@@ -1,0 +1,4324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="theme-color" content="#6366f1">
+<title>生活记录 · LifeLog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+/* ===== CSS Reset & Variables ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --primary:#6366f1;
+  --primary-light:#818cf8;
+  --primary-dark:#4f46e5;
+  --primary-bg:#eef2ff;
+  --success:#10b981;
+  --success-light:#34d399;
+  --success-bg:#ecfdf5;
+  --warning:#f59e0b;
+  --warning-bg:#fffbeb;
+  --danger:#ef4444;
+  --danger-bg:#fef2f2;
+  --info:#0ea5e9;
+  --info-bg:#f0f9ff;
+  --purple:#8b5cf6;
+  --purple-bg:#f5f3ff;
+
+  --bg:#f5f7fb;
+  --surface:#ffffff;
+  --surface-hover:#f9fafb;
+  --text:#1e293b;
+  --text-secondary:#64748b;
+  --text-muted:#94a3b8;
+  --border:#e2e8f0;
+  --border-light:#f1f5f9;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 6px -1px rgba(0,0,0,.07),0 2px 4px -2px rgba(0,0,0,.05);
+  --shadow-lg:0 10px 15px -3px rgba(0,0,0,.08),0 4px 6px -4px rgba(0,0,0,.05);
+  --radius:16px;
+  --radius-sm:10px;
+  --radius-xs:8px;
+  --sidebar-w:250px;
+  --font:'Inter',system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+}
+
+[data-theme="dark"]{
+  --primary:#818cf8;
+  --primary-light:#a5b4fc;
+  --primary-dark:#6366f1;
+  --primary-bg:#312e81;
+  --success:#34d399;
+  --success-light:#6ee7b7;
+  --success-bg:#064e3b;
+  --warning:#fbbf24;
+  --warning-bg:#78350f;
+  --danger:#f87171;
+  --danger-bg:#7f1d1d;
+  --info:#38bdf8;
+  --info-bg:#0c4a6e;
+  --purple:#a78bfa;
+  --purple-bg:#2e1065;
+
+  --bg:#0f172a;
+  --surface:#1e293b;
+  --surface-hover:#334155;
+  --text:#f1f5f9;
+  --text-secondary:#cbd5e1;
+  --text-muted:#94a3b8;
+  --border:#334155;
+  --border-light:#1e293b;
+  --shadow:0 1px 3px rgba(0,0,0,.3);
+  --shadow-md:0 4px 6px -1px rgba(0,0,0,.3);
+  --shadow-lg:0 10px 15px -3px rgba(0,0,0,.3);
+}
+
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--font);
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.6;
+  min-height:100vh;
+  transition:background .3s,color .3s;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-muted)}
+
+/* ===== Layout ===== */
+.app{display:flex;min-height:100vh}
+
+/* ===== Sidebar ===== */
+.sidebar{
+  width:var(--sidebar-w);
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  position:fixed;
+  top:0;left:0;bottom:0;
+  z-index:100;
+  transition:transform .3s ease;
+  overflow-y:auto;
+}
+.sidebar-header{
+  padding:24px 20px 16px;
+  display:flex;align-items:center;gap:12px;
+  border-bottom:1px solid var(--border-light);
+}
+.logo{
+  width:42px;height:42px;
+  background:linear-gradient(135deg,var(--primary),var(--primary-light));
+  border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;
+  flex-shrink:0;
+  box-shadow:0 4px 12px rgba(99,102,241,.3);
+}
+.logo-text h1{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.logo-text p{font-size:11px;color:var(--text-muted);font-weight:500}
+
+.nav{padding:12px;flex:1}
+.nav-label{
+  font-size:11px;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  color:var(--text-muted);
+  padding:12px 12px 6px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 12px;
+  border-radius:var(--radius-xs);
+  cursor:pointer;
+  font-size:14px;
+  font-weight:500;
+  color:var(--text-secondary);
+  transition:all .2s;
+  margin-bottom:2px;
+  position:relative;
+}
+.nav-item:hover{background:var(--surface-hover);color:var(--text)}
+.nav-item.active{
+  background:var(--primary-bg);
+  color:var(--primary);
+  font-weight:600;
+}
+.nav-item.active::before{
+  content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:3px;height:20px;background:var(--primary);border-radius:0 2px 2px 0;
+}
+.nav-item .icon{font-size:18px;width:24px;text-align:center;flex-shrink:0}
+
+.sidebar-footer{
+  padding:12px;
+  border-top:1px solid var(--border-light);
+}
+.sync-status{
+  padding:6px 10px;
+  border-radius:8px;
+  font-size:12px;
+  font-weight:500;
+  cursor:pointer;
+  margin-bottom:6px;
+  transition:all .2s;
+  display:flex;align-items:center;gap:6px;
+}
+.sync-status:hover{opacity:.8}
+.sync-status.online{background:var(--success-bg);color:var(--success)}
+.sync-status.offline{background:var(--danger-bg);color:var(--danger)}
+.sync-status.syncing{background:var(--warning-bg);color:var(--warning)}
+.sync-status.synced{background:var(--success-bg);color:var(--success)}
+.sync-status.error{background:var(--danger-bg);color:var(--danger)}
+.theme-toggle{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px;
+  border-radius:var(--radius-xs);
+  cursor:pointer;
+  font-size:13px;font-weight:500;
+  color:var(--text-secondary);
+  transition:background .2s;
+}
+.theme-toggle:hover{background:var(--surface-hover)}
+
+/* ===== Main Content ===== */
+.main{
+  flex:1;
+  margin-left:var(--sidebar-w);
+  padding:24px 32px 80px;
+  max-width:1400px;
+  transition:margin .3s;
+}
+
+.page-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:24px;
+  flex-wrap:wrap;gap:12px;
+}
+.page-title{font-size:26px;font-weight:800;letter-spacing:-.02em}
+.page-subtitle{font-size:14px;color:var(--text-muted);margin-top:2px}
+
+/* ===== Cards ===== */
+.card{
+  background:var(--surface);
+  border-radius:var(--radius);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  transition:box-shadow .2s,transform .2s;
+}
+.card-pad{padding:20px}
+.card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px;
+  border-bottom:1px solid var(--border-light);
+}
+.card-title{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.card-body{padding:20px}
+
+/* ===== Stat Cards ===== */
+.stat-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:16px;
+  margin-bottom:24px;
+}
+.stat-card{
+  background:var(--surface);
+  border-radius:var(--radius);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  padding:20px;
+  position:relative;
+  overflow:hidden;
+  transition:transform .2s,box-shadow .2s;
+}
+.stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.stat-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:4px;
+}
+.stat-card.fit::before{background:linear-gradient(90deg,var(--primary),var(--primary-light))}
+.stat-card.sleep::before{background:linear-gradient(90deg,var(--info),#818cf8)}
+.stat-card.finance::before{background:linear-gradient(90deg,var(--success),var(--success-light))}
+.stat-card.streak::before{background:linear-gradient(90deg,var(--warning),#fb923c)}
+
+.stat-icon{
+  width:44px;height:44px;
+  border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;
+  margin-bottom:12px;
+}
+.stat-card.fit .stat-icon{background:var(--primary-bg);color:var(--primary)}
+.stat-card.sleep .stat-icon{background:var(--info-bg);color:var(--info)}
+.stat-card.finance .stat-icon{background:var(--success-bg);color:var(--success)}
+.stat-card.streak .stat-icon{background:var(--warning-bg);color:var(--warning)}
+
+.stat-label{font-size:13px;color:var(--text-muted);font-weight:500}
+.stat-value{font-size:28px;font-weight:800;letter-spacing:-.02em;margin-top:2px}
+.stat-trend{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:12px;font-weight:600;
+  margin-top:6px;
+  padding:2px 8px;
+  border-radius:20px;
+}
+.stat-trend.up{background:var(--success-bg);color:var(--success)}
+.stat-trend.down{background:var(--danger-bg);color:var(--danger)}
+.stat-trend.neutral{background:var(--border-light);color:var(--text-muted)}
+
+/* ===== Grid Layout ===== */
+.grid-2{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+  margin-bottom:16px;
+}
+.grid-3{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+}
+
+/* ===== Buttons ===== */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:10px 18px;
+  border-radius:var(--radius-xs);
+  border:none;
+  font-size:14px;font-weight:600;
+  cursor:pointer;
+  transition:all .2s;
+  font-family:var(--font);
+  white-space:nowrap;
+}
+.btn-primary{
+  background:var(--primary);
+  color:#fff;
+}
+.btn-primary:hover{background:var(--primary-dark);transform:translateY(-1px);box-shadow:0 4px 12px rgba(99,102,241,.3)}
+.btn-ghost{
+  background:transparent;
+  color:var(--text-secondary);
+  border:1px solid var(--border);
+}
+.btn-ghost:hover{background:var(--surface-hover);color:var(--text)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{opacity:.9}
+.btn-sm{padding:6px 12px;font-size:12px}
+.btn-icon{
+  width:28px;height:28px;
+  padding:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:6px;
+  background:transparent;
+  border:none;
+  cursor:pointer;
+  color:var(--text-muted);
+  font-size:16px;
+  transition:all .2s;
+}
+.btn-icon:hover{background:var(--surface-hover);color:var(--text)}
+
+/* ===== Forms ===== */
+.form-group{margin-bottom:16px}
+.form-row{display:flex;gap:12px}
+.form-row>*{flex:1}
+.form-label{
+  display:block;
+  font-size:13px;font-weight:600;
+  margin-bottom:6px;
+  color:var(--text-secondary);
+}
+.form-input,.form-select,.form-textarea{
+  width:100%;
+  padding:10px 14px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  font-size:14px;
+  font-family:var(--font);
+  background:var(--surface);
+  color:var(--text);
+  transition:border-color .2s,box-shadow .2s;
+}
+.form-input:focus,.form-select:focus,.form-textarea:focus{
+  outline:none;
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(99,102,241,.1);
+}
+.form-textarea{resize:vertical;min-height:60px}
+
+/* Quality rating */
+.rating{display:flex;gap:6px}
+.rating-star{
+  font-size:24px;
+  cursor:pointer;
+  color:var(--border);
+  transition:color .15s,transform .15s;
+  user-select:none;
+}
+.rating-star:hover{transform:scale(1.15)}
+.rating-star.active{color:var(--warning)}
+
+/* Intensity selector */
+.intensity-group{display:flex;gap:8px}
+.intensity-btn{
+  flex:1;
+  padding:8px 12px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  background:var(--surface);
+  cursor:pointer;
+  font-size:13px;font-weight:500;
+  color:var(--text-secondary);
+  text-align:center;
+  transition:all .2s;
+}
+.intensity-btn:hover{border-color:var(--primary)}
+.intensity-btn.active{
+  background:var(--primary);
+  color:#fff;
+  border-color:var(--primary);
+}
+
+/* ===== Table ===== */
+.table-wrap{overflow-x:auto;border-radius:var(--radius-sm)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{
+  text-align:left;
+  padding:6px 10px;
+  font-weight:600;
+  color:var(--text-muted);
+  border-bottom:1px solid var(--border);
+  white-space:nowrap;
+}
+td{
+  padding:6px 10px;
+  border-bottom:1px solid var(--border-light);
+  white-space:nowrap;
+}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface-hover)}
+.text-right{text-align:right}
+.text-center{text-align:center}
+
+/* ===== Badges ===== */
+.badge{
+  display:inline-flex;align-items:center;
+  padding:2px 10px;
+  border-radius:20px;
+  font-size:11px;font-weight:600;
+}
+.badge-primary{background:var(--primary-bg);color:var(--primary)}
+.badge-success{background:var(--success-bg);color:var(--success)}
+.badge-danger{background:var(--danger-bg);color:var(--danger)}
+.badge-warning{background:var(--warning-bg);color:var(--warning)}
+.badge-info{background:var(--info-bg);color:var(--info)}
+.badge-neutral{background:var(--border-light);color:var(--text-muted)}
+.badge-muted{background:var(--border-light);color:var(--text-muted)}
+
+/* ===== Media Grid Styles ===== */
+.stat-card-mini{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;min-width:70px;flex-shrink:0}
+.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px}
+.media-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0;overflow:hidden;transition:box-shadow .2s,border-color .2s,transform .2s;display:flex;flex-direction:row}
+.media-card:hover{box-shadow:0 3px 10px rgba(0,0,0,.1);border-color:var(--primary);transform:translateY(-1px)}
+.media-card-bar{width:3px;height:100%;flex-shrink:0}
+.media-card-cover{width:48px;height:72px;object-fit:contain;display:block;flex-shrink:0;background:var(--surface-hover)}
+.media-card-body{padding:5px 7px;flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.media-card-foot{display:flex;align-items:center;justify-content:space-between;padding:3px 7px 4px;background:transparent}
+.media-type-chip{display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600}
+.media-date-row{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--text-muted)}
+.media-related{font-size:10px;color:var(--text-secondary);line-height:1.35;padding:3px 6px;background:var(--surface-hover);border-radius:4px;border-left:2px solid var(--border-light);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cover-search-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:260px;overflow-y:auto;padding:2px}
+.cover-result{cursor:pointer;border:2px solid transparent;border-radius:8px;overflow:hidden;text-align:center;transition:border-color .15s,transform .15s;background:var(--surface-hover)}
+.cover-result:hover{border-color:var(--primary);transform:scale(1.03)}
+.cover-result img{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
+.cover-result-title{font-size:11px;font-weight:600;padding:4px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cover-result-sub{font-size:10px;color:var(--text-muted);padding:0 4px 4px}
+.cover-drop-zone{display:flex;align-items:center;gap:12px;padding:14px;border:2px dashed var(--border);border-radius:10px;transition:all .2s;min-height:90px;position:relative;background:var(--surface)}
+.cover-drop-zone:hover{border-color:var(--primary);background:var(--surface-hover)}
+.cover-drop-zone.drag-over{border-color:var(--primary);background:var(--primary-bg)}
+.cover-drop-hint{text-align:center;flex:1;color:var(--text-muted)}
+.cover-clear-btn{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.8}
+.cover-clear-btn:hover{opacity:1}
+
+/* ===== Stock Signal Styles ===== */
+.ma-up{color:var(--success);font-weight:600}
+.ma-down{color:var(--danger);font-weight:600}
+.signal-hold{background:var(--success-bg);color:var(--success);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
+.signal-sell25{background:var(--warning-bg);color:var(--warning);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
+.signal-sell50{background:#fff7ed;color:#ea580c;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
+.signal-sell75{background:var(--danger-bg);color:var(--danger);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
+.signal-sellall{background:#fef2f2;color:var(--danger);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;border:1px solid var(--danger)}
+.stock-search-dropdown{
+  position:absolute;z-index:50;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;
+  max-height:200px;overflow-y:auto;width:100%;
+  box-shadow:0 4px 12px rgba(0,0,0,.08)
+}
+.stock-search-item{padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border-light)}
+.stock-search-item:hover{background:var(--surface-hover)}
+.stock-search-item:last-child{border-bottom:none}
+
+/* ===== Modal ===== */
+.modal-overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.4);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:200;
+  padding:20px;
+  backdrop-filter:blur(4px);
+  animation:fadeIn .2s;
+}
+.modal-overlay.active{display:flex}
+.modal{
+  background:var(--surface);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-lg);
+  width:100%;max-width:500px;
+  max-height:90vh;
+  overflow-y:auto;
+  animation:slideUp .3s;
+}
+.modal-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 24px;
+  border-bottom:1px solid var(--border-light);
+}
+.modal-title{font-size:17px;font-weight:700}
+.modal-body{padding:24px}
+.modal-footer{
+  display:flex;justify-content:flex-end;gap:10px;
+  padding:16px 24px;
+  border-top:1px solid var(--border-light);
+}
+
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes fadeInUp{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* ===== Pages ===== */
+.page{display:none;animation:fadeInUp .3s}
+.page.active{display:block}
+
+/* ===== Empty State ===== */
+.empty-state{
+  text-align:center;
+  padding:48px 20px;
+  color:var(--text-muted);
+}
+.empty-state .empty-icon{font-size:48px;margin-bottom:12px;opacity:.5}
+.empty-state p{font-size:14px}
+.empty-state .btn{margin-top:16px}
+
+/* ===== Toast ===== */
+.toast-container{
+  position:fixed;
+  bottom:24px;left:50%;
+  transform:translateX(-50%);
+  z-index:300;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.toast{
+  background:var(--text);
+  color:var(--surface);
+  padding:10px 20px;
+  border-radius:var(--radius-xs);
+  font-size:13px;font-weight:500;
+  box-shadow:var(--shadow-lg);
+  animation:slideUp .3s;
+  display:flex;align-items:center;gap:8px;
+}
+
+/* ===== Chart container ===== */
+.chart-container{position:relative;height:280px}
+.chart-container-sm{position:relative;height:200px}
+
+/* ===== Mobile bottom nav ===== */
+.mobile-nav{
+  display:none;
+  position:fixed;
+  bottom:0;left:0;right:0;
+  background:var(--surface);
+  border-top:1px solid var(--border);
+  z-index:100;
+  padding:6px 0 env(safe-area-inset-bottom,6px);
+}
+.mobile-nav-item{
+  flex:1;
+  display:flex;flex-direction:column;align-items:center;
+  gap:2px;
+  padding:8px 4px;
+  font-size:10px;font-weight:500;
+  color:var(--text-muted);
+  cursor:pointer;
+  transition:color .2s;
+}
+.mobile-nav-item .icon{font-size:20px}
+.mobile-nav-item.active{color:var(--primary)}
+
+/* Mobile menu button */
+.mobile-menu-btn{
+  display:none;
+  width:40px;height:40px;
+  align-items:center;justify-content:center;
+  border-radius:10px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  cursor:pointer;
+  font-size:20px;
+  color:var(--text);
+}
+
+/* ===== Responsive ===== */
+@media(max-width:1024px){
+  .grid-3{grid-template-columns:1fr}
+  .grid-2{grid-template-columns:1fr}
+}
+@media(max-width:768px){
+  .sidebar{
+    transform:translateX(-100%);
+  }
+  .sidebar.open{transform:translateX(0)}
+  .main{
+    margin-left:0;
+    padding:16px 16px 90px;
+  }
+  .mobile-nav{display:flex}
+  .mobile-menu-btn{display:flex}
+  .page-title{font-size:22px}
+  .stat-value{font-size:24px}
+  .stat-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:480px){
+  .stat-grid{grid-template-columns:1fr}
+  .form-row{flex-direction:column}
+  .modal{max-width:100%}
+}
+
+/* ===== Misc ===== */
+.text-muted{color:var(--text-muted)}
+.text-sm{font-size:13px}
+.text-lg{font-size:18px;font-weight:700}
+.text-success{color:var(--success)}
+.text-danger{color:var(--danger)}
+.flex-between{display:flex;align-items:center;justify-content:space-between}
+.flex-center{display:flex;align-items:center;justify-content:center}
+.gap-8{gap:8px}
+.gap-12{gap:12px}
+.mt-8{margin-top:8px}
+.mt-16{margin-top:16px}
+.mb-16{margin-bottom:16px}
+.hidden{display:none!important}
+
+/* Overlay for mobile sidebar */
+.sidebar-overlay{
+  display:none;
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.3);
+  z-index:99;
+}
+.sidebar-overlay.active{display:block}
+
+/* Progress bar */
+.progress-bar{
+  height:8px;
+  background:var(--border-light);
+  border-radius:4px;
+  overflow:hidden;
+  margin-top:6px;
+}
+.progress-fill{
+  height:100%;
+  border-radius:4px;
+  transition:width .5s ease;
+}
+
+/* Tag chips for exercise types */
+.chip{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:4px 10px;
+  border-radius:20px;
+  font-size:12px;font-weight:500;
+  background:var(--border-light);
+  color:var(--text-secondary);
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">🌿</div>
+      <div class="logo-text">
+        <h1>LifeLog</h1>
+        <p>生活记录</p>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="nav-label">主功能</div>
+      <div class="nav-item" data-page="fitness">
+        <span class="icon">💪</span><span>健身记录</span>
+      </div>
+      <div class="nav-item" data-page="sleep">
+        <span class="icon">😴</span><span>睡眠追踪</span>
+      </div>
+      <div class="nav-item" data-page="finance">
+        <span class="icon">💰</span><span>财务投资</span>
+      </div>
+      <div class="nav-item" data-page="stock">
+        <span class="icon">📈</span><span>股票投资</span>
+      </div>
+      <div class="nav-item" data-page="media">
+        <span class="icon">🎬</span><span>影音书演</span>
+      </div>
+      <div class="nav-item active" data-page="daily">
+        <span class="icon">📅</span><span>每日记录</span>
+      </div>
+      <div class="nav-label">工具</div>
+      <div class="nav-item" data-page="export">
+        <span class="icon">📦</span><span>数据管理</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sync-status" id="syncStatus" onclick="syncNow()" title="点击同步">☁️ 等待连接</div>
+      <div class="theme-toggle" id="themeToggle">
+        <span>🌙 深色模式</span>
+        <span id="themeIcon">○</span>
+      </div>
+    </div>
+  </aside>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ===== Main ===== -->
+  <main class="main">
+
+    <!-- ===== Fitness Page ===== -->
+    <div class="page" id="page-fitness">
+      <div class="page-header">
+        <div>
+          <div class="page-title">健身记录</div>
+          <div class="page-subtitle">记录每一次锻炼，见证每一份成长</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="mobile-menu-btn" id="mobileMenuBtn2">☰</button>
+          <button class="btn btn-primary" onclick="openFitnessModal()">➕ 添加记录</button>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card fit">
+          <div class="stat-icon">📅</div>
+          <div class="stat-label">本月锻炼次数</div>
+          <div class="stat-value" id="fitMonthlyCount">0</div>
+        </div>
+        <div class="stat-card streak">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-label">本月总时长</div>
+          <div class="stat-value" id="fitMonthlyDuration">0 分钟</div>
+        </div>
+        <div class="stat-card sleep">
+          <div class="stat-icon">🔥</div>
+          <div class="stat-label">本月消耗热量</div>
+          <div class="stat-value" id="fitMonthlyCalories">0 kcal</div>
+        </div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="card-header">
+          <div class="card-title">📊 锻炼时长分布</div>
+        </div>
+        <div class="card-body">
+          <div class="chart-container"><canvas id="fitnessChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📝 健身记录</div>
+          <button class="btn btn-ghost btn-sm" onclick="exportFitnessCSV()">📥 导出CSV</button>
+        </div>
+        <div class="table-wrap" id="fitnessTableWrap">
+          <!-- table injected by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Sleep Page ===== -->
+    <div class="page" id="page-sleep">
+      <div class="page-header">
+        <div>
+          <div class="page-title">睡眠追踪</div>
+          <div class="page-subtitle">好睡眠是好生活的开始</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="mobile-menu-btn" id="mobileMenuBtn3">☰</button>
+          <button class="btn btn-primary" onclick="openSleepModal()">➕ 添加记录</button>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card sleep">
+          <div class="stat-icon">🌙</div>
+          <div class="stat-label">平均睡眠时长</div>
+          <div class="stat-value" id="sleepAvgDuration">0 小时</div>
+        </div>
+        <div class="stat-card sleep">
+          <div class="stat-icon">😴</div>
+          <div class="stat-label">平均入睡时间</div>
+          <div class="stat-value" id="sleepAvgBedtime">—</div>
+        </div>
+        <div class="stat-card streak">
+          <div class="stat-icon">⏰</div>
+          <div class="stat-label">平均起床时间</div>
+          <div class="stat-value" id="sleepAvgWake">—</div>
+        </div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="card-header">
+          <div class="card-title">🌙 睡眠综合趋势（近14天）</div>
+          <div style="display:flex;gap:12px;align-items:center;font-size:12px;color:var(--text-muted)">
+            <span><span style="display:inline-block;width:12px;height:3px;background:#8b5cf6;border-radius:2px;vertical-align:middle;margin-right:4px"></span>入睡</span>
+            <span><span style="display:inline-block;width:12px;height:3px;background:#f59e0b;border-radius:2px;vertical-align:middle;margin-right:4px"></span>起床</span>
+            <span><span style="display:inline-block;width:12px;height:10px;background:#0ea5e9;opacity:.5;border-radius:2px;vertical-align:middle;margin-right:4px"></span>时长</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="chart-container"><canvas id="sleepChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📝 睡眠记录</div>
+          <button class="btn btn-ghost btn-sm" onclick="exportSleepCSV()">📥 导出CSV</button>
+        </div>
+        <div class="table-wrap" id="sleepTableWrap">
+          <!-- table injected by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Finance Page ===== -->
+    <div class="page" id="page-finance">
+      <div class="page-header">
+        <div>
+          <div class="page-title">财务投资</div>
+          <div class="page-subtitle">理性投资，稳健收益</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="mobile-menu-btn" id="mobileMenuBtn4">☰</button>
+          <button class="btn btn-ghost" onclick="openAccountModal()">🏦 添加账户</button>
+          <button class="btn btn-primary" onclick="openBalanceModal()">💰 记录余额</button>
+        </div>
+      </div>
+
+      <!-- ===== Account Assets Section ===== -->
+      <div class="stat-grid">
+        <div class="stat-card finance">
+          <div class="stat-icon">🏦</div>
+          <div class="stat-label">金融资产总额（¥）</div>
+          <div class="stat-value" id="accTotalCNY">¥0</div>
+          <div class="stat-trend neutral" id="accTotalDetail">0 个账户</div>
+        </div>
+        <div class="stat-card fit">
+          <div class="stat-icon">💱</div>
+          <div class="stat-label">涉及币种</div>
+          <div class="stat-value" id="accCurrencyCount">0</div>
+          <div class="stat-trend neutral" id="accCurrencyList">—</div>
+        </div>
+        <div class="stat-card sleep">
+          <div class="stat-icon">🔄</div>
+          <div class="stat-label">汇率更新</div>
+          <div class="stat-value" style="font-size:16px" id="accRateDate">未更新</div>
+          <button class="btn btn-ghost btn-sm mt-8" onclick="refreshRates()" style="width:100%">🔄 刷新汇率</button>
+        </div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="card-header">
+          <div class="card-title">📊 资产余额趋势（叠加面积图）</div>
+        </div>
+        <div class="card-body">
+          <div class="chart-container"><canvas id="accountChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div class="card-title">📈 单账户余额趋势</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="text-muted" style="font-size:12px">选择账户：</span>
+            <select class="form-select" id="singleAccountSelect" onchange="renderSingleAccountChart()" style="min-width:160px;font-size:13px;padding:6px 10px">
+              <!-- options injected by JS -->
+            </select>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="chart-container"><canvas id="singleAccountChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="card-header">
+          <div class="card-title">🏦 账户列表</div>
+          <button class="btn btn-ghost btn-sm" onclick="exportAccountCSV()">📥 导出CSV</button>
+        </div>
+        <div class="table-wrap" id="accountTableWrap">
+          <!-- table injected by JS -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ===== Stock Page ===== -->
+    <div class="page" id="page-stock">
+      <div class="page-header">
+        <div>
+          <div class="page-title">股票投资</div>
+          <div class="page-subtitle">均线策略 · 自动监控买卖信号</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-left:auto;margin-right:auto">
+          <button class="mobile-menu-btn" id="mobileMenuBtn6">☰</button>
+          <button class="btn btn-ghost" onclick="refreshAllStocks()">🔄 刷新行情</button>
+          <button class="btn btn-primary" onclick="openStockModal()">📈 添加股票</button>
+        </div>
+      </div>
+
+      <div class="card mb-16" style="background:var(--info-bg);border:1px solid var(--info)">
+        <div class="card-body" style="padding:12px 16px">
+          <p class="text-sm" style="color:var(--info);line-height:1.6">
+            <b>均线卖出策略（按初始持仓量）：</b>市场价跌破 30分MA25 → 减仓初始持仓的1/4；跌破 60分MA25 → 减仓至初始持仓的1/2；跌破 120分MA25 → 减仓至初始持仓的1/4；跌破 日线MA25 → 清仓。以最严重的跌破信号决定目标仓位。<span style="color:var(--text-muted)">（A股支持全部四档信号；港股/美股仅支持日线MA25信号，分钟K线暂不可用）</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="card mb-16">
+        <div class="card-header">
+          <div class="card-title">📈 持仓监控</div>
+        </div>
+        <div class="table-wrap" id="stockTableWrap">
+          <!-- table injected by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Media Page ===== -->
+    <div class="page" id="page-media">
+      <div class="page-header">
+        <div>
+          <div class="page-title">影音书演</div>
+          <div class="page-subtitle">电影 · 电视剧 · 书籍 · 演出</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-left:auto;margin-right:auto">
+          <button class="mobile-menu-btn" id="mobileMenuBtn7">☰</button>
+          <button class="btn btn-primary" onclick="openMediaModal()">🎬 添加记录</button>
+        </div>
+      </div>
+
+      <div id="mediaStatsWrap"></div>
+
+      <div class="card mb-16">
+        <div class="card-header" style="flex-wrap:wrap;gap:6px">
+          <div class="card-title">📚 我的记录</div>
+          <div id="mediaFilterBar" style="display:flex;gap:4px;flex-wrap:wrap;margin-left:auto"></div>
+        </div>
+        <div id="mediaGridWrap" style="padding:16px"></div>
+      </div>
+    </div>
+
+    <!-- ===== Export Page ===== -->
+    <!-- ===== Daily Notes Page ===== -->
+    <div class="page active" id="page-daily">
+      <div class="page-header">
+        <div>
+          <div class="page-title">每日记录</div>
+          <div class="page-subtitle" id="dailyDateLabel"></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="mobile-menu-btn" id="mobileMenuBtn8">☰</button>
+          <button class="btn btn-ghost btn-sm" onclick="shiftDailyDate(-1)" title="前一天">◀</button>
+          <button class="btn btn-ghost btn-sm" onclick="shiftDailyDate(0)" title="回到今天">📅 今天</button>
+          <button class="btn btn-ghost btn-sm" onclick="shiftDailyDate(1)" title="后一天">▶</button>
+          <button class="btn btn-primary btn-sm" id="dailySaveBtn" onclick="saveDailyNote()">💾 保存</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <!-- Editor -->
+        <div style="flex:1;min-width:300px">
+          <div class="card">
+            <div class="card-body" style="padding:12px">
+              <textarea id="dailyEditor" style="width:100%;min-height:420px;border:1px solid var(--border);border-radius:8px;padding:16px;font-size:15px;font-family:var(--font);line-height:1.8;resize:vertical;background:var(--surface);color:var(--text);outline:none" placeholder="今天做了什么值得记录的事？有什么感悟？学到了什么新东西？"></textarea>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+                <span class="text-sm text-muted" id="dailyWordCount">0 字</span>
+                <span class="text-sm text-muted" id="dailySavedTip"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Entry list -->
+        <div style="width:220px;flex-shrink:0" id="dailyEntryList">
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-export">
+      <div class="page-header">
+        <div>
+          <div class="page-title">数据管理</div>
+          <div class="page-subtitle">备份、恢复和管理你的数据</div>
+        </div>
+        <button class="mobile-menu-btn" id="mobileMenuBtn5">☰</button>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📦 数据导出</div></div>
+          <div class="card-body">
+            <p class="text-sm text-muted mb-16">将所有数据导出为 JSON 文件备份到本地</p>
+            <button class="btn btn-primary" onclick="exportAllData()">📥 导出全部数据</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">📤 数据导入</div></div>
+          <div class="card-body">
+            <p class="text-sm text-muted mb-16">从 JSON 备份文件恢复数据</p>
+            <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+            <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">📤 选择文件导入</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-16">
+        <div class="card-header"><div class="card-title">⚠️ 危险操作</div></div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-16">清空所有数据，此操作不可撤销！</p>
+          <button class="btn btn-danger" onclick="clearAllData()">🗑️ 清空全部数据</button>
+        </div>
+      </div>
+
+      <div class="card mt-16">
+        <div class="card-header"><div class="card-title">ℹ️ 关于</div></div>
+        <div class="card-body">
+          <p class="text-sm text-muted">
+            LifeLog v1.1 — 一个个人生活记录应用，涵盖健身、睡眠、财务投资和股票投资四大模块。<br>
+            所有数据存储在浏览器本地（LocalStorage），不会上传到服务器。<br>
+            支持桌面和移动端，随时随地记录你的生活。
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ===== Mobile Bottom Nav ===== -->
+<div class="mobile-nav">
+  <div class="mobile-nav-item" data-page="fitness"><span class="icon">💪</span>健身</div>
+  <div class="mobile-nav-item" data-page="sleep"><span class="icon">😴</span>睡眠</div>
+  <div class="mobile-nav-item" data-page="finance"><span class="icon">💰</span>财务</div>
+  <div class="mobile-nav-item" data-page="stock"><span class="icon">📈</span>股票</div>
+  <div class="mobile-nav-item" data-page="media"><span class="icon">🎬</span>影音</div>
+  <div class="mobile-nav-item active" data-page="daily"><span class="icon">📅</span>每日</div>
+  <div class="mobile-nav-item" data-page="export"><span class="icon">📦</span>数据</div>
+</div>
+
+<!-- ===== Toast ===== -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ===== Modals ===== -->
+
+<!-- Fitness Modal -->
+<div class="modal-overlay" id="fitnessModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="fitnessModalTitle">添加健身记录</div>
+      <button class="btn-icon" onclick="closeModal('fitnessModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="fitId">
+      <div class="form-group">
+        <label class="form-label">日期</label>
+        <input type="date" class="form-input" id="fitDate">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">运动类型</label>
+          <select class="form-select" id="fitType">
+            <option value="跑步">🏃 跑步</option>
+            <option value="力量训练">🏋️ 力量训练</option>
+            <option value="瑜伽">🧘 瑜伽</option>
+            <option value="游泳">🏊 游泳</option>
+            <option value="骑行">🚴 骑行</option>
+            <option value="篮球">🏀 篮球</option>
+            <option value="羽毛球">🏸 羽毛球</option>
+            <option value="足球">⚽ 足球</option>
+            <option value="跳绳">🪢 跳绳</option>
+            <option value="HIIT">🔥 HIIT</option>
+            <option value="徒步">🥾 徒步</option>
+            <option value="其他">📌 其他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">运动时长（分钟）</label>
+          <input type="number" class="form-input" id="fitDuration" placeholder="如 60" min="1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">运动强度</label>
+        <div class="intensity-group" id="fitIntensity">
+          <div class="intensity-btn" data-val="低">轻松</div>
+          <div class="intensity-btn active" data-val="中">适中</div>
+          <div class="intensity-btn" data-val="高">高强度</div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">消耗热量（kcal）</label>
+          <input type="number" class="form-input" id="fitCalories" placeholder="如 300" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">组数</label>
+          <input type="number" class="form-input" id="fitSets" placeholder="如 4" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">每组次数</label>
+          <input type="number" class="form-input" id="fitReps" placeholder="如 12" min="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">备注</label>
+        <textarea class="form-textarea" id="fitNotes" placeholder="今天感觉怎么样..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('fitnessModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveFitness()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sleep Modal -->
+<div class="modal-overlay" id="sleepModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="sleepModalTitle">添加睡眠记录</div>
+      <button class="btn-icon" onclick="closeModal('sleepModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sleepId">
+      <div class="form-group">
+        <label class="form-label">日期</label>
+        <input type="date" class="form-input" id="sleepDate">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">入睡时间</label>
+          <input type="time" class="form-input" id="sleepBedtime" value="23:00">
+        </div>
+        <div class="form-group">
+          <label class="form-label">起床时间</label>
+          <input type="time" class="form-input" id="sleepWakeTime" value="07:00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">备注</label>
+        <textarea class="form-textarea" id="sleepNotes" placeholder="做梦了吗？醒来感觉如何..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('sleepModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveSleep()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Account Modal -->
+<div class="modal-overlay" id="accountModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="accountModalTitle">添加账户</div>
+      <button class="btn-icon" onclick="closeModal('accountModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="accId">
+      <div class="form-group">
+        <label class="form-label">账户名称</label>
+        <input type="text" class="form-input" id="accName" placeholder="如 招商银行储蓄、支付宝、美股账户">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">币种</label>
+          <select class="form-select" id="accCurrency">
+            <option value="CNY">¥ 人民币 (CNY)</option>
+            <option value="USD">$ 美元 (USD)</option>
+            <option value="HKD">HK$ 港币 (HKD)</option>
+            <option value="EUR">€ 欧元 (EUR)</option>
+            <option value="GBP">£ 英镑 (GBP)</option>
+            <option value="JPY">¥ 日元 (JPY)</option>
+            <option value="SGD">S$ 新加坡元 (SGD)</option>
+            <option value="AUD">A$ 澳元 (AUD)</option>
+            <option value="CAD">C$ 加元 (CAD)</option>
+            <option value="KRW">₩ 韩元 (KRW)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">余额计算方式</label>
+          <select class="form-select" id="accCalcMode" onchange="toggleAccCalcMode()">
+            <option value="direct">直接填写余额</option>
+            <option value="formula">基础余额 + 持仓计算</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" id="accInitBalanceGroup">
+        <label class="form-label">初始余额</label>
+        <input type="number" class="form-input" id="accInitBalance" placeholder="0.00" step="0.01">
+      </div>
+      <div id="accFormulaGroup" style="display:none">
+        <div class="form-group">
+          <label class="form-label">基础余额（现金部分）</label>
+          <input type="number" class="form-input" id="accBaseAmount" placeholder="0.00" step="0.01">
+        </div>
+        <div class="form-group">
+          <label class="form-label">持仓明细（记录余额时填写市价）</label>
+          <p class="text-sm text-muted" style="margin-bottom:8px">余额 = 基础余额 + Σ(持仓数量 × 市价)<br>持仓可选择不同币种，自动按汇率折算到账户币种</p>
+          <div id="accHoldingsList"></div>
+          <button class="btn btn-ghost btn-sm" onclick="addHoldingRow()" style="margin-top:8px">➕ 添加持仓</button>
+        </div>
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--surface-hover);border-radius:8px;border:1px solid var(--border)">
+        <input type="checkbox" id="accExcluded" style="margin-top:3px;flex-shrink:0">
+        <label for="accExcluded" style="font-size:13px;line-height:1.5;margin:0;cursor:pointer">
+          <b>长期不动资产</b><br>
+          <span class="text-muted" style="font-size:12px">折叠显示在账户列表底部，且金额不计入资产余额趋势图</span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label">备注（可选）</label>
+        <input type="text" class="form-input" id="accNote" placeholder="如 活期、定投、股票等">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('accountModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveAccount()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Balance Record Modal -->
+<div class="modal-overlay" id="balanceModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="balanceModalTitle">记录余额</div>
+      <button class="btn-icon" onclick="closeModal('balanceModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="balId">
+      <div class="form-group">
+        <label class="form-label">选择账户</label>
+        <select class="form-select" id="balAccount">
+          <!-- options injected by JS -->
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">日期</label>
+          <input type="date" class="form-input" id="balDate">
+        </div>
+        <div class="form-group" id="balAmountGroup">
+          <label class="form-label">余额</label>
+          <input type="number" class="form-input" id="balAmount" placeholder="0.00" step="0.01">
+        </div>
+      </div>
+      <div id="balFormulaGroup" style="display:none">
+        <div class="form-group">
+          <label class="form-label">基础余额</label>
+          <input type="number" class="form-input" id="balBaseAmount" placeholder="0.00" step="0.01" oninput="calcFormulaBalance()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">持仓市价填写</label>
+          <div id="balHoldingsList"></div>
+          <div style="margin-top:10px;padding:10px 14px;background:var(--bg-secondary);border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+            <span class="text-sm text-muted">计算余额</span>
+            <span id="balCalcResult" style="font-weight:700;font-size:18px">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-group" id="balCurrencyHint" style="display:none">
+        <p class="text-sm text-muted" id="balCurrencyText"></p>
+      </div>
+      <div class="form-group" id="balCarryHint" style="display:none">
+        <p class="text-sm text-muted" id="balCarryText"></p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('balanceModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveBalance()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stock Modal -->
+<div class="modal-overlay" id="stockModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="stockModalTitle">添加股票</div>
+      <button class="btn-icon" onclick="closeModal('stockModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="stockId">
+      <div class="form-group" style="position:relative">
+        <label class="form-label">搜索股票（输入名称或代码）</label>
+        <input type="text" class="form-input" id="stockSearchInput" placeholder="如 茅台、600519" autocomplete="off" oninput="searchStock(this.value)">
+        <div class="stock-search-dropdown" id="stockSearchDropdown" style="display:none"></div>
+      </div>
+      <div class="form-group" id="stockSelectedInfo" style="display:none">
+        <label class="form-label">已选股票</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="stockSelectedName" style="font-weight:600;font-size:15px"></span>
+          <span id="stockSelectedCode" class="badge badge-info"></span>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">持仓数量</label>
+          <input type="number" class="form-input" id="stockQty" placeholder="如 100" step="1" min="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">成本价</label>
+          <input type="number" class="form-input" id="stockCost" placeholder="如 15.50" step="0.001">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">手动现价 <span class="text-muted" style="font-size:11px;font-weight:400">（可选，API无数据时使用）</span></label>
+        <input type="number" class="form-input" id="stockManualPrice" placeholder="留空则自动获取" step="0.001">
+      </div>
+      <div class="form-group">
+        <label class="form-label">可用资金 <span class="text-muted" style="font-size:11px;font-weight:400">（本只股票的可用现金）</span></label>
+        <input type="number" class="form-input" id="stockAvailableCash" placeholder="如 50000" step="0.01" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">备注（可选）</label>
+        <input type="text" class="form-input" id="stockNote" placeholder="如 长线持仓、打新等">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('stockModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveStock()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Balance History Modal -->
+<div class="modal-overlay" id="balanceHistoryModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="balanceHistoryTitle">余额记录</div>
+      <button class="btn-icon" onclick="closeModal('balanceHistoryModal')">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:60vh;overflow-y:auto">
+      <div id="balanceHistoryContent"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('balanceHistoryModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Media Modal -->
+<div class="modal-overlay" id="mediaModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="mediaModalTitle">添加记录</div>
+      <button class="btn-icon" onclick="closeModal('mediaModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="mediaId">
+      <div class="form-group">
+        <label class="form-label">类型</label>
+        <select class="form-select" id="mediaType" onchange="onMediaTypeChange()">
+          <option value="movie">🎬 电影</option>
+          <option value="tv">📺 电视剧</option>
+          <option value="book">📖 书籍</option>
+          <option value="show">🎭 演出</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">标题</label>
+        <input type="text" class="form-input" id="mediaTitle" placeholder="如 盗梦空间" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">封面 <span onclick="openDoubanSearch()" style="font-size:12px;cursor:pointer;color:var(--primary);float:right">🔗 到豆瓣搜索封面</span></label>
+        <div id="coverDropZone" class="cover-drop-zone" tabindex="0">
+          <img id="coverPreviewImg" src="" referrerpolicy="no-referrer" style="display:none;max-width:70px;max-height:110px;object-fit:contain;border-radius:6px;flex-shrink:0" onerror="onCoverPreviewError()">
+          <div id="coverDropHint" class="cover-drop-hint">
+            <div style="font-size:22px;margin-bottom:2px">📋</div>
+            <div style="font-size:13px;font-weight:500">粘贴图片 (Ctrl+V) 或拖拽到此</div>
+            <div style="font-size:11px;margin-top:3px;opacity:.7;display:flex;align-items:center;justify-content:center;gap:6px">
+              <span>到豆瓣右键封面→复制图片→回来 Ctrl+V</span>
+            </div>
+            <button type="button" onclick="coverPickFile()" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-hover);color:var(--text-secondary);cursor:pointer">📁 选择文件</button>
+          </div>
+          <button type="button" id="coverClearBtn" class="cover-clear-btn" style="display:none" onclick="clearCover(event)">✕</button>
+        </div>
+        <input type="text" class="form-input" id="mediaCoverUrl" placeholder="也可粘贴图片URL" style="margin-top:6px;font-size:12px" oninput="onCoverUrlInput(this.value)">
+      </div>
+      <input type="hidden" id="mediaCover">
+      <div class="form-group" id="mediaDateSingleGroup">
+        <label class="form-label">日期</label>
+        <input type="date" class="form-input" id="mediaDate">
+      </div>
+      <div class="form-group" id="mediaDateRangeGroup" style="display:none">
+        <label class="form-label">日期范围</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" class="form-input" id="mediaDateStart" style="flex:1">
+          <span class="text-muted">~</span>
+          <input type="date" class="form-input" id="mediaDateEnd" style="flex:1" placeholder="留空=至今">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">状态</label>
+        <select class="form-select" id="mediaStatus">
+          <option value="done">✅ 看完</option>
+          <option value="ongoing">▶️ 在看</option>
+          <option value="pending">⏳ 待看</option>
+          <option value="abandoned">🚫 弃了</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">相关</label>
+        <textarea class="form-textarea" id="mediaNotes" placeholder="导演 / 作者 / 演员 / 备注..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('mediaModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveMedia()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   LifeLog - Life Tracking App
+   Data stored in localStorage
+   ============================================================ */
+
+// ===== Data Layer =====
+const DB = {
+  get(key, def=[]) {
+    try { return JSON.parse(localStorage.getItem('lifelog_'+key)) || def; }
+    catch { return def; }
+  },
+  set(key, val) { localStorage.setItem('lifelog_'+key, JSON.stringify(val)); }
+};
+
+let fitnessData = DB.get('fitness');
+let sleepData = DB.get('sleep');
+let financeData = DB.get('finance');
+
+// ===== Media Data =====
+let mediaData = DB.get('media') || [];
+let mediaFilter = 'all'; // all/movie/tv/book/show
+function saveMediaData() { DB.set('media', mediaData); }
+
+// ===== Daily Notes =====
+let dailyNotes = DB.get('dailyNotes') || [];
+
+// ===== Stock Investment Data =====
+let stockData = DB.get('stock') || [];
+// Migration: fix stock codes corrupted by an earlier search-parsing bug (code="11", name="sz300382")
+stockData = stockData.map(s => {
+  const fixed = normalizeStockCode(s.code, s.name);
+  if (fixed !== s.code) {
+    s.code = fixed;
+    s.name = s.name && /^(sh|sz|hk|us)/i.test(s.name) ? '' : s.name; // keep real name if it wasn't a code
+  }
+  return s;
+});
+let stockQuotes = {}; // runtime cache: {stockId: {price, ma30, ma60, ma120, maDaily, signal, error, ts}}
+
+function saveStocks() { DB.set('stock', stockData); }
+
+function saveAll() {
+  DB.set('fitness', fitnessData);
+  DB.set('sleep', sleepData);
+  DB.set('finance', financeData);
+  DB.set('accounts', accountData);
+  DB.set('rates', exchangeRates);
+  DB.set('stock', stockData);
+  DB.set('media', mediaData);
+  DB.set('dailyNotes', dailyNotes);
+  // Trigger background cloud sync (debounced)
+  scheduleCloudPush();
+}
+
+// ===== Cloud Sync (Supabase) =====
+const SUPABASE_URL = 'https://byxqubrxnwqxgxqvlgey.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_tGMDLTgbWcq0yy4yKOO_Zg_wsgnalLS';
+const SYNC_KEYS = ['fitness', 'sleep', 'accounts', 'rates', 'stock', 'media', 'dailyNotes'];
+let supabaseClient = null;
+
+function initSupabase() {
+  try {
+    if (typeof supabase !== 'undefined' && supabase.createClient) {
+      supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      console.log('[Sync] Supabase initialized');
+      return true;
+    }
+  } catch(e) { console.warn('[Sync] Supabase SDK not loaded:', e); }
+  return false;
+}
+
+function tryInitSupabase(maxRetries, callback) {
+  var retries = 0;
+  function attempt() {
+    if (initSupabase()) { if (callback) callback(true); return; }
+    retries++;
+    if (retries <= maxRetries) {
+      setTimeout(attempt, 300);
+    } else {
+      console.warn('[Sync] Supabase SDK failed to load after retries');
+      if (callback) callback(false);
+    }
+  }
+  attempt();
+}
+
+function syncStatusEl() { return document.getElementById('syncStatus'); }
+
+function setSyncStatus(text, cls) {
+  var el = syncStatusEl();
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'sync-status ' + (cls || '');
+}
+
+// Pull all data from cloud, merge into local
+async function pullAllFromCloud() {
+  if (!supabaseClient) { setSyncStatus('离线', 'offline'); return; }
+  setSyncStatus('同步中...', 'syncing');
+  var changed = false;
+  for (var i = 0; i < SYNC_KEYS.length; i++) {
+    var key = SYNC_KEYS[i];
+    try {
+      var resp = await supabaseClient.from('lifelog_data').select('*').eq('id', key).maybeSingle();
+      if (resp.error) {
+        if (resp.error.code !== 'PGRST116') console.warn('[Sync] pull error', key, resp.error);
+        continue;
+      }
+      if (!resp.data) continue;
+
+      // rates is a single object
+      if (key === 'rates') {
+        exchangeRates = resp.data.data;
+        DB.set('rates', exchangeRates);
+        changed = true;
+        continue;
+      }
+
+      // Other keys are arrays — merge: remote wins, keep local-only records
+      var remoteArr = resp.data.data || [];
+      var localArr = DB.get(key);
+      var remoteIds = {};
+      remoteArr.forEach(function(r) { remoteIds[r.id] = true; });
+
+      // Start with remote records (authoritative)
+      var merged = remoteArr.slice();
+      // Add local records that don't exist in remote
+      localArr.forEach(function(l) {
+        if (!remoteIds[l.id]) merged.push(l);
+      });
+
+      // Update global variable
+      switch(key) {
+        case 'fitness': fitnessData = merged; break;
+        case 'sleep': sleepData = merged; break;
+        case 'accounts': accountData = merged; break;
+        case 'stock': stockData = merged; break;
+        case 'media': mediaData = merged; break;
+        case 'dailyNotes': dailyNotes = merged; break;
+      }
+      DB.set(key, merged);
+      changed = true;
+    } catch(e) { console.warn('[Sync] pull failed', key, e); }
+  }
+  if (changed) {
+    setSyncStatus('已同步 ✅', 'synced');
+    // Re-render current page
+    var active = document.querySelector('.page.active');
+    if (active) {
+      var pageId = active.id.replace('page-', '');
+      if (typeof renderPage === 'function') renderPage(pageId);
+    }
+  } else {
+    setSyncStatus('在线', 'online');
+  }
+}
+
+// Push all local data to cloud
+async function pushAllToCloud() {
+  if (!supabaseClient) { setSyncStatus('离线', 'offline'); return; }
+  setSyncStatus('上传中...', 'syncing');
+  var errors = 0;
+  for (var i = 0; i < SYNC_KEYS.length; i++) {
+    var key = SYNC_KEYS[i];
+    var value = key === 'rates' ? exchangeRates : DB.get(key);
+    try {
+      var resp = await supabaseClient.from('lifelog_data').upsert(
+        { id: key, data: value, updated_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      );
+      if (resp.error) { errors++; console.warn('[Sync] push error', key, resp.error); }
+    } catch(e) { errors++; console.warn('[Sync] push failed', key, e); }
+  }
+  setSyncStatus(errors ? '部分失败 ⚠️' : '已同步 ✅', errors ? 'error' : 'synced');
+  setTimeout(function() { setSyncStatus('在线', 'online'); }, 3000);
+}
+
+// Debounced push: called by saveAll(), batches writes within 2s
+var _pushTimer = null;
+function scheduleCloudPush() {
+  if (!supabaseClient) return;
+  clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(pushAllToCloud, 2000);
+}
+
+// Manual sync: pull then push
+async function syncNow() {
+  if (!supabaseClient) {
+    if (!initSupabase()) { setSyncStatus('SDK未加载', 'offline'); return; }
+  }
+  await pullAllFromCloud();
+  await pushAllToCloud();
+}
+
+// ===== Utility Functions =====
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayStr() { return new Date().toISOString().slice(0,10); }
+function yesterdayStr() { return new Date(Date.now() - 86400000).toISOString().slice(0,10); }
+function fmtMoney(n) {
+  const sign = n < 0 ? '-' : '';
+  return sign + '¥' + Math.abs(n).toLocaleString('zh-CN', {minimumFractionDigits:0, maximumFractionDigits:0});
+}
+function fmtDate(d) {
+  const dt = new Date(d);
+  return `${dt.getMonth()+1}月${dt.getDate()}日`;
+}
+function fmtDateFull(d) {
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+function getWeekDates() {
+  const dates = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0,10));
+  }
+  return dates;
+}
+function getRecentDates(n) {
+  const dates = [];
+  for (let i = n-1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0,10));
+  }
+  return dates;
+}
+function calcSleepDuration(bedtime, wakeTime) {
+  let [bh, bm] = bedtime.split(':').map(Number);
+  let [wh, wm] = wakeTime.split(':').map(Number);
+  let bedMin = bh * 60 + bm;
+  let wakeMin = wh * 60 + wm;
+  if (wakeMin <= bedMin) wakeMin += 24 * 60;
+  let diff = wakeMin - bedMin;
+  return Math.round((diff / 60) * 10) / 10;
+}
+
+// Convert "HH:MM" to decimal hour; for bedtime after midnight (hour<12) add 24
+// so the curve is continuous (e.g. 23:30→23.5, 00:15→24.25)
+// For wake time, also add 24 if hour<12 so wake is always above bedtime on chart
+function timeToDecimal(time, isBedtime) {
+  if (!time) return null;
+  let [h, m] = time.split(':').map(Number);
+  let dec = h + m / 60;
+  if (h < 12) dec += 24;  // applies to both late-night bedtime and morning wake
+  return Math.round(dec * 100) / 100;
+}
+
+// Convert decimal hour back to "HH:MM" display (handles values > 24)
+function decimalToTime(dec) {
+  if (dec == null) return '—';
+  dec = ((dec % 24) + 24) % 24;
+  let h = Math.floor(dec);
+  let m = Math.round((dec - h) * 60);
+  if (m === 60) { h++; m = 0; }
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+function qualityText(q) {
+  return ['','很差','较差','一般','良好','极好'][q] || '—';
+}
+function qualityStars(q) {
+  return '★'.repeat(q) + '☆'.repeat(5-q);
+}
+
+// ===== Toast =====
+function toast(msg) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(),300); }, 2500);
+}
+
+// ===== Navigation =====
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.mobile-nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll(`[data-page="${page}"]`).forEach(n => n.classList.add('active'));
+  // Close mobile sidebar
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('active');
+  // Render page data
+  renderPage(page);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function renderPage(page) {
+  switch(page) {
+    case 'fitness': renderFitness(); break;
+    case 'sleep': renderSleep(); break;
+    case 'finance': renderFinance(); break;
+    case 'stock':
+      renderStocks();
+      // Auto-refresh quotes if data is missing or stale (>60s)
+      const stale = stockData.some(s => {
+        const q = stockQuotes[s.id];
+        return !q || !q.price || (Date.now() - (q.ts || 0) > 60000);
+      });
+      if (stockData.length > 0 && stale) refreshAllStocks();
+      break;
+    case 'media': renderMedia(); break;
+    case 'daily': renderDaily(); break;
+  }
+}
+
+document.querySelectorAll('[data-page]').forEach(el => {
+  el.addEventListener('click', () => navigate(el.dataset.page));
+});
+
+// Mobile sidebar
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('active');
+}
+document.getElementById('sidebarOverlay').addEventListener('click', toggleSidebar);
+document.getElementById('mobileMenuBtn2')?.addEventListener('click', toggleSidebar);
+document.getElementById('mobileMenuBtn3')?.addEventListener('click', toggleSidebar);
+document.getElementById('mobileMenuBtn4')?.addEventListener('click', toggleSidebar);
+document.getElementById('mobileMenuBtn5')?.addEventListener('click', toggleSidebar);
+document.getElementById('mobileMenuBtn6')?.addEventListener('click', toggleSidebar);
+document.getElementById('mobileMenuBtn7')?.addEventListener('click', toggleSidebar);
+document.getElementById('mobileMenuBtn8')?.addEventListener('click', toggleSidebar);
+
+// ===== Theme =====
+function initTheme() {
+  const saved = localStorage.getItem('lifelog_theme') || 'light';
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme','dark');
+    document.getElementById('themeIcon').textContent = '●';
+  }
+}
+document.getElementById('themeToggle').addEventListener('click', () => {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (isDark) {
+    document.documentElement.removeAttribute('data-theme');
+    document.getElementById('themeIcon').textContent = '○';
+    localStorage.setItem('lifelog_theme','light');
+  } else {
+    document.documentElement.setAttribute('data-theme','dark');
+    document.getElementById('themeIcon').textContent = '●';
+    localStorage.setItem('lifelog_theme','dark');
+  }
+  // Re-render charts with theme colors
+  setTimeout(() => renderPage(document.querySelector('.page.active')?.id.replace('page-','')), 50);
+});
+
+// ===== Chart defaults =====
+Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+Chart.defaults.font.size = 12;
+
+function getChartColors() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return {
+    text: isDark ? '#cbd5e1' : '#64748b',
+    grid: isDark ? '#334155' : '#f1f5f9',
+    primary: '#6366f1',
+    info: '#0ea5e9',
+    success: '#10b981',
+    warning: '#f59e0b',
+    danger: '#ef4444',
+    purple: '#8b5cf6'
+  };
+}
+
+// Destroy old chart helper
+const chartInstances = {};
+function destroyChart(id) {
+  if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+}
+
+/* ============================================================
+   FITNESS MODULE
+   ============================================================ */
+
+function openFitnessModal(id) {
+  document.getElementById('fitId').value = id || '';
+  document.getElementById('fitnessModalTitle').textContent = id ? '编辑健身记录' : '添加健身记录';
+  if (id) {
+    const r = fitnessData.find(f => f.id === id);
+    if (r) {
+      document.getElementById('fitDate').value = r.date;
+      document.getElementById('fitType').value = r.type;
+      document.getElementById('fitDuration').value = r.duration || '';
+      document.getElementById('fitCalories').value = r.calories || '';
+      document.getElementById('fitSets').value = r.sets || '';
+      document.getElementById('fitReps').value = r.reps || '';
+      document.getElementById('fitNotes').value = r.notes || '';
+      document.querySelectorAll('#fitIntensity .intensity-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.val === r.intensity);
+      });
+    }
+  } else {
+    document.getElementById('fitDate').value = todayStr();
+    document.getElementById('fitType').value = '跑步';
+    document.getElementById('fitDuration').value = '';
+    document.getElementById('fitCalories').value = '';
+    document.getElementById('fitSets').value = '';
+    document.getElementById('fitReps').value = '';
+    document.getElementById('fitNotes').value = '';
+    document.querySelectorAll('#fitIntensity .intensity-btn').forEach((b,i) => {
+      b.classList.toggle('active', i === 1);
+    });
+  }
+  document.getElementById('fitnessModal').classList.add('active');
+}
+
+// Intensity buttons
+document.querySelectorAll('#fitIntensity .intensity-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#fitIntensity .intensity-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// Media: toggle date range vs single date based on type
+function onMediaTypeChange() {
+  const type = document.getElementById('mediaType').value;
+  const isRange = (type === 'tv' || type === 'book');
+  document.getElementById('mediaDateSingleGroup').style.display = isRange ? 'none' : '';
+  document.getElementById('mediaDateRangeGroup').style.display = isRange ? '' : 'none';
+}
+
+function saveFitness() {
+  const id = document.getElementById('fitId').value;
+  const date = document.getElementById('fitDate').value;
+  if (!date) { toast('请选择日期'); return; }
+  const type = document.getElementById('fitType').value;
+  const duration = parseInt(document.getElementById('fitDuration').value) || 0;
+  if (!duration) { toast('请输入运动时长'); return; }
+  const calories = parseInt(document.getElementById('fitCalories').value) || 0;
+  const sets = parseInt(document.getElementById('fitSets').value) || 0;
+  const reps = parseInt(document.getElementById('fitReps').value) || 0;
+  const notes = document.getElementById('fitNotes').value;
+  const intensity = document.querySelector('#fitIntensity .intensity-btn.active')?.dataset.val || '中';
+
+  if (id) {
+    const idx = fitnessData.findIndex(f => f.id === id);
+    if (idx >= 0) fitnessData[idx] = {...fitnessData[idx], date, type, duration, calories, sets, reps, notes, intensity};
+  } else {
+    fitnessData.push({id:uid(), date, type, duration, calories, sets, reps, notes, intensity});
+  }
+  saveAll();
+  closeModal('fitnessModal');
+  toast('健身记录已保存 💪');
+  renderFitness();
+}
+
+function deleteFitness(id) {
+  if (!confirm('确定删除这条记录？')) return;
+  fitnessData = fitnessData.filter(f => f.id !== id);
+  saveAll();
+  toast('记录已删除');
+  renderFitness();
+}
+
+function renderFitness() {
+  // Stats
+  const now = new Date();
+  const monthRecords = fitnessData.filter(f => {
+    const d = new Date(f.date);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  document.getElementById('fitMonthlyCount').textContent = monthRecords.length + ' 次';
+  document.getElementById('fitMonthlyDuration').textContent = monthRecords.reduce((s,f)=>s+f.duration,0) + ' 分钟';
+  document.getElementById('fitMonthlyCalories').textContent = monthRecords.reduce((s,f)=>s+(f.calories||0),0) + ' kcal';
+
+  // Chart - last 14 days duration
+  const colors = getChartColors();
+  const dates = getRecentDates(14);
+  destroyChart('fitnessChart');
+  chartInstances.fitnessChart = new Chart(document.getElementById('fitnessChart'), {
+    type: 'bar',
+    data: {
+      labels: dates.map(fmtDate),
+      datasets: [{
+        label: '运动时长（分钟）',
+        data: dates.map(d => {
+          const recs = fitnessData.filter(f => f.date === d);
+          return recs.reduce((s,r) => s+r.duration, 0);
+        }),
+        backgroundColor: dates.map((d,i) => {
+          const hasData = fitnessData.some(f => f.date === d);
+          return hasData ? colors.primary : colors.grid;
+        }),
+        borderRadius: 6,
+        barThickness: 'flex',
+        maxBarThickness: 30
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.text } },
+        x: { grid: { display: false }, ticks: { color: colors.text, maxRotation: 45 } }
+      }
+    }
+  });
+
+  // Table
+  const sorted = [...fitnessData].sort((a,b) => b.date.localeCompare(a.date));
+  if (sorted.length === 0) {
+    document.getElementById('fitnessTableWrap').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">💪</div>
+        <p>还没有健身记录，开始记录你的第一次锻炼吧！</p>
+        <button class="btn btn-primary" onclick="openFitnessModal()">➕ 添加记录</button>
+      </div>`;
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th>日期</th><th>运动</th><th>时长</th><th>强度</th><th>热量</th><th>备注</th><th></th>
+  </tr></thead><tbody>`;
+  sorted.forEach(f => {
+    const intensityBadge = f.intensity === '高' ? 'badge-danger' : f.intensity === '中' ? 'badge-warning' : 'badge-success';
+    html += `<tr>
+      <td>${fmtDate(f.date)}</td>
+      <td><span class="chip">${f.type}</span></td>
+      <td>${f.duration} 分钟</td>
+      <td><span class="badge ${intensityBadge}">${f.intensity}</span></td>
+      <td>${f.calories || '-'} kcal</td>
+      <td class="text-muted text-sm" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.notes || '-'}</td>
+      <td>
+        <button class="btn-icon" onclick="openFitnessModal('${f.id}')" title="编辑">✏️</button>
+        <button class="btn-icon" onclick="deleteFitness('${f.id}')" title="删除">🗑️</button>
+      </td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('fitnessTableWrap').innerHTML = html;
+}
+
+/* ============================================================
+   SLEEP MODULE
+   ============================================================ */
+
+function openSleepModal(id) {
+  document.getElementById('sleepId').value = id || '';
+  document.getElementById('sleepModalTitle').textContent = id ? '编辑睡眠记录' : '添加睡眠记录';
+  if (id) {
+    const r = sleepData.find(s => s.id === id);
+    if (r) {
+      document.getElementById('sleepDate').value = r.date;
+      document.getElementById('sleepBedtime').value = r.bedtime;
+      document.getElementById('sleepWakeTime').value = r.wakeTime;
+      document.getElementById('sleepNotes').value = r.notes || '';
+    }
+  } else {
+    document.getElementById('sleepDate').value = yesterdayStr();
+    document.getElementById('sleepBedtime').value = '23:00';
+    document.getElementById('sleepWakeTime').value = '07:00';
+    document.getElementById('sleepNotes').value = '';
+  }
+  document.getElementById('sleepModal').classList.add('active');
+}
+
+function saveSleep() {
+  const id = document.getElementById('sleepId').value;
+  const date = document.getElementById('sleepDate').value;
+  if (!date) { toast('请选择日期'); return; }
+  const bedtime = document.getElementById('sleepBedtime').value;
+  const wakeTime = document.getElementById('sleepWakeTime').value;
+  if (!bedtime || !wakeTime) { toast('请填写入睡和起床时间'); return; }
+  const notes = document.getElementById('sleepNotes').value;
+  const duration = calcSleepDuration(bedtime, wakeTime);
+  const quality = 3; // default, no longer user-input
+
+  if (id) {
+    const idx = sleepData.findIndex(s => s.id === id);
+    if (idx >= 0) sleepData[idx] = {...sleepData[idx], date, bedtime, wakeTime, quality, notes, duration};
+  } else {
+    sleepData.push({id:uid(), date, bedtime, wakeTime, quality, notes, duration});
+  }
+  saveAll();
+  closeModal('sleepModal');
+  toast('睡眠记录已保存 😴');
+  renderSleep();
+}
+
+function deleteSleep(id) {
+  if (!confirm('确定删除这条记录？')) return;
+  sleepData = sleepData.filter(s => s.id !== id);
+  saveAll();
+  toast('记录已删除');
+  renderSleep();
+}
+
+function renderSleep() {
+  // Stats
+  const now = new Date();
+  const monthRecords = sleepData.filter(s => {
+    const d = new Date(s.date);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const avgDuration = monthRecords.length > 0
+    ? (monthRecords.reduce((s,r) => s+r.duration, 0) / monthRecords.length).toFixed(1)
+    : '0';
+  document.getElementById('sleepAvgDuration').textContent = avgDuration + ' 小时';
+  // Average bedtime & wake time (this month)
+  if (monthRecords.length > 0) {
+    const avgBed = monthRecords.reduce((s,r) => s + timeToDecimal(r.bedtime, true), 0) / monthRecords.length;
+    const avgWake = monthRecords.reduce((s,r) => s + timeToDecimal(r.wakeTime, false), 0) / monthRecords.length;
+    document.getElementById('sleepAvgBedtime').textContent = decimalToTime(avgBed);
+    document.getElementById('sleepAvgWake').textContent = decimalToTime(avgWake);
+  } else {
+    document.getElementById('sleepAvgBedtime').textContent = '—';
+    document.getElementById('sleepAvgWake').textContent = '—';
+  }
+
+  // Combined chart - duration bars + bedtime/wake time lines (14 days)
+  const colors = getChartColors();
+  const dates = getRecentDates(14);
+  const durationData = dates.map(d => {
+    const rec = sleepData.find(s => s.date === d);
+    return rec ? rec.duration : null;
+  });
+  const bedtimeData = dates.map(d => {
+    const rec = sleepData.find(s => s.date === d);
+    return rec ? timeToDecimal(rec.bedtime, true) : null;
+  });
+  const wakeData = dates.map(d => {
+    const rec = sleepData.find(s => s.date === d);
+    return rec ? timeToDecimal(rec.wakeTime, false) : null;
+  });
+
+  // Compute Y axis range for time axis based on actual data
+  const allTimeVals = [...bedtimeData, ...wakeData].filter(v => v != null);
+  const minTime = allTimeVals.length ? Math.min(...allTimeVals) : 20;
+  const maxTime = allTimeVals.length ? Math.max(...allTimeVals) : 32;
+  // Pad the range a bit
+  const yMin = Math.floor(minTime - 1);
+  const yMax = Math.ceil(maxTime + 1);
+
+  destroyChart('sleepChart');
+  chartInstances.sleepChart = new Chart(document.getElementById('sleepChart'), {
+    type: 'bar',
+    data: {
+      labels: dates.map(fmtDate),
+      datasets: [
+        {
+          type: 'bar',
+          label: '睡眠时长',
+          data: durationData,
+          backgroundColor: dates.map(d => {
+            const rec = sleepData.find(s => s.date === d);
+            if (!rec) return 'transparent';
+            if (rec.duration >= 7) return 'rgba(16,185,129,.35)';
+            if (rec.duration >= 6) return 'rgba(245,158,11,.35)';
+            return 'rgba(239,68,68,.35)';
+          }),
+          borderColor: dates.map(d => {
+            const rec = sleepData.find(s => s.date === d);
+            if (!rec) return 'transparent';
+            if (rec.duration >= 7) return colors.success;
+            if (rec.duration >= 6) return colors.warning;
+            return colors.danger;
+          }),
+          borderWidth: 1.5,
+          borderRadius: 4,
+          maxBarThickness: 20,
+          yAxisID: 'y1',
+          order: 1
+        },
+        {
+          type: 'line',
+          label: '入睡时间',
+          data: bedtimeData,
+          borderColor: colors.purple,
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.3,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointBackgroundColor: colors.purple,
+          pointBorderColor: 'transparent',
+          spanGaps: true,
+          yAxisID: 'y',
+          order: 2
+        },
+        {
+          type: 'line',
+          label: '起床时间',
+          data: wakeData,
+          borderColor: colors.warning,
+          backgroundColor: 'rgba(245,158,11,.12)',
+          fill: '-1',   // fill down to the previous dataset (bedtime)
+          tension: 0.3,
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointBackgroundColor: colors.warning,
+          pointBorderColor: 'transparent',
+          spanGaps: true,
+          yAxisID: 'y',
+          order: 3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const label = ctx.dataset.label;
+              const val = ctx.parsed.y;
+              if (val == null) return label + ': 无数据';
+              if (ctx.dataset.yAxisID === 'y1') {
+                return label + ': ' + val + ' 小时';
+              }
+              return label + ': ' + decimalToTime(val);
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          position: 'left',
+          min: yMin,
+          max: yMax,
+          grid: { color: colors.grid, drawOnChartArea: true },
+          ticks: {
+            color: colors.text,
+            stepSize: 1,
+            callback: function(val) { return decimalToTime(val); }
+          }
+        },
+        y1: {
+          position: 'right',
+          min: 0,
+          max: 10,
+          grid: { drawOnChartArea: false },
+          ticks: {
+            color: colors.text,
+            stepSize: 2,
+            callback: function(val) { return val + 'h'; }
+          },
+          title: { display: true, text: '睡眠时长（小时）', color: colors.text, font: { size: 11 } }
+        },
+        x: { grid: { display: false }, ticks: { color: colors.text, maxRotation: 45 } }
+      }
+    }
+  });
+
+  // Table
+  const sorted = [...sleepData].sort((a,b) => b.date.localeCompare(a.date));
+  if (sorted.length === 0) {
+    document.getElementById('sleepTableWrap').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">😴</div>
+        <p>还没有睡眠记录，开始追踪你的睡眠吧！</p>
+        <button class="btn btn-primary" onclick="openSleepModal()">➕ 添加记录</button>
+      </div>`;
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th>日期</th><th>入睡</th><th>起床</th><th>时长</th><th>备注</th><th></th>
+  </tr></thead><tbody>`;
+  sorted.forEach(s => {
+    const durColor = s.duration >= 7 ? 'text-success' : s.duration >= 6 ? 'text-muted' : 'text-danger';
+    html += `<tr>
+      <td>${fmtDate(s.date)}</td>
+      <td>${s.bedtime}</td>
+      <td>${s.wakeTime}</td>
+      <td class="${durColor}">${s.duration} 小时</td>
+      <td class="text-muted text-sm" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.notes || '-'}</td>
+      <td>
+        <button class="btn-icon" onclick="openSleepModal('${s.id}')" title="编辑">✏️</button>
+        <button class="btn-icon" onclick="deleteSleep('${s.id}')" title="删除">🗑️</button>
+      </td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('sleepTableWrap').innerHTML = html;
+}
+
+/* ============================================================
+   ACCOUNT & ASSETS MODULE (multi-currency, stacked area chart)
+   ============================================================ */
+
+let accountData = DB.get('accounts');
+let exchangeRates = DB.get('rates', { rates: {}, date: '' });
+
+// Currency display config
+const CURRENCY_INFO = {
+  CNY: { symbol: '¥', name: '人民币' },
+  USD: { symbol: '$', name: '美元' },
+  HKD: { symbol: 'HK$', name: '港币' },
+  EUR: { symbol: '€', name: '欧元' },
+  GBP: { symbol: '£', name: '英镑' },
+  JPY: { symbol: '¥', name: '日元' },
+  SGD: { symbol: 'S$', name: '新加坡元' },
+  AUD: { symbol: 'A$', name: '澳元' },
+  CAD: { symbol: 'C$', name: '加元' },
+  KRW: { symbol: '₩', name: '韩元' }
+};
+
+// Fetch exchange rates (USD base → convert to CNY-based)
+async function refreshRates() {
+  toast('正在获取最新汇率...');
+  try {
+    const resp = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await resp.json();
+    if (data && data.rates) {
+      const usdToCny = data.rates['CNY'] || 7.2;
+      // Build rates: how much CNY per 1 unit of each currency
+      const cnyRates = {};
+      for (const [cur, rate] of Object.entries(data.rates)) {
+        // rate = X cur per 1 USD; usdToCny = CNY per 1 USD
+        // CNY per 1 cur = usdToCny / rate
+        cnyRates[cur] = usdToCny / rate;
+      }
+      cnyRates['CNY'] = 1;
+      exchangeRates = { rates: cnyRates, date: data.time_last_update_utc ? new Date(data.time_last_update_utc).toISOString().slice(0,10) : todayStr() };
+      DB.set('rates', exchangeRates);
+      toast('汇率已更新 ✅');
+      renderAccounts();
+    } else {
+      throw new Error('Invalid response');
+    }
+  } catch(err) {
+    // Fallback: use default rates if none stored
+    if (!exchangeRates.rates || Object.keys(exchangeRates.rates).length === 0) {
+      const defaults = { CNY: 1, USD: 7.2, HKD: 0.92, EUR: 7.8, GBP: 9.1, JPY: 0.048, SGD: 5.3, AUD: 4.7, CAD: 5.3, KRW: 0.0053 };
+      exchangeRates = { rates: defaults, date: todayStr() };
+      DB.set('rates', exchangeRates);
+    }
+    toast('无法在线获取汇率，使用本地缓存');
+    renderAccounts();
+  }
+}
+
+function getRate(currency) {
+  if (currency === 'CNY') return 1;
+  return exchangeRates.rates[currency] || 1;
+}
+
+function convertToCNY(amount, currency) {
+  return amount * getRate(currency);
+}
+
+function fmtCurrency(amount, currency) {
+  const info = CURRENCY_INFO[currency] || { symbol: '' };
+  return info.symbol + amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ===== Account CRUD =====
+function openAccountModal(id) {
+  document.getElementById('accId').value = id || '';
+  document.getElementById('accountModalTitle').textContent = id ? '编辑账户' : '添加账户';
+  // Reset holdings list
+  document.getElementById('accHoldingsList').innerHTML = '';
+  if (id) {
+    const acc = accountData.find(a => a.id === id);
+    if (acc) {
+      document.getElementById('accName').value = acc.name;
+      document.getElementById('accCurrency').value = acc.currency;
+      document.getElementById('accNote').value = acc.note || '';
+      document.getElementById('accExcluded').checked = !!acc.excluded;
+      document.getElementById('accCalcMode').value = acc.calcMode || 'direct';
+      document.getElementById('accInitBalance').value = '';
+      document.getElementById('accBaseAmount').value = acc.baseAmount || '';
+      // Load existing holdings
+      if (acc.holdings && acc.holdings.length > 0) {
+        acc.holdings.forEach(h => addHoldingRow(h));
+      }
+    }
+  } else {
+    document.getElementById('accName').value = '';
+    document.getElementById('accCurrency').value = 'CNY';
+    document.getElementById('accNote').value = '';
+    document.getElementById('accExcluded').checked = false;
+    document.getElementById('accCalcMode').value = 'direct';
+    document.getElementById('accInitBalance').value = '';
+    document.getElementById('accBaseAmount').value = '';
+  }
+  toggleAccCalcMode();
+  document.getElementById('accountModal').classList.add('active');
+}
+
+function toggleAccCalcMode() {
+  const mode = document.getElementById('accCalcMode').value;
+  document.getElementById('accInitBalanceGroup').style.display = mode === 'direct' ? '' : 'none';
+  document.getElementById('accFormulaGroup').style.display = mode === 'formula' ? '' : 'none';
+}
+
+function addHoldingRow(existing) {
+  const list = document.getElementById('accHoldingsList');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center';
+  const h = existing || { name: '', quantity: '', currency: '' };
+  const accCurrency = document.getElementById('accCurrency')?.value || 'CNY';
+  const holdingCurrency = h.currency || accCurrency;
+  const curOptions = ['CNY','USD','HKD','EUR','GBP','JPY','SGD','AUD','CAD','KRW']
+    .map(c => `<option value="${c}" ${c === holdingCurrency ? 'selected' : ''}>${c}</option>`).join('');
+  row.innerHTML = `
+    <input type="text" class="form-input holding-name" placeholder="持仓名称（如 腾讯）" value="${h.name || ''}" style="flex:1;min-width:80px">
+    <input type="number" class="form-input holding-qty" placeholder="数量" step="0.0001" value="${h.quantity || ''}" style="width:90px">
+    <select class="form-input holding-cur" style="width:80px">${curOptions}</select>
+    <button class="btn-icon" onclick="this.parentElement.remove()" title="删除">🗑️</button>
+  `;
+  list.appendChild(row);
+}
+
+function saveAccount() {
+  const id = document.getElementById('accId').value;
+  const name = document.getElementById('accName').value.trim();
+  if (!name) { toast('请输入账户名称'); return; }
+  const currency = document.getElementById('accCurrency').value;
+  const note = document.getElementById('accNote').value;
+  const calcMode = document.getElementById('accCalcMode').value;
+
+  // Collect holdings for formula mode
+  let holdings = [];
+  let baseAmount = 0;
+  if (calcMode === 'formula') {
+    baseAmount = parseFloat(document.getElementById('accBaseAmount').value) || 0;
+    const rows = document.querySelectorAll('#accHoldingsList > div');
+    rows.forEach(row => {
+      const hName = row.querySelector('.holding-name').value.trim();
+      const hQty = parseFloat(row.querySelector('.holding-qty').value);
+      const hCur = row.querySelector('.holding-cur')?.value || currency;
+      if (hName && hQty > 0) {
+        holdings.push({ id: uid(), name: hName, quantity: hQty, currency: hCur });
+      }
+    });
+  }
+
+  if (id) {
+    const idx = accountData.findIndex(a => a.id === id);
+    if (idx >= 0) {
+      accountData[idx].name = name;
+      accountData[idx].currency = currency;
+      accountData[idx].note = note;
+      accountData[idx].excluded = document.getElementById('accExcluded').checked;
+      accountData[idx].calcMode = calcMode;
+      if (calcMode === 'formula') {
+        accountData[idx].baseAmount = baseAmount;
+        // Merge holdings: keep existing holding IDs if name matches, add new ones
+        const oldHoldings = accountData[idx].holdings || [];
+        accountData[idx].holdings = holdings.map(h => {
+          const old = oldHoldings.find(oh => oh.name === h.name);
+          return old ? { ...h, id: old.id } : h;
+        });
+      }
+    }
+  } else {
+    const newAcc = {
+      id: uid(),
+      name, currency, note, calcMode,
+      excluded: document.getElementById('accExcluded').checked,
+      createdAt: todayStr(),
+      balances: []
+    };
+    if (calcMode === 'formula') {
+      newAcc.baseAmount = baseAmount;
+      newAcc.holdings = holdings;
+    } else {
+      const initBalance = parseFloat(document.getElementById('accInitBalance').value) || 0;
+      if (initBalance !== 0) {
+        newAcc.balances.push({ id: uid(), date: todayStr(), amount: initBalance });
+      }
+    }
+    accountData.push(newAcc);
+  }
+  saveAccounts();
+  closeModal('accountModal');
+  toast('账户已保存 🏦');
+  renderAccounts();
+}
+
+function deleteAccount(id) {
+  const acc = accountData.find(a => a.id === id);
+  if (!confirm(`确定删除账户「${acc?.name}」及其所有余额记录？`)) return;
+  accountData = accountData.filter(a => a.id !== id);
+  saveAccounts();
+  toast('账户已删除');
+  renderAccounts();
+}
+
+function saveAccounts() { DB.set('accounts', accountData); }
+
+// ===== Balance Record CRUD =====
+function openBalanceModal(id) {
+  if (accountData.length === 0) {
+    toast('请先添加账户');
+    openAccountModal();
+    return;
+  }
+  document.getElementById('balId').value = id || '';
+  document.getElementById('balanceModalTitle').textContent = id ? '编辑余额' : '记录余额';
+  // Populate account dropdown
+  const sel = document.getElementById('balAccount');
+  sel.innerHTML = accountData.map(a =>
+    `<option value="${a.id}">${a.name} (${a.currency})</option>`
+  ).join('');
+  document.getElementById('balDate').value = todayStr();
+  document.getElementById('balAmount').value = '';
+  document.getElementById('balBaseAmount').value = '';
+
+  // If editing, load existing record
+  if (id) {
+    for (const acc of accountData) {
+      const bal = acc.balances.find(b => b.id === id);
+      if (bal) {
+        sel.value = acc.id;
+        document.getElementById('balDate').value = bal.date;
+        // updateBalUI will handle the rest after we set account and date
+        break;
+      }
+    }
+  }
+  updateBalUI();
+  document.getElementById('balanceModal').classList.add('active');
+}
+
+function updateBalUI() {
+  const sel = document.getElementById('balAccount');
+  const acc = accountData.find(a => a.id === sel.value);
+  if (!acc) return;
+  const rate = getRate(acc.currency);
+  const editId = document.getElementById('balId').value;
+  const selDate = document.getElementById('balDate').value;
+
+  // Check if there's an existing record for this date (or the edit target)
+  const existingBal = editId
+    ? acc.balances.find(b => b.id === editId)
+    : acc.balances.find(b => b.date === selDate);
+
+  // Currency hint
+  const hint = document.getElementById('balCurrencyHint');
+  const text = document.getElementById('balCurrencyText');
+  if (acc.currency === 'CNY') {
+    hint.style.display = 'none';
+  } else {
+    hint.style.display = 'block';
+    text.textContent = `1 ${acc.currency} = ¥${rate.toFixed(4)}（汇率日期：${exchangeRates.date || '未知'}）`;
+  }
+
+  // Toggle formula / direct UI
+  const isFormula = (acc.calcMode === 'formula');
+  document.getElementById('balAmountGroup').style.display = isFormula ? 'none' : '';
+  document.getElementById('balFormulaGroup').style.display = isFormula ? '' : 'none';
+
+  if (isFormula) {
+    // Pre-fill base amount from account config
+    document.getElementById('balBaseAmount').value = acc.baseAmount || 0;
+    // Render holdings list with price inputs
+    const list = document.getElementById('balHoldingsList');
+    list.innerHTML = '';
+    if (acc.holdings && acc.holdings.length > 0) {
+      acc.holdings.forEach(h => {
+        // Try to load saved price from existing record
+        const savedHolding = existingBal && existingBal.holdingsData
+          ? existingBal.holdingsData.find(hd => hd.name === h.name)
+          : null;
+        const savedPrice = savedHolding ? savedHolding.price : '';
+        const hCur = h.currency || acc.currency;
+        const rateNote = hCur !== acc.currency ? ` 1${hCur}=${(getRate(hCur) / getRate(acc.currency)).toFixed(4)}${acc.currency}` : '';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap';
+        row.innerHTML = `
+          <span style="flex:1;font-size:13px;font-weight:600;min-width:60px">${h.name}</span>
+          <span style="width:60px;text-align:right;font-size:13px;color:var(--text-muted)">${h.quantity}</span>
+          <span style="font-size:11px;color:var(--text-muted)">×</span>
+          <span style="font-size:11px;color:var(--text-muted);width:36px">${hCur}</span>
+          <input type="number" class="form-input holding-price" data-qty="${h.quantity}" data-cur="${hCur}" placeholder="市价" step="0.0001" style="width:90px" value="${savedPrice}" oninput="calcFormulaBalance()">
+          ${rateNote ? `<span class="text-xs text-muted">${rateNote}</span>` : ''}
+        `;
+        list.appendChild(row);
+      });
+    }
+    calcFormulaBalance();
+  } else {
+    // If editing or date has existing record, load it; otherwise carry-forward
+    const carryHint = document.getElementById('balCarryHint');
+    const carryText = document.getElementById('balCarryText');
+    const latest = getLatestBalance(acc);
+    if (existingBal) {
+      // Loading existing record
+      document.getElementById('balAmount').value = existingBal.amount;
+      carryHint.style.display = 'block';
+      carryText.textContent = `编辑记录（${fmtDate(existingBal.date)}）`;
+    } else if (latest) {
+      // Carry-forward: pre-fill with last known balance
+      carryHint.style.display = 'block';
+      carryText.textContent = `沿用上次余额（${fmtDate(latest.date)}）：${fmtCurrency(latest.amount, acc.currency)}`;
+      document.getElementById('balAmount').value = latest.amount;
+    } else {
+      carryHint.style.display = 'none';
+    }
+  }
+}
+
+function calcFormulaBalance() {
+  const acc = accountData.find(a => a.id === document.getElementById('balAccount').value);
+  if (!acc) return;
+  const accCurrency = acc.currency;
+  const base = parseFloat(document.getElementById('balBaseAmount').value) || 0;
+  let total = base; // base is in account currency
+  document.querySelectorAll('.holding-price').forEach(input => {
+    const qty = parseFloat(input.dataset.qty) || 0;
+    const price = parseFloat(input.value) || 0;
+    const hCur = input.dataset.cur || accCurrency;
+    // Convert holding value from its currency to account currency via CNY
+    const holdingValue = qty * price;
+    const converted = hCur === accCurrency ? holdingValue : holdingValue * getRate(hCur) / getRate(accCurrency);
+    total += converted;
+  });
+  document.getElementById('balCalcResult').textContent = fmtCurrency(Math.round(total * 100) / 100, accCurrency);
+}
+
+// Replace the old event listener (do not reference undefined updateBalCurrencyHint)
+document.getElementById('balAccount')?.removeEventListener('change', window.updateBalCurrencyHint || (() => {}));
+document.getElementById('balAccount')?.addEventListener('change', updateBalUI);
+// Also listen on date change for carry-forward
+document.getElementById('balDate')?.addEventListener('change', updateBalUI);
+
+function saveBalance() {
+  const id = document.getElementById('balId').value;
+  const accId = document.getElementById('balAccount').value;
+  const date = document.getElementById('balDate').value;
+  if (!date) { toast('请选择日期'); return; }
+
+  const acc = accountData.find(a => a.id === accId);
+  if (!acc) { toast('账户不存在'); return; }
+
+  let amount;
+  let holdingsData = [];
+  if (acc.calcMode === 'formula') {
+    // Calculate from formula
+    const base = parseFloat(document.getElementById('balBaseAmount').value) || 0;
+    const accCurrency = acc.currency;
+    let total = base;
+    document.querySelectorAll('#balHoldingsList > div').forEach((row, i) => {
+      const holding = acc.holdings[i];
+      const priceInput = row.querySelector('.holding-price');
+      const price = parseFloat(priceInput?.value) || 0;
+      if (holding) {
+        const hCur = holding.currency || accCurrency;
+        const holdingValue = holding.quantity * price;
+        const converted = hCur === accCurrency ? holdingValue : holdingValue * getRate(hCur) / getRate(accCurrency);
+        total += converted;
+        holdingsData.push({ name: holding.name, quantity: holding.quantity, price, currency: hCur });
+      }
+    });
+    amount = Math.round(total * 100) / 100;
+    if (amount === 0) { toast('请填写持仓市价或基础余额'); return; }
+  } else {
+    amount = parseFloat(document.getElementById('balAmount').value);
+    if (isNaN(amount)) { toast('请输入有效余额'); return; }
+  }
+
+  if (id) {
+    const idx = acc.balances.findIndex(b => b.id === id);
+    if (idx >= 0) {
+      acc.balances[idx] = { ...acc.balances[idx], date, amount };
+      if (acc.calcMode === 'formula') {
+        acc.balances[idx].holdingsData = holdingsData || [];
+      }
+    }
+  } else {
+    // Check if balance for this date already exists
+    const existing = acc.balances.find(b => b.date === date);
+    if (existing) {
+      existing.amount = amount;
+      if (acc.calcMode === 'formula') {
+        existing.holdingsData = holdingsData || [];
+      }
+    } else {
+      const newBal = { id: uid(), date, amount };
+      if (acc.calcMode === 'formula') {
+        newBal.holdingsData = holdingsData || [];
+      }
+      acc.balances.push(newBal);
+    }
+  }
+  // Sort balances by date
+  acc.balances.sort((a,b) => a.date.localeCompare(b.date));
+  saveAccounts();
+  closeModal('balanceModal');
+  toast('余额已记录 💰');
+  renderAccounts();
+}
+
+function deleteBalance(accId, balId) {
+  if (!confirm('确定删除这条余额记录？')) return;
+  const acc = accountData.find(a => a.id === accId);
+  if (acc) {
+    acc.balances = acc.balances.filter(b => b.id !== balId);
+    saveAccounts();
+    toast('记录已删除');
+    renderAccounts();
+      // Refresh the history modal if it's open
+    openBalanceHistory(accId);
+  }
+}
+
+function openBalanceHistory(accId) {
+  const acc = accountData.find(a => a.id === accId);
+  if (!acc) return;
+  document.getElementById('balanceHistoryTitle').textContent = acc.name + ' · 余额记录';
+  const isFormula = acc.calcMode === 'formula';
+  let html = '';
+  if (!acc.balances || acc.balances.length === 0) {
+    html = '<div class="empty-state"><div class="empty-icon">💰</div><p>暂无余额记录</p></div>';
+  } else {
+    const sorted = [...acc.balances].sort((a,b) => b.date.localeCompare(a.date));
+    if (isFormula) {
+      html = '<table><thead><tr><th>日期</th><th>基础余额</th><th>持仓明细</th><th>总余额</th><th></th></tr></thead><tbody>';
+      sorted.forEach(b => {
+        let holdingsStr = (b.holdingsData || []).map(h => {
+          const cur = h.currency || acc.currency;
+          const curTag = cur !== acc.currency ? ` <span class="badge badge-info" style="font-size:10px">${cur}</span>` : '';
+          return `${h.name} ${h.quantity}×${h.price}${curTag}`;
+        }).join('<br>');
+        html += `<tr>
+          <td>${fmtDate(b.date)}</td>
+          <td>${fmtCurrency(acc.baseAmount || 0, acc.currency)}</td>
+          <td class="text-sm">${holdingsStr || '—'}</td>
+          <td style="font-weight:700">${fmtCurrency(b.amount, acc.currency)}</td>
+          <td>
+            <button class="btn-icon" onclick="closeModal('balanceHistoryModal');openBalanceModalForEdit('${acc.id}','${b.id}')" title="编辑">✏️</button>
+            <button class="btn-icon" onclick="deleteBalance('${acc.id}','${b.id}')" title="删除">🗑️</button>
+          </td>
+        </tr>`;
+      });
+    } else {
+      html = '<table><thead><tr><th>日期</th><th>余额</th><th>折合人民币</th><th></th></tr></thead><tbody>';
+      sorted.forEach(b => {
+        const cny = convertToCNY(b.amount, acc.currency);
+        html += `<tr>
+          <td>${fmtDate(b.date)}</td>
+          <td style="font-weight:600">${fmtCurrency(b.amount, acc.currency)}</td>
+          <td>${acc.currency === 'CNY' ? '—' : fmtMoney(cny)}</td>
+          <td>
+            <button class="btn-icon" onclick="closeModal('balanceHistoryModal');openBalanceModalForEdit('${acc.id}','${b.id}')" title="编辑">✏️</button>
+            <button class="btn-icon" onclick="deleteBalance('${acc.id}','${b.id}')" title="删除">🗑️</button>
+          </td>
+        </tr>`;
+      });
+    }
+    html += '</tbody></table>';
+  }
+  document.getElementById('balanceHistoryContent').innerHTML = html;
+  document.getElementById('balanceHistoryModal').classList.add('active');
+}
+
+// Get latest balance for an account
+function getLatestBalance(acc) {
+  if (!acc.balances || acc.balances.length === 0) return null;
+  return acc.balances[acc.balances.length - 1];
+}
+
+// Get balance on or before a specific date (for historical chart)
+function getBalanceOnDate(acc, date) {
+  if (!acc.balances || acc.balances.length === 0) return null;
+  // Find the most recent balance on or before the given date
+  let result = null;
+  for (const b of acc.balances) {
+    if (b.date <= date) result = b.amount;
+    else break;
+  }
+  return result;
+}
+
+// ===== Render Account Section =====
+function renderAccounts() {
+  const colors = getChartColors();
+  const chartColors = [colors.primary, colors.success, colors.warning, colors.info, colors.purple, colors.danger, '#fb923c','#22d3ee','#a78bfa','#f472b6','#34d399','#fbbf24'];
+
+  const activeAccounts = accountData.filter(a => !a.excluded);
+  const excludedAccounts = accountData.filter(a => a.excluded);
+
+  // Calculate totals (active accounts only for main total)
+  const totalCNY = activeAccounts.reduce((s, acc) => {
+    const latest = getLatestBalance(acc);
+    return s + (latest ? convertToCNY(latest.amount, acc.currency) : 0);
+  }, 0);
+  const totalExcludedCNY = excludedAccounts.reduce((s, acc) => {
+    const latest = getLatestBalance(acc);
+    return s + (latest ? convertToCNY(latest.amount, acc.currency) : 0);
+  }, 0);
+  const allCurrencies = [...new Set(accountData.map(a => a.currency))];
+
+  document.getElementById('accTotalCNY').textContent = fmtMoney(totalCNY);
+  document.getElementById('accTotalDetail').textContent = activeAccounts.length + ' 个账户 · ' + allCurrencies.length + ' 种币种' + (excludedAccounts.length ? ' · 已折叠 ' + excludedAccounts.length + ' 个' : '');
+  document.getElementById('accCurrencyCount').textContent = allCurrencies.length + ' 种';
+  document.getElementById('accCurrencyList').textContent = allCurrencies.join(' / ') || '—';
+  document.getElementById('accRateDate').textContent = exchangeRates.date ? exchangeRates.date : '未更新';
+
+  // ===== Stacked Area Chart (active accounts only) =====
+  const chartAccounts = activeAccounts;
+  const allDates = new Set();
+  chartAccounts.forEach(acc => acc.balances.forEach(b => allDates.add(b.date)));
+  allDates.add(todayStr());
+  const sortedDates = [...allDates].sort();
+
+  const sortedAccounts = [...chartAccounts].sort((a, b) => {
+    const aBal = getLatestBalance(a);
+    const bBal = getLatestBalance(b);
+    const aCNY = aBal ? convertToCNY(aBal.amount, a.currency) : 0;
+    const bCNY = bBal ? convertToCNY(bBal.amount, b.currency) : 0;
+    return aCNY - bCNY;
+  });
+
+  const datasets = sortedAccounts.map((acc, idx) => {
+    const color = chartColors[idx % chartColors.length];
+    return {
+      label: acc.name + ' (' + acc.currency + ')',
+      data: sortedDates.map(d => {
+        const bal = getBalanceOnDate(acc, d);
+        return bal != null ? convertToCNY(bal, acc.currency) : null;
+      }),
+      backgroundColor: color + '40',
+      borderColor: color,
+      borderWidth: 1.5,
+      fill: true,
+      tension: 0.2,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+      spanGaps: true
+    };
+  });
+
+  destroyChart('accountChart');
+  chartInstances.accountChart = new Chart(document.getElementById('accountChart'), {
+    type: 'line',
+    data: { labels: sortedDates.map(fmtDate), datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: { color: colors.text, font: { size: 11 }, boxWidth: 12, padding: 8 }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return ctx.dataset.label + ': ' + fmtMoney(ctx.parsed.y);
+            },
+            footer: function(items) {
+              const total = items.reduce((s, item) => s + (item.parsed.y || 0), 0);
+              return '合计: ' + fmtMoney(total);
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          stacked: true,
+          grid: { color: colors.grid },
+          ticks: { color: colors.text, callback: v => '¥' + (v/10000).toFixed(1) + 'w' }
+        },
+        x: { grid: { display: false }, ticks: { color: colors.text, maxRotation: 45 } }
+      }
+    }
+  });
+
+  // ===== Single Account Trend Chart =====
+  const singleSelect = document.getElementById('singleAccountSelect');
+  const preferredAcc = accountData.find(a => /东方财富|股票/.test(a.name)) || activeAccounts[0] || accountData[0];
+  singleSelect.innerHTML = accountData.map(a => `<option value="${a.id}" ${preferredAcc && a.id === preferredAcc.id ? 'selected' : ''}>${a.name} (${a.currency})</option>`).join('');
+  renderSingleAccountChart();
+
+  // ===== Account Table =====
+  if (accountData.length === 0) {
+    document.getElementById('accountTableWrap').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🏦</div>
+        <p>还没有账户，添加你的第一个金融账户吧！</p>
+        <button class="btn btn-primary" onclick="openAccountModal()">🏦 添加账户</button>
+      </div>`;
+    return;
+  }
+
+  // Helper to build a table row for an account
+  function buildAccountRow(acc, idx, list, isExcluded) {
+    const latest = getLatestBalance(acc);
+    const rate = getRate(acc.currency);
+    const cny = latest ? convertToCNY(latest.amount, acc.currency) : 0;
+    const curBadge = acc.currency === 'CNY' ? 'badge-success' : 'badge-info';
+    const modeBadge = acc.calcMode === 'formula' ? 'badge-warning' : 'badge-success';
+    const modeShort = acc.calcMode === 'formula' ? '📊' : '✏️';
+    const holdingInfo = acc.calcMode === 'formula' && acc.holdings ? `${acc.holdings.length}持仓${acc.holdings.some(h => h.currency && h.currency !== acc.currency) ? '🌍' : ''}` : '';
+    const rateStr = acc.currency === 'CNY' ? '' : ` ¥${rate.toFixed(4)}`;
+    const excludeTag = isExcluded ? '<span class="badge badge-warning" style="margin-left:4px;font-size:10px">长期不动</span>' : '';
+    return `<tr>
+      <td style="padding:0 2px;text-align:center">
+        <button class="btn-icon" style="font-size:14px;width:22px;height:22px" onclick="moveAccount('${acc.id}',-1)" ${idx===0?'disabled style="opacity:.3;cursor:default;font-size:14px;width:22px;height:22px"':''} title="上移">▲</button>
+        <button class="btn-icon" style="font-size:14px;width:22px;height:22px" onclick="moveAccount('${acc.id}',1)" ${idx===list.length-1?'disabled style="opacity:.3;cursor:default;font-size:14px;width:22px;height:22px"':''} title="下移">▼</button>
+      </td>
+      <td>
+        <span style="font-weight:600">${acc.name}</span>
+        <span class="badge ${curBadge}" style="margin-left:4px">${acc.currency}</span>
+        ${excludeTag}
+        ${acc.calcMode === 'formula' ? `<span class="badge ${modeBadge}" style="margin-left:2px" title="${holdingInfo}">${modeShort}${holdingInfo?' '+holdingInfo:''}</span>` : ''}
+        ${acc.note ? `<span class="text-muted" style="font-size:11px;margin-left:4px">${acc.note}</span>` : ''}
+        ${rateStr ? `<span class="text-muted" style="font-size:11px;margin-left:4px">${rateStr}</span>` : ''}
+      </td>
+      <td>${latest ? fmtCurrency(latest.amount, acc.currency) : '—'}<span class="text-muted" style="font-size:11px;margin-left:4px">${latest ? fmtDate(latest.date) : ''}</span></td>
+      <td style="font-weight:700">${fmtMoney(cny)}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn-icon" onclick="openBalanceModalForAccount('${acc.id}')" title="记录余额">💰</button>
+        <button class="btn-icon" onclick="openBalanceHistory('${acc.id}')" title="余额记录">📋</button>
+        <button class="btn-icon" onclick="openAccountModal('${acc.id}')" title="编辑">✏️</button>
+        <button class="btn-icon" onclick="deleteAccount('${acc.id}')" title="删除">🗑️</button>
+      </td>
+    </tr>`;
+  }
+
+  // One-click helper: detect primary/company equity accounts not yet excluded
+  const suggestPattern = /^(一级股权|公司股权)/;
+  const suggestExcluded = accountData.filter(a => !a.excluded && suggestPattern.test(a.name));
+
+  let html = '';
+  if (suggestExcluded.length > 0) {
+    html += `<div style="margin-bottom:12px;padding:10px 12px;background:var(--info-bg);border:1px solid var(--info);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span style="font-size:13px;color:var(--info)">检测到 ${suggestExcluded.length} 个疑似长期不动的股权账户，是否折叠？</span>
+      <button class="btn btn-ghost btn-sm" onclick="autoExcludeLongTermAccounts()" style="white-space:nowrap">📦 一键折叠</button>
+    </div>`;
+  }
+
+  html += `<table><thead><tr>
+    <th style="width:30px"></th><th>账户</th><th>余额</th><th>折合人民币</th><th style="text-align:right">操作</th>
+  </tr></thead><tbody>`;
+
+  activeAccounts.forEach((acc, idx) => {
+    html += buildAccountRow(acc, idx, activeAccounts, false);
+  });
+
+  // Total row for active accounts
+  html += `<tr style="border-top:2px solid var(--border)">
+    <td></td>
+    <td style="font-weight:700">流动资产合计</td>
+    <td></td>
+    <td style="font-weight:700;color:var(--success)">${fmtMoney(totalCNY)}</td>
+    <td></td>
+  </tr>`;
+
+  // Collapsible excluded section
+  if (excludedAccounts.length > 0) {
+    html += `</tbody></table>`;
+    html += `<div class="card mt-16" style="background:var(--surface-hover);border:1px solid var(--border)">
+      <div class="card-header" style="cursor:pointer;padding:12px 16px" onclick="toggleExcludedAccounts()">
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+          <div>
+            <div class="card-title" style="font-size:14px">📦 长期不动资产（${excludedAccounts.length} 个账户）</div>
+            <div class="text-muted" style="font-size:12px;margin-top:2px">不计入趋势图 · 点击展开/折叠</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-weight:700;color:var(--warning)">${fmtMoney(totalExcludedCNY)}</span>
+            <span id="excludedToggleIcon" style="font-size:12px;transition:transform .2s">▼</span>
+          </div>
+        </div>
+      </div>
+      <div id="excludedAccountsBody" class="card-body" style="display:none;padding:0">
+        <table><tbody>`;
+    excludedAccounts.forEach((acc, idx) => {
+      html += buildAccountRow(acc, idx, excludedAccounts, true);
+    });
+    html += `<tr style="border-top:2px solid var(--border)">
+      <td></td>
+      <td style="font-weight:700">长期不动资产合计</td>
+      <td></td>
+      <td style="font-weight:700;color:var(--warning)">${fmtMoney(totalExcludedCNY)}</td>
+      <td></td>
+    </tr>`;
+    html += `</tbody></table></div></div>`;
+  }
+
+  document.getElementById('accountTableWrap').innerHTML = html;
+}
+
+function autoExcludeLongTermAccounts() {
+  const pattern = /^(一级股权|公司股权)/;
+  let count = 0;
+  accountData.forEach(acc => {
+    if (!acc.excluded && pattern.test(acc.name)) {
+      acc.excluded = true;
+      count++;
+    }
+  });
+  if (count === 0) return;
+  saveAccounts();
+  renderAccounts();
+  toast(`已折叠 ${count} 个长期不动账户 📦`);
+}
+
+function toggleExcludedAccounts() {
+  const body = document.getElementById('excludedAccountsBody');
+  const icon = document.getElementById('excludedToggleIcon');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    icon.style.transform = 'rotate(180deg)';
+  } else {
+    body.style.display = 'none';
+    icon.style.transform = 'rotate(0deg)';
+  }
+}
+
+function moveAccount(id, dir) {
+  const idx = accountData.findIndex(a => a.id === id);
+  if (idx < 0) return;
+  const acc = accountData[idx];
+  // Find next/previous index within the same group (excluded vs active)
+  let newIdx = idx + dir;
+  while (newIdx >= 0 && newIdx < accountData.length && !!accountData[newIdx].excluded !== !!acc.excluded) {
+    newIdx += dir;
+  }
+  if (newIdx < 0 || newIdx >= accountData.length) return;
+  [accountData[idx], accountData[newIdx]] = [accountData[newIdx], accountData[idx]];
+  saveAccounts();
+  renderAccounts();
+}
+
+function openBalanceModalForAccount(accId) {
+  openBalanceModal();
+  document.getElementById('balAccount').value = accId;
+  updateBalUI();
+}
+
+function openBalanceModalForEdit(accId, balId) {
+  openBalanceModal(balId);
+  document.getElementById('balAccount').value = accId;
+  updateBalUI();
+}
+
+function renderSingleAccountChart() {
+  const select = document.getElementById('singleAccountSelect');
+  if (!select) return;
+  const accId = select.value;
+  const acc = accountData.find(a => a.id === accId);
+  const canvas = document.getElementById('singleAccountChart');
+  if (!canvas || !acc) return;
+
+  const colors = getChartColors();
+  const allDates = new Set();
+  accountData.forEach(a => a.balances.forEach(b => allDates.add(b.date)));
+  allDates.add(todayStr());
+  const sortedDates = [...allDates].sort();
+
+  const data = sortedDates.map(d => {
+    const bal = getBalanceOnDate(acc, d);
+    return bal != null ? bal : null;
+  });
+
+  destroyChart('singleAccountChart');
+  chartInstances.singleAccountChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: sortedDates.map(fmtDate),
+      datasets: [{
+        label: acc.name + ' 余额（' + acc.currency + '）',
+        data,
+        borderColor: colors.primary,
+        backgroundColor: colors.primary + '20',
+        fill: true,
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: 3,
+        pointBackgroundColor: colors.primary,
+        pointBorderColor: 'transparent',
+        spanGaps: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top', labels: { color: colors.text, font: { size: 11 }, boxWidth: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => acc.name + ': ' + fmtCurrency(ctx.parsed.y, acc.currency)
+          }
+        }
+      },
+      scales: {
+        y: { grid: { color: colors.grid }, ticks: { color: colors.text } },
+        x: { grid: { display: false }, ticks: { color: colors.text, maxRotation: 45 } }
+      }
+    }
+  });
+}
+
+function renderFinance() {
+  renderAccounts();
+}
+
+/* ============================================================
+   MODAL HELPERS
+   ============================================================ */
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+// Close on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('active');
+  });
+});
+// Close on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('active');
+  }
+});
+
+/* ============================================================
+   MEDIA MODULE — 影音书演
+   ============================================================ */
+const MEDIA_TYPES = {
+  movie: { icon: '🎬', label: '电影', color: 'var(--danger)' },
+  tv:    { icon: '📺', label: '电视剧', color: 'var(--info)' },
+  book:  { icon: '📖', label: '书籍', color: 'var(--success)' },
+  show:  { icon: '🎭', label: '演出', color: 'var(--purple)' }
+};
+const DOUBAN_SEARCH_URL = { movie: 'https://search.douban.com/movie/subject_search?search_text=', tv: 'https://search.douban.com/movie/subject_search?search_text=', book: 'https://search.douban.com/book/subject_search?search_text=', show: 'https://search.douban.com/movie/subject_search?search_text=' };
+
+function openDoubanSearch() {
+  var title = document.getElementById('mediaTitle').value.trim();
+  var type = document.getElementById('mediaType').value;
+  var baseUrl = DOUBAN_SEARCH_URL[type] || DOUBAN_SEARCH_URL.movie;
+  window.open(baseUrl + encodeURIComponent(title), '_blank');
+}
+
+function clearCover(e) {
+  if (e) e.stopPropagation();
+  document.getElementById('mediaCover').value = '';
+  document.getElementById('mediaCoverUrl').value = '';
+  var img = document.getElementById('coverPreviewImg');
+  img.src = '';
+  img.style.display = 'none';
+  document.getElementById('coverClearBtn').style.display = 'none';
+  document.getElementById('coverDropHint').style.display = '';
+}
+
+function setCoverPreview(src) {
+  document.getElementById('mediaCover').value = src;
+  document.getElementById('mediaCoverUrl').value = src.startsWith('data:') ? '' : src;
+  var img = document.getElementById('coverPreviewImg');
+  img.src = src;
+  img.style.display = '';
+  document.getElementById('coverClearBtn').style.display = '';
+  document.getElementById('coverDropHint').style.display = 'none';
+}
+
+function onCoverUrlInput(url) {
+  if (!url) { clearCover(); return; }
+  // Set cover + preview directly WITHOUT calling setCoverPreview
+  // (setCoverPreview overwrites the URL input, causing cursor jumps while typing)
+  document.getElementById('mediaCover').value = url;
+  var img = document.getElementById('coverPreviewImg');
+  img.src = url;
+  img.style.display = '';
+  document.getElementById('coverClearBtn').style.display = '';
+  document.getElementById('coverDropHint').style.display = 'none';
+}
+
+function onCoverPreviewError() {
+  var img = document.getElementById('coverPreviewImg');
+  img.style.display = 'none';
+  img.removeAttribute('src');
+  document.getElementById('coverDropHint').style.display = '';
+  document.getElementById('coverClearBtn').style.display = 'none';
+  document.getElementById('mediaCover').value = '';
+  document.getElementById('mediaCoverUrl').value = '';
+  toast('图片URL加载失败（可能有防盗链），请直接粘贴图片 (Ctrl+V)');
+}
+
+function coverPickFile() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = function() {
+    if (input.files && input.files[0]) handleImageBlob(input.files[0]);
+  };
+  input.click();
+}
+
+/* ===== Image paste / drag-drop → base64 ===== */
+function compressImage(blob, maxW, quality, cb) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      var cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      var ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      var isPng = blob.type === 'image/png';
+      var dataUrl = cv.toDataURL(isPng ? 'image/png' : 'image/jpeg', quality);
+      cb(dataUrl);
+    };
+    img.onerror = function() { cb(null); };
+    img.src = e.target.result;
+  };
+  reader.onerror = function() { cb(null); };
+  reader.readAsDataURL(blob);
+}
+
+function handleImageBlob(blob) {
+  if (!blob || !blob.type.startsWith('image/')) return false;
+  compressImage(blob, 400, 0.82, function(dataUrl) {
+    if (dataUrl) {
+      setCoverPreview(dataUrl);
+      toast('封面已设置');
+    } else {
+      toast('图片处理失败');
+    }
+  });
+  return true;
+}
+
+function initCoverPasteDrop() {
+  var zone = document.getElementById('coverDropZone');
+  if (!zone) return;
+
+  // Paste listener on the whole modal
+  var modal = document.getElementById('mediaModal');
+  if (modal && !modal._pasteBound) {
+    modal.addEventListener('paste', function(e) {
+      var items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image/') === 0) {
+          var blob = items[i].getAsFile();
+          if (blob) {
+            e.preventDefault();
+            handleImageBlob(blob);
+            return;
+          }
+        }
+      }
+    });
+    modal._pasteBound = true;
+  }
+
+  // Drag & drop only — NO click handler (click was opening file picker,
+  // blocking users from clicking to focus for Ctrl+V paste)
+  zone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    zone.classList.add('drag-over');
+  });
+  zone.addEventListener('dragleave', function(e) {
+    zone.classList.remove('drag-over');
+  });
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleImageBlob(files[0]);
+    }
+  });
+}
+
+const STATUS_MAP = {
+  done:      { icon: '✅', label: '看完' },
+  ongoing:   { icon: '▶️', label: '在看' },
+  pending:   { icon: '⏳', label: '待看' },
+  abandoned: { icon: '🚫', label: '弃了' }
+};
+
+function renderMedia() {
+  // ---- Stats bar ----
+  const counts = { movie: 0, tv: 0, book: 0, show: 0 };
+  mediaData.forEach(m => { if (counts[m.type] != null) counts[m.type]++; });
+  const statCards = Object.entries(MEDIA_TYPES).map(([k, v]) =>
+    `<div class="stat-card-mini" style="border-left:3px solid ${v.color}">
+      <div style="font-size:11px;color:var(--text-muted)">${v.icon} ${v.label}</div>
+      <div style="font-size:20px;font-weight:700;margin-top:2px">${counts[k]}</div>
+    </div>`
+  ).join('');
+  document.getElementById('mediaStatsWrap').innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      ${statCards}
+      <div class="stat-card-mini" style="border-left:3px solid var(--text)">
+        <div style="font-size:11px;color:var(--text-muted)">📚 总计</div>
+        <div style="font-size:20px;font-weight:700;margin-top:2px">${mediaData.length}</div>
+      </div>
+    </div>`;
+
+  // ---- Filter bar ----
+  const filterBtns = [
+    `<button class="btn ${mediaFilter==='all'?'btn-primary':'btn-ghost'} btn-sm" onclick="setMediaFilter('all')">全部 ${mediaData.length}</button>`,
+    ...Object.entries(MEDIA_TYPES).map(([k, v]) =>
+      `<button class="btn ${mediaFilter===k?'btn-primary':'btn-ghost'} btn-sm" onclick="setMediaFilter('${k}')">${v.icon} ${v.label} ${counts[k]}</button>`
+    )
+  ].join('');
+  document.getElementById('mediaFilterBar').innerHTML = filterBtns;
+
+  // ---- Card grid ----
+  const wrap = document.getElementById('mediaGridWrap');
+  if (mediaData.length === 0) {
+    wrap.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🎬</div>
+        <p>还没有记录，添加你看过的电影、电视剧、书籍或演出吧！</p>
+        <button class="btn btn-primary" onclick="openMediaModal()">🎬 添加记录</button>
+      </div>`;
+    return;
+  }
+
+  let filtered = mediaFilter === 'all' ? mediaData : mediaData.filter(m => m.type === mediaFilter);
+  // Sort: by completion date (newest first); range types use dateEnd, single types use date
+  filtered = filtered.slice().sort((a, b) => {
+    const da = a.dateEnd || a.date || a.dateStart || '';
+    const db = b.dateEnd || b.date || b.dateStart || '';
+    return db.localeCompare(da);
+  });
+
+  function formatDateDisplay(m) {
+    const t = MEDIA_TYPES[m.type] || MEDIA_TYPES.movie;
+    const isRange = (m.type === 'tv' || m.type === 'book');
+    if (!isRange) {
+      return m.date ? fmtDate(m.date) : '';
+    }
+    // Range
+    const start = m.dateStart || '';
+    const end = m.dateEnd || '';
+    if (!start && !end) return '';
+    if (!end || m.status === 'ongoing') return fmtDate(start) + ' ~ 至今';
+    return fmtDate(start) + ' ~ ' + fmtDate(end);
+  }
+
+  wrap.innerHTML = `<div class="media-grid">${filtered.map(m => {
+    const t = MEDIA_TYPES[m.type] || MEDIA_TYPES.movie;
+    const s = STATUS_MAP[m.status] || STATUS_MAP.done;
+    const dateStr = formatDateDisplay(m);
+    const statusCls = m.status==='done'?'badge-success':m.status==='ongoing'?'badge-info':m.status==='pending'?'badge-warning':'badge-muted';
+    return `
+      <div class="media-card">
+        ${m.cover
+          ? `<img class="media-card-cover" src="${m.cover}" referrerpolicy="no-referrer" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="media-card-bar" style="background:${t.color};display:none"></div>`
+          : `<div class="media-card-bar" style="background:${t.color}"></div>`}
+        <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+          <div class="media-card-body">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px">
+              <div style="display:flex;align-items:center;gap:4px;min-width:0">
+                <span style="font-size:13px;flex-shrink:0">${t.icon}</span>
+                <span style="font-weight:600;font-size:12px;line-height:1.3;word-break:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(m.title)}</span>
+              </div>
+              <span class="badge ${statusCls}" style="font-size:9px;white-space:nowrap;flex-shrink:0">${s.icon} ${s.label}</span>
+            </div>
+            ${dateStr ? `<div class="media-date-row">📅 ${dateStr}</div>` : ''}
+            ${m.notes ? `<div class="media-related">${escapeHtml(m.notes)}</div>` : ''}
+          </div>
+          <div class="media-card-foot">
+            <span class="media-type-chip" style="background:${t.color}15;color:${t.color}">${t.label}</span>
+            <div style="display:flex;gap:2px">
+              <button class="btn-icon" onclick="openMediaModal('${m.id}')" title="编辑" style="font-size:11px">✏️</button>
+              <button class="btn-icon" onclick="deleteMedia('${m.id}')" title="删除" style="font-size:11px">🗑️</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+function setMediaFilter(f) { mediaFilter = f; renderMedia(); }
+
+function openMediaModal(id) {
+  const modalEl = document.getElementById('mediaModal');
+  clearCover();
+  if (id) {
+    const m = mediaData.find(x => x.id === id);
+    if (!m) return;
+    document.getElementById('mediaModalTitle').textContent = '编辑记录';
+    document.getElementById('mediaId').value = m.id;
+    document.getElementById('mediaType').value = m.type || 'movie';
+    document.getElementById('mediaTitle').value = m.title || '';
+    document.getElementById('mediaStatus').value = m.status || 'done';
+    document.getElementById('mediaNotes').value = m.notes || '';
+    // Date: single or range
+    document.getElementById('mediaDate').value = m.date || todayStr();
+    document.getElementById('mediaDateStart').value = m.dateStart || '';
+    document.getElementById('mediaDateEnd').value = m.dateEnd || '';
+    // Cover
+    if (m.cover) setCoverPreview(m.cover);
+  } else {
+    document.getElementById('mediaModalTitle').textContent = '添加记录';
+    document.getElementById('mediaId').value = '';
+    document.getElementById('mediaType').value = 'movie';
+    document.getElementById('mediaTitle').value = '';
+    document.getElementById('mediaStatus').value = 'done';
+    document.getElementById('mediaNotes').value = '';
+    document.getElementById('mediaDate').value = todayStr();
+    document.getElementById('mediaDateStart').value = todayStr();
+    document.getElementById('mediaDateEnd').value = '';
+  }
+  onMediaTypeChange();
+  modalEl.classList.add('active');
+  initCoverPasteDrop();
+}
+
+function saveMedia() {
+  const id = document.getElementById('mediaId').value;
+  const title = document.getElementById('mediaTitle').value.trim();
+  if (!title) { toast('请输入标题'); return; }
+  const type = document.getElementById('mediaType').value;
+  const status = document.getElementById('mediaStatus').value;
+  const notes = document.getElementById('mediaNotes').value.trim();
+  const cover = document.getElementById('mediaCover').value || document.getElementById('mediaCoverUrl').value.trim() || '';
+
+  // Date: single or range based on type
+  const isRange = (type === 'tv' || type === 'book');
+  let date = '', dateStart = '', dateEnd = '';
+  if (isRange) {
+    dateStart = document.getElementById('mediaDateStart').value;
+    dateEnd = document.getElementById('mediaDateEnd').value;
+  } else {
+    date = document.getElementById('mediaDate').value;
+  }
+
+  if (id) {
+    const idx = mediaData.findIndex(m => m.id === id);
+    if (idx >= 0) {
+      Object.assign(mediaData[idx], { type, title, date, dateStart, dateEnd, status, notes, cover });
+    }
+  } else {
+    mediaData.push({ id: uid(), type, title, date, dateStart, dateEnd, status, notes, cover, createdAt: todayStr() });
+  }
+  saveMediaData();
+  closeModal('mediaModal');
+  renderMedia();
+  toast(id ? '记录已更新 ✏️' : '记录已添加 ✅');
+}
+
+function deleteMedia(id) {
+  const m = mediaData.find(x => x.id === id);
+  if (!m) return;
+  if (!confirm(`确定删除「${m.title}」？`)) return;
+  mediaData = mediaData.filter(x => x.id !== id);
+  saveMediaData();
+  renderMedia();
+  toast('已删除 🗑️');
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+
+function exportAllData() {
+  const data = { fitness: fitnessData, sleep: sleepData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, exportDate: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `lifelog_backup_${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('数据已导出 📦');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!confirm('导入将覆盖现有数据，确定继续？')) return;
+      if (data.fitness) fitnessData = data.fitness;
+      if (data.sleep) sleepData = data.sleep;
+      if (data.finance) financeData = data.finance;
+      if (data.accounts) accountData = data.accounts;
+      if (data.rates) exchangeRates = data.rates;
+      if (data.stock) stockData = data.stock;
+      if (data.media) mediaData = data.media;
+      if (data.dailyNotes) dailyNotes = data.dailyNotes;
+      saveAll();
+      saveAccounts();
+      DB.set('rates', exchangeRates);
+      toast('数据导入成功 ✅');
+        } catch(err) {
+      toast('导入失败：文件格式错误 ❌');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function clearAllData() {
+  if (!confirm('⚠️ 确认清空全部数据？此操作不可撤销！')) return;
+  if (!confirm('再次确认：真的要删除所有记录吗？')) return;
+  fitnessData = [];
+  sleepData = [];
+  financeData = [];
+  accountData = [];
+  stockData = [];
+  mediaData = [];
+  dailyNotes = [];
+  exchangeRates = { rates: {}, date: '' };
+  saveAll();
+  saveAccounts();
+  saveStocks();
+  saveMediaData();
+  DB.set('rates', exchangeRates);
+  toast('全部数据已清空');
+  renderFitness();
+  renderSleep();
+  renderFinance();
+  renderStocks();
+}
+
+/* ============================================================
+   DAILY NOTES MODULE — 日记
+   ============================================================ */
+let dailyDate = todayStr();
+
+function saveDailyNotes() { DB.set('dailyNotes', dailyNotes); }
+
+function shiftDailyDate(delta) {
+  // Auto-save current content before navigating
+  autoSaveCurrent();
+  if (delta === 0) {
+    dailyDate = todayStr();
+  } else {
+    var d = new Date(dailyDate + 'T00:00:00');
+    d.setDate(d.getDate() + delta);
+    dailyDate = d.toISOString().slice(0, 10);
+  }
+  renderDaily();
+}
+
+function autoSaveCurrent() {
+  var editor = document.getElementById('dailyEditor');
+  if (!editor) return;
+  var content = editor.value.trim();
+  var existing = dailyNotes.find(function(n) { return n.date === dailyDate; });
+  if (existing) {
+    if (content && content !== existing.content) {
+      existing.content = content;
+      existing.updatedAt = new Date().toISOString();
+      saveDailyNotes();
+    }
+  } else if (content) {
+    dailyNotes.push({ id: uid(), date: dailyDate, content: content, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    saveDailyNotes();
+  }
+}
+
+function saveDailyNote() {
+  var editor = document.getElementById('dailyEditor');
+  var content = editor.value.trim();
+  var existing = dailyNotes.find(function(n) { return n.date === dailyDate; });
+  var tip = document.getElementById('dailySavedTip');
+  if (existing) {
+    if (content) {
+      existing.content = content;
+      existing.updatedAt = new Date().toISOString();
+      tip.textContent = '已保存 ✅';
+    } else {
+      // Delete empty note
+      dailyNotes = dailyNotes.filter(function(n) { return n.date !== dailyDate; });
+      tip.textContent = '已删除（内容为空）';
+    }
+  } else if (content) {
+    dailyNotes.push({ id: uid(), date: dailyDate, content: content, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    tip.textContent = '已保存 ✅';
+  } else {
+    tip.textContent = '';
+  }
+  saveDailyNotes();
+  setTimeout(function() { tip.textContent = ''; }, 2000);
+  renderDailyEntryList();
+}
+
+function renderDaily() {
+  var dt = new Date(dailyDate + 'T00:00:00');
+  var weekDays = ['日','一','二','三','四','五','六'];
+  document.getElementById('dailyDateLabel').textContent =
+    dt.getFullYear()+'年'+(dt.getMonth()+1)+'月'+dt.getDate()+'日 星期'+weekDays[dt.getDay()];
+
+  var note = dailyNotes.find(function(n) { return n.date === dailyDate; });
+  var editor = document.getElementById('dailyEditor');
+  editor.value = note ? note.content : '';
+
+  // Word count
+  var count = (note ? note.content.length : 0);
+  document.getElementById('dailyWordCount').textContent = count + ' 字';
+  document.getElementById('dailySavedTip').textContent = '';
+
+  renderDailyEntryList();
+}
+
+function renderDailyEntryList() {
+  var list = document.getElementById('dailyEntryList');
+  if (!list) return;
+  
+  // Sort notes by date descending
+  var sorted = dailyNotes.slice().sort(function(a, b) { return b.date.localeCompare(a.date); });
+  
+  if (sorted.length === 0) {
+    list.innerHTML = '<div class="text-sm text-muted" style="padding:8px">暂无记录</div>';
+    return;
+  }
+
+  var html = '<div class="text-sm" style="font-weight:600;margin-bottom:8px;padding:4px 0">📝 历史记录</div>';
+  sorted.forEach(function(n) {
+    var preview = n.content.replace(/\n/g, ' ').slice(0, 35);
+    if (n.content.length > 35) preview += '…';
+    var isActive = n.date === dailyDate;
+    html += '<div '+
+      'onclick="shiftDailyDateTo(\''+n.date+'\')" '+
+      'style="padding:8px;border-radius:6px;cursor:pointer;margin-bottom:4px;'+
+      (isActive ? 'background:var(--primary-bg);border:1px solid var(--primary-light);' : 'border:1px solid transparent;')+
+      'transition:all .15s"'+
+      'onmouseover="if(!'+isActive+')this.style.background=\'var(--surface-hover)\'" '+
+      'onmouseout="if(!'+isActive+')this.style.background=\'\'">'+
+      '<div style="font-size:12px;font-weight:600;color:'+(isActive?'var(--primary)':'var(--text)')+'">'+fmtDate(n.date)+'</div>'+
+      '<div class="text-sm text-muted" style="font-size:11px;line-height:1.4;margin-top:2px">'+escapeHtml(preview)+'</div>'+
+    '</div>';
+  });
+  list.innerHTML = html;
+}
+
+function shiftDailyDateTo(dateStr) {
+  autoSaveCurrent();
+  dailyDate = dateStr;
+  renderDaily();
+}
+
+// Auto-save on editor change (debounced)
+var _dailySaveTimer = null;
+document.addEventListener('DOMContentLoaded', function() {
+  var editor = document.getElementById('dailyEditor');
+  if (editor) {
+    editor.addEventListener('input', function() {
+      document.getElementById('dailyWordCount').textContent = editor.value.length + ' 字';
+      clearTimeout(_dailySaveTimer);
+      _dailySaveTimer = setTimeout(autoSaveCurrent, 1500);
+    });
+  }
+});
+
+/* CSV exports */
+function exportCSV(filename, headers, rows) {
+  const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+  const blob = new Blob(['\ufeff' + csv], {type: 'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  toast('CSV已导出 📥');
+}
+function exportFitnessCSV() {
+  if (!fitnessData.length) return toast('没有数据可导出');
+  exportCSV(`fitness_${todayStr()}.csv`,
+    ['日期','运动类型','时长(分钟)','强度','热量(kcal)','组数','次数','备注'],
+    fitnessData.map(f => [f.date, f.type, f.duration, f.intensity, f.calories||0, f.sets||0, f.reps||0, f.notes||''])
+  );
+}
+function exportSleepCSV() {
+  if (!sleepData.length) return toast('没有数据可导出');
+  exportCSV(`sleep_${todayStr()}.csv`,
+    ['日期','入睡时间','起床时间','时长(小时)','质量(1-5)','备注'],
+    sleepData.map(s => [s.date, s.bedtime, s.wakeTime, s.duration, s.quality, s.notes||''])
+  );
+}
+function exportAccountCSV() {
+  if (!accountData.length) return toast('没有账户可导出');
+  const rows = [];
+  accountData.forEach(acc => {
+    acc.balances.forEach(b => {
+      rows.push([b.date, acc.name, acc.currency, b.amount, getRate(acc.currency).toFixed(4), convertToCNY(b.amount, acc.currency).toFixed(2)]);
+    });
+  });
+  exportCSV(`accounts_${todayStr()}.csv`,
+    ['日期','账户名称','币种','余额','汇率','折合人民币'],
+    rows
+  );
+}
+
+/* ============================================================
+   STOCK INVESTMENT MODULE
+   Data source: Tencent API (qt.gtimg.cn / ifzq.gtimg.cn)
+   - Real-time quote via fetch (CORS enabled)
+   - K-line data via fetch (CORS enabled)
+   - Search still uses Sina suggest JSONP (no CORS alternative available)
+   Strategy: MA25 crossover on 30min/60min/120min/daily
+   ============================================================ */
+
+// --- Stock Search (Sina suggest API via script tag) ---
+let stockSearchTimer = null;
+
+function searchStock(keyword) {
+  clearTimeout(stockSearchTimer);
+  if (!keyword || keyword.trim().length < 1) {
+    document.getElementById('stockSearchDropdown').style.display = 'none';
+    return;
+  }
+  stockSearchTimer = setTimeout(() => doSearchStock(keyword.trim()), 300);
+}
+
+// Helper: try to fetch HK stock name via Tencent for 5-digit numeric keywords.
+// Always returns a candidate: real name if Tencent has data, manual fallback otherwise.
+async function tryHkCandidate(code) {
+  try {
+    const r = await fetch('https://qt.gtimg.cn/q=hk' + code, { signal: AbortSignal.timeout(4000) });
+    const text = await decodeGbk(await r.arrayBuffer());
+    const m = text.match(/v_hk\w+="([^"]*)"/);
+    if (m && m[1]) {
+      const parts = m[1].split('~');
+      if (parts[1] && parseFloat(parts[3]) > 0) {
+        return { name: '港股 ' + parts[1], code: 'hk' + code, type: 'hk', market: '' };
+      }
+      // Has HK response but price=0 (suspended) — still usable
+      if (parts[1]) {
+        return { name: '港股 ' + parts[1] + ' (停牌?)', code: 'hk' + code, type: 'hk', market: '' };
+      }
+    }
+    // Tencent has no data for this HK code (v_pv_none_match or empty) — offer manual add
+    return { name: '港股 hk' + code + ' (手动添加)', code: 'hk' + code, type: 'hk', market: '' };
+  } catch(_) { /* network error — still offer manual add */ }
+  return { name: '港股 hk' + code + ' (手动添加)', code: 'hk' + code, type: 'hk', market: '' };
+}
+
+function doSearchStock(keyword) {
+  // Use Sina suggest API via script tag injection
+  const varName = 'suggestdata_' + Date.now();
+  const url = `https://suggest3.sinajs.cn/suggest/type=11,12,13,14,15,16,17,18,21,22,23,24,25,26&key=${encodeURIComponent(keyword)}&name=${varName}`;
+  const script = document.createElement('script');
+  script.src = url;
+  script.charset = 'GBK';
+  script.onload = async () => {
+    document.body.removeChild(script);
+    const raw = window[varName];
+
+    // For 5-digit numeric keywords: try HK stock via Tencent (Sina rarely indexes HK stocks)
+    // tryHkCandidate always returns a candidate (manual fallback if Tencent has no data)
+    let hkItem = null;
+    if (/^\d{5}$/.test(keyword)) {
+      hkItem = await tryHkCandidate(keyword);
+    }
+
+    if (!raw) {
+      // No Sina results
+      if (hkItem) {
+        showStockSearchResults([hkItem]);
+      } else if (/^[a-zA-Z]{1,6}$/.test(keyword)) {
+        showStockSearchResults([{ name: '美股 ' + keyword.toUpperCase(), code: 'us' + keyword.toUpperCase(), type: 'us', market: '' }]);
+      } else {
+        document.getElementById('stockSearchDropdown').style.display = 'none';
+      }
+      return;
+    }
+    delete window[varName];
+    // Parse Sina suggest format: "field0,type,code,marketCode,name,..."
+    const items = raw.split(';').filter(s => s).map(s => {
+      const parts = s.split(',');
+      const code = parts[3] || parts[0];
+      const name = parts[4] || parts[0];
+      return { name, code, type: parts[1] || '', market: parts[3] || '' };
+    }).filter(it => it.code && !/^of/.test(it.code)); // filter out open-end funds (of-prefix)
+
+    // Prepend HK candidate if found
+    if (hkItem && !items.some(it => it.code === hkItem.code)) {
+      items.unshift(hkItem);
+    }
+    // Sina suggest rarely returns US stocks for English keywords (matches pinyin instead).
+    // Always prepend a US ticker candidate for letter-only keywords.
+    if (/^[a-zA-Z]{1,6}$/.test(keyword)) {
+      const usTicker = keyword.toUpperCase();
+      const usCode = 'us' + usTicker;
+      if (!items.some(it => it.code === usCode || it.code === 'gb_' + usTicker.toLowerCase())) {
+        items.unshift({ name: '美股 ' + usTicker, code: usCode, type: 'us', market: '' });
+      }
+    }
+    showStockSearchResults(items);
+  };
+  script.onerror = async () => {
+    document.body.removeChild(script);
+    // Fallback: try HK quote for 5-digit, or treat as direct code entry
+    if (/^\d{5}$/.test(keyword)) {
+      const hkItem = await tryHkCandidate(keyword);
+      showStockSearchResults(hkItem ? [hkItem] : [{ name: '手动输入', code: 'hk' + keyword, type: '', market: '' }]);
+    } else if (/^\d{6}$/.test(keyword)) {
+      const prefix = keyword.startsWith('6') || keyword.startsWith('5') || keyword.startsWith('9') ? 'sh' : 'sz';
+      showStockSearchResults([{ name: '手动输入', code: prefix + keyword, type: '', market: '' }]);
+    } else if (/^[a-zA-Z]{1,5}$/.test(keyword)) {
+      showStockSearchResults([{ name: '手动输入', code: 'us' + keyword.toUpperCase(), type: '', market: '' }]);
+    } else {
+      document.getElementById('stockSearchDropdown').style.display = 'none';
+    }
+  };
+  document.body.appendChild(script);
+}
+
+function showStockSearchResults(items) {
+  const dropdown = document.getElementById('stockSearchDropdown');
+  if (items.length === 0) {
+    dropdown.innerHTML = '<div class="stock-search-item text-muted">无匹配结果</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+  dropdown.innerHTML = items.slice(0, 10).map((it, i) =>
+    `<div class="stock-search-item" onclick="selectStockSearch('${it.code}','${it.name}')">
+      <span style="font-weight:600">${it.name}</span>
+      <span class="text-muted" style="margin-left:8px">${it.code}</span>
+    </div>`
+  ).join('');
+  dropdown.style.display = 'block';
+}
+
+function selectStockSearch(code, name) {
+  const normCode = normalizeStockCode(code);
+  setStockSelection(normCode, name);
+  document.getElementById('stockSearchInput').value = `${name} (${normCode})`;
+  document.getElementById('stockSearchDropdown').style.display = 'none';
+  document.getElementById('stockSelectedName').textContent = name;
+  document.getElementById('stockSelectedCode').textContent = code;
+  document.getElementById('stockSelectedInfo').style.display = 'block';
+}
+
+// --- Real-time quote via Tencent (supports CORS from file://, verified) ---
+function normalizeStockCode(code, nameHint) {
+  code = (code || '').trim();
+  const lower = code.toLowerCase();
+  // Sina US format (gb_aapl) -> our internal US format (usAAPL, ticker uppercase)
+  if (lower.startsWith('gb_')) return 'us' + code.slice(3).toUpperCase();
+  // Already in our internal format
+  if (/^(sh|sz|hk|us)/.test(lower)) {
+    // Tencent US endpoints are case-sensitive: keep ticker UPPERCASE
+    if (lower.startsWith('us')) return 'us' + code.slice(2).toUpperCase();
+    return lower;
+  }
+  // Pure 5-digit numeric -> HK (e.g. 00700)
+  if (/^\d{5}$/.test(code)) return 'hk' + code;
+  // Pure 6-digit numeric -> A-share
+  if (/^\d{6}$/.test(code)) {
+    if (code.startsWith('6') || code.startsWith('5') || code.startsWith('9')) return 'sh' + code;
+    return 'sz' + code;
+  }
+  // Pure letters (1-5 chars) -> US ticker (e.g. AAPL -> usAAPL)
+  if (/^[a-zA-Z]{1,6}$/.test(code)) return 'us' + code.toUpperCase();
+  // Compatibility: old bug saved broken code like "11" with the real symbol in name (e.g. "sz300382")
+  if (nameHint) {
+    const m = String(nameHint).trim().match(/^(sh|sz|hk|us)([a-zA-Z0-9\.]+)$/i);
+    if (m) {
+      const p = m[1].toLowerCase();
+      const rest = (p === 'us') ? m[2].toUpperCase() : m[2];
+      return p + rest;
+    }
+  }
+  return lower;
+}
+
+// Decode GBK text from a fetch response buffer
+async function decodeGbk(buf) {
+  try { return new TextDecoder('gbk').decode(buf); }
+  catch(_) { return new TextDecoder().decode(buf); }
+}
+
+// Stock currency by market: sh/sz -> CNY, hk -> HKD, us -> USD
+function getStockCurrency(stock) {
+  const norm = normalizeStockCode(stock.code, stock.name);
+  if (norm.startsWith('us')) return 'USD';
+  if (norm.startsWith('hk')) return 'HKD';
+  return 'CNY';
+}
+
+// Parse Tencent quote string: v_code="51~name~code~price~yclose~open~..."
+function parseTencentQuote(code, raw) {
+  // Detect Tencent's "no data" response (e.g. unsupported HK codes like 08251)
+  if (/v_pv_none_match=/.test(raw)) {
+    throw new Error('腾讯无此股票行情数据');
+  }
+  const varName = 'v_' + code;
+  // Escape regex special chars in code (safety, though codes are alphanumeric)
+  const escName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = raw.match(new RegExp(escName + '="([^"]*)"'));
+  if (!m || !m[1]) throw new Error('行情响应格式错误(' + code + ')');
+  const parts = m[1].split('~');
+  const name = parts[1];
+  const fullCode = parts[2] || '';  // e.g. "AAPL.OQ" for US, "300382" for A-share
+  const price = parseFloat(parts[3]);
+  if (!name) throw new Error('无法解析行情');
+  if (!price || price <= 0) throw new Error('该股票可能停牌');
+  return { name, price, fullCode };
+}
+
+async function fetchQuote(code) {
+  const normCode = normalizeStockCode(code);
+  const url = `https://qt.gtimg.cn/q=${normCode}`;
+  const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const text = await decodeGbk(await resp.arrayBuffer());
+  console.log('[quote resp]', normCode, 'len=' + text.length, text.slice(0, 120));
+  return parseTencentQuote(normCode, text);
+}
+
+// --- K-line fetch via Tencent (supports CORS) ---
+// period: 30 / 60 / 120 / 'day'; count: number of candles
+async function fetchKLine(code, period, count) {
+  const normCode = normalizeStockCode(code);
+  let url;
+  if (period === 'day') {
+    url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${normCode},day,,,${count},qfq`;
+  } else {
+    url = `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${normCode},m${period},,${count}`;
+  }
+  const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const json = await resp.json();
+  console.log('[kline resp]', normCode, 'period=' + period, json.code, json.msg);
+  if (!json || json.code !== 0 || !json.data || !json.data[normCode]) {
+    throw new Error('K线数据格式错误');
+  }
+  const d = json.data[normCode];
+  let candles;
+  if (period === 'day') {
+    candles = d.qfqday || d.day;
+  } else {
+    candles = d['m' + period];
+  }
+  if (!Array.isArray(candles) || candles.length === 0) {
+    throw new Error('K线数据为空');
+  }
+  // Tencent candle: [date, open, close, low, high, volume, ...]
+  return candles.map(c => ({
+    day: c[0],
+    open: c[1],
+    close: c[2],
+    low: c[3],
+    high: c[4],
+    volume: c[5]
+  }));
+}
+
+// --- Calculate MA25 ---
+function calcMA25(candles) {
+  if (!candles || candles.length === 0) return null;
+  const n = Math.min(25, candles.length);
+  const slice = candles.slice(-n);
+  const sum = slice.reduce((s, c) => s + parseFloat(c.close), 0);
+  return sum / n;
+}
+
+// --- Get signal for a stock ---
+// Tiered strategy based on INITIAL position (qty):
+//   price < 30min MA25  -> reduce 1/4 of initial (target 75%)
+//   price < 60min MA25  -> reduce to 1/2 of initial (target 50%)
+//   price < 120min MA25 -> reduce to 1/4 of initial (target 25%)
+//   price < daily MA25  -> clear (target 0%)
+// Most severe breach determines the target holdings.
+function getStockSignal(price, ma30, ma60, ma120, maDaily, qty, availableCash) {
+  const breached = [];
+  if (ma30 != null && price < ma30) breached.push('30分');
+  if (ma60 != null && price < ma60) breached.push('60分');
+  if (ma120 != null && price < ma120) breached.push('120分');
+  if (maDaily != null && price < maDaily) breached.push('日线');
+
+  // Each breached MA reduces target position by 1/4
+  const breachCount = breached.length;
+  const targetRatio = Math.max(0, 1 - breachCount * 0.25);
+
+  // Total capital = available cash + current holdings value at market price
+  const cash = availableCash || 0;
+  const currentValue = (qty || 0) * price;
+  const totalCapital = cash + currentValue;
+
+  // Target position
+  const targetValue = totalCapital * targetRatio;
+  const targetQty = price > 0 ? Math.floor(targetValue / price) : 0;
+  const currentQty = qty || 0;
+  const actionQty = targetQty - currentQty; // positive=buy, negative=sell
+
+  let label, cls;
+  if (breachCount === 0) {
+    label = '🟢 满仓持有';
+    cls = 'signal-hold';
+  } else if (breachCount === 1) {
+    label = '🟡 减至3/4';
+    cls = 'signal-sell25';
+  } else if (breachCount === 2) {
+    label = '🟠 减至1/2';
+    cls = 'signal-sell50';
+  } else if (breachCount === 3) {
+    label = '🔴 减至1/4';
+    cls = 'signal-sell75';
+  } else {
+    label = '⛔ 清仓';
+    cls = 'signal-sellall';
+  }
+
+  return { breachCount, targetRatio, targetQty, currentQty, actionQty, totalCapital, label, cls, breached };
+}
+
+// --- Fetch all data for one stock ---
+async function fetchStockData(stock) {
+  const normCode = normalizeStockCode(stock.code, stock.name);
+  const isUS = normCode.startsWith('us');
+  const isAShare = /^(sh|sz)/.test(normCode);
+  let price = null, name = stock.name;
+  let maDaily = null, ma30 = null, ma60 = null, ma120 = null;
+  let errors = [];
+
+  // Validate normalized code
+  if (!/^(sh|sz|hk|us)/.test(normCode)) {
+    console.warn('[stock invalid code]', stock.name, stock.code, '->', normCode);
+    stockQuotes[stock.id] = { error: '股票代码格式无效: ' + (stock.code || '空'), ts: Date.now() };
+    return;
+  }
+
+  // For K-line API: US stocks need exchange suffix (e.g. usAAPL.OQ), which we get from the quote.
+  // Default to normCode; will be updated after quote fetch succeeds.
+  let klineCode = normCode;
+
+  // 1) Real-time quote: must succeed for basic display
+  try {
+    const quote = await fetchQuote(normCode);
+    price = quote.price;
+    name = quote.name || stock.name;
+    // US stocks: quote returns fullCode like "AAPL.OQ" — K-line API needs "usAAPL.OQ"
+    if (isUS && quote.fullCode && quote.fullCode.includes('.')) {
+      klineCode = 'us' + quote.fullCode;
+    }
+    console.log('[stock quote]', stock.name, normCode, price, name, 'klineCode=' + klineCode);
+  } catch(e) {
+    console.warn('[stock quote failed]', stock.name, normCode, e.message);
+    errors.push('行情:' + e.message);
+  }
+
+  // 2) Daily K-line
+  try {
+    const klDaily = await fetchKLine(klineCode, 'day', 25);
+    maDaily = calcMA25(klDaily);
+    // Fallback: if real-time quote failed, try manual price first, then K-line close
+    if (price == null) {
+      if (stock.manualPrice && stock.manualPrice > 0) {
+        price = stock.manualPrice;
+        errors = errors.map(e => e.startsWith('行情:')
+          ? '行情:手动现价' + price
+          : e);
+        console.log('[stock manual price]', stock.name, 'using manual price =', price);
+      } else if (klDaily.length > 0) {
+        const last = klDaily[klDaily.length - 1];
+        price = parseFloat(last.close);
+        errors = errors.map(e => e.startsWith('行情:')
+          ? '行情:无实时数据,沿用' + last.day + '收盘价' + price + '(建议手动设价)'
+          : e);
+        console.log('[stock kline fallback]', stock.name, 'using close from', last.day, '=', price);
+      }
+    }
+    console.log('[stock daily]', stock.name, klineCode, 'MA25=', maDaily);
+  } catch(e) {
+    console.warn('[stock daily failed]', stock.name, klineCode, e.message);
+    errors.push('日线:' + e.message);
+  }
+
+  // 3) Intraday K-lines (30/60/120 min) — Tencent API only supports minute K-lines for A-shares
+  if (!isAShare) {
+    console.log('[stock intraday] Non-A-share (' + normCode + '), skipping minute K-lines (unsupported by Tencent API)');
+  } else {
+    try {
+      const [kl30, kl60, kl120] = await Promise.all([
+        fetchKLine(klineCode, 30, 25),
+        fetchKLine(klineCode, 60, 25),
+        fetchKLine(klineCode, 120, 25)
+      ]);
+      ma30 = calcMA25(kl30);
+      ma60 = calcMA25(kl60);
+      ma120 = calcMA25(kl120);
+      console.log('[stock intraday]', stock.name, klineCode, 'MA30=', ma30, 'MA60=', ma60, 'MA120=', ma120);
+    } catch(e) {
+      console.warn('[stock intraday failed]', stock.name, klineCode, e.message);
+      errors.push('分钟K线:' + e.message);
+    }
+  }
+
+  if (price == null) {
+    // No quote at all: mark as failed
+    stockQuotes[stock.id] = { error: errors.join(' / ') || '无行情数据', ts: Date.now() };
+  } else {
+    const signal = getStockSignal(price, ma30, ma60, ma120, maDaily, stock.quantity, stock.availableCash || 0);
+    stockQuotes[stock.id] = {
+      price, ma30, ma60, ma120, maDaily,
+      signal, name, ts: Date.now(),
+      error: errors.length ? errors.join(' / ') : null
+    };
+    // Persist corrected name back to stockData (fixes old dirty name from search bug)
+    if (name && name !== stock.name) {
+      stock.name = name;
+      DB.set('stock', stockData);
+    }
+  }
+}
+
+// --- Refresh all stocks ---
+async function refreshAllStocks() {
+  if (stockData.length === 0) { toast('暂无持仓股票'); return; }
+  toast('正在获取行情数据...');
+  let failed = 0;
+  for (const stock of stockData) {
+    await fetchStockData(stock);
+    renderStocks(); // update progressively
+    const q = stockQuotes[stock.id];
+    if (!q || !q.price) failed++;
+  }
+  if (failed > 0) {
+    toast(`${stockData.length - failed}/${stockData.length} 只刷新成功，${failed} 只失败 ❌`);
+  } else {
+    toast('行情刷新完成 ✅');
+  }
+}
+
+// --- Render stock table ---
+function renderStocks() {
+  const wrap = document.getElementById('stockTableWrap');
+  if (stockData.length === 0) {
+    wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><p>还没有持仓，添加你的第一只股票吧</p><button class="btn btn-primary" onclick="openStockModal()">📈 添加股票</button></div>`;
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th style="width:40px"></th><th>股票</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th>
+    <th>30分MA25</th><th>60分MA25</th><th>120分MA25</th><th>日线MA25</th><th>信号</th><th style="text-align:right">操作</th>
+  </tr></thead><tbody>`;
+  stockData.forEach((s, idx) => {
+    const q = stockQuotes[s.id];
+    const hasPrice = q && q.price != null;  // price available (API, manual, or K-line fallback)
+    const price = hasPrice ? q.price : null;
+    const pnl = (price != null && s.costPrice) ? ((price - s.costPrice) / s.costPrice * 100) : null;
+    const pnlVal = (price != null && s.costPrice) ? ((price - s.costPrice) * s.quantity) : null;
+    const isManual = q && q.error && q.error.includes('手动现价');
+
+    // MA cells
+    function maCell(maVal) {
+      if (!hasPrice || maVal == null) return '<td class="text-muted">—</td>';
+      const isUp = price >= maVal;
+      return `<td class="${isUp ? 'ma-up' : 'ma-down'}">${maVal.toFixed(2)}<span style="font-size:10px">${isUp ? ' ↑' : ' ↓'}</span></td>`;
+    }
+
+    // Signal cell
+    let signalHtml = '<td class="text-muted">—</td>';
+    if (hasPrice && q.signal) {
+      const sig = q.signal;
+      // Show action qty + target position; if diff < 0.1% of current qty, show "on strategy"
+      let actionHint = '';
+      const onStrategy = sig.currentQty > 0 && Math.abs(sig.actionQty) / sig.currentQty < 0.001;
+      if (onStrategy) {
+        actionHint = `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">符合策略</div>`;
+      } else if (sig.actionQty > 0) {
+        actionHint = `<div style="font-size:10px;color:var(--danger);margin-top:2px">建议增仓 ${sig.actionQty} 股<br>持仓调整为 ${sig.targetQty} 股</div>`;
+      } else if (sig.actionQty < 0) {
+        actionHint = `<div style="font-size:10px;color:var(--success);margin-top:2px">建议减仓 ${Math.abs(sig.actionQty)} 股<br>持仓调整为 ${sig.targetQty} 股</div>`;
+      } else {
+        actionHint = `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">持有 ${sig.targetQty} 股</div>`;
+      }
+      const errNote = q.error ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${q.error}</div>` : '';
+      signalHtml = `<td><span class="${sig.cls}">${sig.label}</span>${actionHint}${errNote}</td>`;
+    } else if (q && q.error) {
+      signalHtml = `<td class="text-muted text-sm" style="font-size:11px">${q.error}</td>`;
+    }
+
+    // PnL cell
+    let pnlHtml = '<td class="text-muted">—</td>';
+    if (pnl != null) {
+      const cur = getStockCurrency(s);
+      const pnlColor = pnl >= 0 ? 'var(--danger)' : 'var(--success)';
+      const pnlSign = pnl >= 0 ? '+' : '';
+      // Convert PnL amount to CNY (percentage is currency-agnostic, already correct)
+      const pnlCny = convertToCNY(pnlVal, cur);
+      const curNote = cur !== 'CNY'
+        ? `<br><span class="text-muted" style="font-size:10px;opacity:.75">${pnlSign}${pnlVal.toFixed(0)} ${cur}</span>`
+        : '';
+      pnlHtml = `<td style="color:${pnlColor};font-weight:700">${pnlSign}${pnl.toFixed(1)}%<br><span class="text-muted" style="font-size:11px;font-weight:400">${pnlSign}¥${pnlCny.toFixed(0)}</span>${curNote}</td>`;
+    }
+
+    html += `<tr>
+      <td style="padding:0 2px;text-align:center">
+        <button class="btn-icon" style="font-size:12px;width:20px;height:20px" onclick="moveStock('${s.id}',-1)" ${idx===0?'disabled style="opacity:.3;font-size:12px;width:20px;height:20px"':''} title="上移">▲</button>
+        <button class="btn-icon" style="font-size:12px;width:20px;height:20px" onclick="moveStock('${s.id}',1)" ${idx===stockData.length-1?'disabled style="opacity:.3;font-size:12px;width:20px;height:20px"':''} title="下移">▼</button>
+      </td>
+      <td>
+        <span style="font-weight:600">${(q && q.name) ? q.name : s.name}</span>
+        <span class="badge badge-info" style="margin-left:4px">${s.code}</span>
+        ${s.note ? `<span class="text-muted" style="font-size:11px;margin-left:4px">${s.note}</span>` : ''}
+      </td>
+      <td>${s.quantity}</td>
+      <td>${s.costPrice ? s.costPrice.toFixed(2) : '—'}</td>
+      <td style="font-weight:600">${price != null ? price.toFixed(2) + (isManual ? ' <span class="badge badge-warning" style="font-size:9px;padding:1px 4px">手动</span>' : '') : '<span class="text-muted">—</span>'}</td>
+      ${pnlHtml}
+      ${maCell(hasPrice ? q.ma30 : null)}
+      ${maCell(hasPrice ? q.ma60 : null)}
+      ${maCell(hasPrice ? q.ma120 : null)}
+      ${maCell(hasPrice ? q.maDaily : null)}
+      ${signalHtml}
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn-icon" onclick="refreshSingleStock('${s.id}')" title="刷新">🔄</button>
+        <button class="btn-icon" onclick="openStockModal('${s.id}')" title="编辑">✏️</button>
+        <button class="btn-icon" onclick="deleteStock('${s.id}')" title="删除">🗑️</button>
+      </td>
+    </tr>`;
+  });
+  // Total row — all amounts converted to CNY (stocks can be priced in CNY/HKD/USD)
+  let totalValue = 0;
+  let totalCost = 0;
+  let totalCash = 0;
+  stockData.forEach(s => {
+    const q = stockQuotes[s.id];
+    const cur = getStockCurrency(s);
+    if (q && q.price) totalValue += convertToCNY(q.price * s.quantity, cur);
+    if (s.costPrice) totalCost += convertToCNY(s.costPrice * s.quantity, cur);
+    totalCash += convertToCNY(s.availableCash || 0, cur);
+  });
+  const totalPnl = totalValue - totalCost;
+  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost * 100) : 0;
+  const totalCapital = totalValue + totalCash;
+  const pnlColor = totalPnl >= 0 ? 'var(--danger)' : 'var(--success)';
+  const pnlSign = totalPnl >= 0 ? '+' : '';
+  html += `<tr style="border-top:2px solid var(--border)">
+    <td></td>
+    <td style="font-weight:700">合计</td>
+    <td colspan="2"></td>
+    <td style="font-weight:700">¥${totalValue.toFixed(0)}</td>
+    <td style="font-weight:700;color:${pnlColor}">${pnlSign}¥${totalPnl.toFixed(0)}<br><span style="font-size:11px;font-weight:400">${pnlSign}${totalPnlPct.toFixed(1)}%</span></td>
+    <td colspan="5" style="font-size:11px;color:var(--text-muted)">可用资金 ¥${totalCash.toFixed(0)} ｜ 总资金 ¥${totalCapital.toFixed(0)}<span style="opacity:.65">（已按汇率折人民币）</span></td>
+  </tr>`;
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+// --- Refresh single stock ---
+async function refreshSingleStock(id) {
+  const stock = stockData.find(s => s.id === id);
+  if (!stock) return;
+  toast('正在获取 ' + stock.name + ' 行情...');
+  await fetchStockData(stock);
+  renderStocks();
+  const q = stockQuotes[id];
+  if (q && q.price && q.signal) {
+    toast(`${stock.name}: ${q.signal.label} | 现价 ${q.price.toFixed(2)}`);
+  } else if (q && q.error) {
+    toast(`${stock.name}: ${q.error} ❌`);
+  }
+}
+
+// --- Stock Modal ---
+// Store selected stock info on the modal element itself to avoid TDZ issues
+function setStockSelection(code, name) {
+  const modal = document.getElementById('stockModal');
+  if (modal) {
+    modal.dataset.selectedCode = code || '';
+    modal.dataset.selectedName = name || '';
+  }
+}
+function getStockSelection() {
+  const modal = document.getElementById('stockModal');
+  return {
+    code: (modal && modal.dataset.selectedCode) || '',
+    name: (modal && modal.dataset.selectedName) || ''
+  };
+}
+
+function openStockModal(id) {
+  try {
+  document.getElementById('stockId').value = id || '';
+  document.getElementById('stockModalTitle').textContent = id ? '编辑股票' : '添加股票';
+  document.getElementById('stockSearchInput').value = '';
+  document.getElementById('stockSearchDropdown').style.display = 'none';
+  document.getElementById('stockSelectedInfo').style.display = 'none';
+  document.getElementById('stockQty').value = '';
+  document.getElementById('stockCost').value = '';
+  document.getElementById('stockManualPrice').value = '';
+  document.getElementById('stockAvailableCash').value = '';
+  document.getElementById('stockNote').value = '';
+  setStockSelection('', '');
+  if (id) {
+    const s = stockData.find(x => x.id === id);
+    if (s) {
+      setStockSelection(s.code, s.name);
+      document.getElementById('stockSearchInput').value = s.name + ' (' + s.code + ')';
+      document.getElementById('stockSelectedName').textContent = s.name;
+      document.getElementById('stockSelectedCode').textContent = s.code;
+      document.getElementById('stockSelectedInfo').style.display = 'block';
+      document.getElementById('stockQty').value = s.quantity;
+      document.getElementById('stockCost').value = s.costPrice;
+      document.getElementById('stockManualPrice').value = s.manualPrice || '';
+      document.getElementById('stockAvailableCash').value = s.availableCash ?? '';
+      document.getElementById('stockNote').value = s.note || '';
+    }
+  }
+  document.getElementById('stockModal').classList.add('active');
+  } catch(e) {
+    console.error('openStockModal error:', e);
+    alert('打开股票弹窗出错: ' + e.message + '\n请按Ctrl+Shift+R强制刷新页面后重试');
+  }
+}
+window.openStockModal = openStockModal;
+
+function saveStock() {
+  const id = document.getElementById('stockId').value;
+  const sel = getStockSelection();
+  if (!sel.code) { toast('请先搜索并选择股票'); return; }
+  const quantity = parseFloat(document.getElementById('stockQty').value);
+  if (!quantity || quantity <= 0) { toast('请输入有效持仓数量'); return; }
+  const costPrice = parseFloat(document.getElementById('stockCost').value);
+  if (!costPrice || costPrice <= 0) { toast('请输入有效成本价'); return; }
+  const note = document.getElementById('stockNote').value;
+  const manualPriceInput = document.getElementById('stockManualPrice').value;
+  const manualPrice = manualPriceInput ? parseFloat(manualPriceInput) : null;
+  const availableCashInput = document.getElementById('stockAvailableCash').value;
+  const availableCash = availableCashInput ? parseFloat(availableCashInput) : 0;
+
+  const normCode = normalizeStockCode(sel.code, sel.name);
+  if (id) {
+    const idx = stockData.findIndex(s => s.id === id);
+    if (idx >= 0) {
+      stockData[idx].code = normCode;
+      stockData[idx].name = sel.name;
+      stockData[idx].quantity = quantity;
+      stockData[idx].costPrice = costPrice;
+      stockData[idx].manualPrice = (manualPrice && manualPrice > 0) ? manualPrice : null;
+      stockData[idx].availableCash = availableCash;
+      stockData[idx].note = note;
+    }
+  } else {
+    const newStock = {
+      id: uid(),
+      code: normCode,
+      name: sel.name,
+      quantity, costPrice, note,
+      manualPrice: (manualPrice && manualPrice > 0) ? manualPrice : null,
+      availableCash,
+      createdAt: todayStr()
+    };
+    stockData.push(newStock);
+  }
+  saveStocks();
+  closeModal('stockModal');
+  toast('股票已保存 📈');
+  renderStocks();
+  // Auto-fetch data for the new/edited stock
+  const targetId = id || stockData[stockData.length - 1].id;
+  refreshSingleStock(targetId);
+}
+
+function deleteStock(id) {
+  if (!confirm('确定删除这只股票？')) return;
+  stockData = stockData.filter(s => s.id !== id);
+  delete stockQuotes[id];
+  saveStocks();
+  renderStocks();
+  toast('股票已删除');
+}
+
+function moveStock(id, dir) {
+  const idx = stockData.findIndex(s => s.id === id);
+  if (idx < 0) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= stockData.length) return;
+  [stockData[idx], stockData[newIdx]] = [stockData[newIdx], stockData[idx]];
+  saveStocks();
+  renderStocks();
+}
+
+// Close stock search dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#stockSearchInput') && !e.target.closest('#stockSearchDropdown')) {
+    document.getElementById('stockSearchDropdown').style.display = 'none';
+  }
+});
+initTheme();
+// Auto-refresh exchange rates if not yet loaded or outdated (>1 day old)
+(function initRates() {
+  const today = todayStr();
+  if (!exchangeRates.date || exchangeRates.date !== today) {
+    refreshRates();
+  }
+})();
+// Init Supabase & sync
+(function initCloudSync() {
+  tryInitSupabase(20, function(ok) {
+    if (ok) {
+      setSyncStatus('在线', 'online');
+      // Pull from cloud on load (delay to let the page render first)
+      setTimeout(pullAllFromCloud, 1500);
+    } else {
+      setSyncStatus('离线', 'offline');
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
