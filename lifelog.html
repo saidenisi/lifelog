@@ -1590,18 +1590,10 @@ async function pullAllFromCloud() {
         continue;
       }
 
-      // Other keys are arrays — merge: remote wins, keep local-only records
+      // Other keys are arrays — merge by updatedAt (newest wins)
       var remoteArr = resp.data.data || [];
       var localArr = DB.get(key);
-      var remoteIds = {};
-      remoteArr.forEach(function(r) { remoteIds[r.id] = true; });
-
-      // Start with remote records (authoritative)
-      var merged = remoteArr.slice();
-      // Add local records that don't exist in remote
-      localArr.forEach(function(l) {
-        if (!remoteIds[l.id]) merged.push(l);
-      });
+      var merged = mergeRecords(remoteArr, localArr);
 
       // Update global variable
       switch(key) {
@@ -1631,6 +1623,22 @@ async function pullAllFromCloud() {
   }
 }
 
+// Merge two record arrays by updatedAt: newest wins
+function mergeRecords(cloudArr, localArr) {
+  if (!cloudArr || cloudArr.length === 0) return localArr;
+  if (!localArr  || localArr.length === 0)  return cloudArr;
+  var map = {};
+  cloudArr.forEach(function(r) { if (r && r.id) map[r.id] = r; });
+  localArr.forEach(function(l) {
+    if (!l || !l.id) return;
+    var c = map[l.id];
+    if (!c || new Date(l.updatedAt || 0) >= new Date(c.updatedAt || 0)) {
+      map[l.id] = l;
+    }
+  });
+  return Object.values(map);
+}
+
 // Push all local data to cloud
 async function pushAllToCloud() {
   if (!supabaseClient) { setSyncStatus('离线', 'offline'); return; }
@@ -1638,10 +1646,31 @@ async function pushAllToCloud() {
   var errors = 0;
   for (var i = 0; i < SYNC_KEYS.length; i++) {
     var key = SYNC_KEYS[i];
-    var value = key === 'rates' ? exchangeRates : DB.get(key);
     try {
+      var localValue = key === 'rates' ? exchangeRates : DB.get(key);
+
+      // For array keys: pull cloud first, merge, then push (prevents delete-undo)
+      if (key !== 'rates') {
+        try {
+          var cloudResp = await supabaseClient.from('lifelog_data').select('data').eq('id', key).maybeSingle();
+          if (cloudResp.data && cloudResp.data.data) {
+            localValue = mergeRecords(cloudResp.data.data, localValue || []);
+            // Also update local in-memory data
+            switch(key) {
+              case 'fitness': fitnessData = localValue; break;
+              case 'sleep': sleepData = localValue; break;
+              case 'accounts': accountData = localValue; break;
+              case 'stock': stockData = localValue; break;
+              case 'media': mediaData = localValue; break;
+              case 'dailyNotes': dailyNotes = localValue; break;
+            }
+            DB.set(key, localValue);
+          }
+        } catch(e) { console.warn('[Sync] merge failed for', key, e); }
+      }
+
       var resp = await supabaseClient.from('lifelog_data').upsert(
-        { id: key, data: value, updated_at: new Date().toISOString() },
+        { id: key, data: localValue, updated_at: new Date().toISOString() },
         { onConflict: 'id' }
       );
       if (resp.error) { errors++; console.warn('[Sync] push error', key, resp.error); }
