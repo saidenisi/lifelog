@@ -329,6 +329,8 @@ body{
 .btn-ghost:hover{background:var(--surface-hover);color:var(--text)}
 .btn-danger{background:var(--danger);color:#fff}
 .btn-danger:hover{opacity:.9}
+.btn-warning{background:var(--warning);color:#fff}
+.btn-warning:hover{opacity:.85}
 .btn-sm{padding:6px 12px;font-size:12px}
 .btn-icon{
   width:28px;height:28px;
@@ -1000,25 +1002,35 @@ tbody tr:hover{background:var(--surface-hover)}
           <button class="btn btn-ghost btn-sm" onclick="shiftDailyDate(-1)" title="前一天">◀</button>
           <button class="btn btn-ghost btn-sm" onclick="shiftDailyDate(0)" title="回到今天">📅 今天</button>
           <button class="btn btn-ghost btn-sm" onclick="shiftDailyDate(1)" title="后一天">▶</button>
-          <button class="btn btn-primary btn-sm" id="dailySaveBtn" onclick="saveDailyNote()">💾 保存</button>
+          <input type="hidden" id="dailyEditingId">
+          <button class="btn btn-primary btn-sm" id="dailySaveBtn" onclick="saveDailyNote()">💾 新增</button>
         </div>
       </div>
 
       <div style="display:flex;gap:16px;flex-wrap:wrap">
-        <!-- Editor -->
+        <!-- Left: Editor + Today's entries -->
         <div style="flex:1;min-width:300px">
           <div class="card">
             <div class="card-body" style="padding:12px">
-              <textarea id="dailyEditor" style="width:100%;min-height:420px;border:1px solid var(--border);border-radius:8px;padding:16px;font-size:15px;font-family:var(--font);line-height:1.8;resize:vertical;background:var(--surface);color:var(--text);outline:none" placeholder="今天做了什么值得记录的事？有什么感悟？学到了什么新东西？"></textarea>
+              <textarea id="dailyEditor" style="width:100%;min-height:320px;border:1px solid var(--border);border-radius:8px;padding:16px;font-size:15px;font-family:var(--font);line-height:1.8;resize:vertical;background:var(--surface);color:var(--text);outline:none" placeholder="今天做了什么值得记录的事？有什么感悟？学到了什么新东西？"></textarea>
               <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
                 <span class="text-sm text-muted" id="dailyWordCount">0 字</span>
                 <span class="text-sm text-muted" id="dailySavedTip"></span>
               </div>
             </div>
           </div>
+          <!-- Today's entries -->
+          <div class="card mt-16">
+            <div class="card-header">
+              <div class="card-title" id="dailyTodayTitle">📋 今日记录</div>
+            </div>
+            <div class="card-body" id="dailyTodayEntries" style="padding:8px">
+              <div class="text-sm text-muted" style="padding:8px">暂无记录</div>
+            </div>
+          </div>
         </div>
 
-        <!-- Entry list -->
+        <!-- Right: History list -->
         <div style="width:220px;flex-shrink:0" id="dailyEntryList">
         </div>
       </div>
@@ -3553,15 +3565,14 @@ function clearAllData() {
 }
 
 /* ============================================================
-   DAILY NOTES MODULE — 日记
+   DAILY NOTES MODULE — 日记（每条独立，不覆盖）
    ============================================================ */
 let dailyDate = todayStr();
 
 function saveDailyNotes() { DB.set('dailyNotes', dailyNotes); }
 
 function shiftDailyDate(delta) {
-  // Auto-save current content before navigating
-  autoSaveCurrent();
+  clearEditMode();
   if (delta === 0) {
     dailyDate = todayStr();
   } else {
@@ -3572,47 +3583,75 @@ function shiftDailyDate(delta) {
   renderDaily();
 }
 
-function autoSaveCurrent() {
-  var editor = document.getElementById('dailyEditor');
-  if (!editor) return;
-  var content = editor.value.trim();
-  var existing = dailyNotes.find(function(n) { return n.date === dailyDate; });
-  if (existing) {
-    if (content && content !== existing.content) {
-      existing.content = content;
-      existing.updatedAt = new Date().toISOString();
-      saveDailyNotes();
-    }
-  } else if (content) {
-    dailyNotes.push({ id: uid(), date: dailyDate, content: content, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    saveDailyNotes();
-  }
+function clearEditMode() {
+  document.getElementById('dailyEditingId').value = '';
+  document.getElementById('dailyEditor').value = '';
+  document.getElementById('dailyWordCount').textContent = '0 字';
+  document.getElementById('dailySavedTip').textContent = '';
+  var btn = document.getElementById('dailySaveBtn');
+  btn.textContent = '💾 新增';
+  btn.className = 'btn btn-primary btn-sm';
 }
 
 function saveDailyNote() {
   var editor = document.getElementById('dailyEditor');
   var content = editor.value.trim();
-  var existing = dailyNotes.find(function(n) { return n.date === dailyDate; });
+  if (!content) { toast('请输入内容'); return; }
+  var editId = document.getElementById('dailyEditingId').value;
   var tip = document.getElementById('dailySavedTip');
-  if (existing) {
-    if (content) {
-      existing.content = content;
-      existing.updatedAt = new Date().toISOString();
-      tip.textContent = '已保存 ✅';
-    } else {
-      // Delete empty note
-      dailyNotes = dailyNotes.filter(function(n) { return n.date !== dailyDate; });
-      tip.textContent = '已删除（内容为空）';
+
+  if (editId) {
+    // Update existing entry
+    var note = dailyNotes.find(function(n) { return n.id === editId; });
+    if (note) {
+      note.content = content;
+      note.updatedAt = new Date().toISOString();
+      note._deleted = false;
+      tip.textContent = '已更新 ✅';
     }
-  } else if (content) {
-    dailyNotes.push({ id: uid(), date: dailyDate, content: content, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    tip.textContent = '已保存 ✅';
   } else {
-    tip.textContent = '';
+    // Create new entry
+    dailyNotes.push({
+      id: uid(), date: dailyDate, content: content,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    });
+    tip.textContent = '已添加 ✅';
+  }
+
+  saveDailyNotes();
+  saveAll();
+  clearEditMode();
+  setTimeout(function() { tip.textContent = ''; }, 2000);
+  renderDaily();
+}
+
+function editDailyNote(id) {
+  var note = dailyNotes.find(function(n) { return n.id === id; });
+  if (!note) return;
+  document.getElementById('dailyEditingId').value = id;
+  document.getElementById('dailyEditor').value = note.content;
+  document.getElementById('dailyWordCount').textContent = note.content.length + ' 字';
+  var btn = document.getElementById('dailySaveBtn');
+  btn.textContent = '✏️ 更新';
+  btn.className = 'btn btn-warning btn-sm';
+  document.getElementById('dailyEditor').focus();
+}
+
+function deleteDailyNote(id) {
+  if (!confirm('确定要删除这条日记记录吗？')) return;
+  var note = dailyNotes.find(function(n) { return n.id === id; });
+  if (note) {
+    note._deleted = true;
+    note.updatedAt = new Date().toISOString();
+    // If editing this note, clear editor
+    if (document.getElementById('dailyEditingId').value === id) {
+      clearEditMode();
+    }
   }
   saveDailyNotes();
-  setTimeout(function() { tip.textContent = ''; }, 2000);
-  renderDailyEntryList();
+  saveAll();
+  toast('日记已删除');
+  renderDaily();
 }
 
 function renderDaily() {
@@ -3621,87 +3660,109 @@ function renderDaily() {
   document.getElementById('dailyDateLabel').textContent =
     dt.getFullYear()+'年'+(dt.getMonth()+1)+'月'+dt.getDate()+'日 星期'+weekDays[dt.getDay()];
 
-  var note = dailyNotes.find(function(n) { return n.date === dailyDate; });
-  var editor = document.getElementById('dailyEditor');
-  editor.value = note ? note.content : '';
-
-  // Word count
-  var count = (note ? note.content.length : 0);
-  document.getElementById('dailyWordCount').textContent = count + ' 字';
-  document.getElementById('dailySavedTip').textContent = '';
-
+  // Keep editor in current state (may be editing), just refresh today's list & history
+  renderDailyTodayEntries();
   renderDailyEntryList();
+}
+
+function renderDailyTodayEntries() {
+  var el = document.getElementById('dailyTodayEntries');
+  if (!el) return;
+
+  var todayNotes = dailyNotes.filter(function(n) {
+    return n.date === dailyDate && !n._deleted;
+  }).sort(function(a, b) {
+    return new Date(a.createdAt) - new Date(b.createdAt);
+  });
+
+  var title = document.getElementById('dailyTodayTitle');
+  title.textContent = '📋 今日记录（'+todayNotes.length+'条）';
+
+  if (todayNotes.length === 0) {
+    el.innerHTML = '<div class="text-sm text-muted" style="padding:8px">暂无记录，在上面写一条吧</div>';
+    return;
+  }
+
+  var timeFmt = function(ts) {
+    if (!ts) return '';
+    var d = new Date(ts);
+    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  };
+
+  var html = '';
+  todayNotes.forEach(function(n) {
+    html += '<div style="padding:10px 12px;border-bottom:1px solid var(--border-light);transition:background .15s"'+
+      'onmouseover="this.style.background=\'var(--surface-hover)\'" onmouseout="this.style.background=\'\'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
+        '<span class="text-sm text-muted" style="flex-shrink:0;font-size:11px">'+timeFmt(n.createdAt)+'</span>'+
+        '<div style="flex:1;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word">'+escapeHtml(n.content)+'</div>'+
+        '<div style="display:flex;gap:2px;flex-shrink:0">'+
+          '<button onclick="editDailyNote(\''+n.id+'\')" title="编辑" '+
+            'style="border:none;background:none;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px;color:var(--text-muted);transition:all .15s"'+
+            'onmouseover="this.style.background=\'var(--info-bg)\';this.style.color=\'var(--info)\'" '+
+            'onmouseout="this.style.background=\'\';this.style.color=\'var(--text-muted)\'">✏️</button>'+
+          '<button onclick="deleteDailyNote(\''+n.id+'\')" title="删除" '+
+            'style="border:none;background:none;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px;color:var(--text-muted);transition:all .15s"'+
+            'onmouseover="this.style.background=\'var(--danger-bg)\';this.style.color=\'var(--danger)\'" '+
+            'onmouseout="this.style.background=\'\';this.style.color=\'var(--text-muted)\'">×</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  el.innerHTML = html;
 }
 
 function renderDailyEntryList() {
   var list = document.getElementById('dailyEntryList');
   if (!list) return;
-  
-  // Sort notes by date descending
-  var sorted = dailyNotes.slice().sort(function(a, b) { return b.date.localeCompare(a.date); });
-  
+
+  var sorted = dailyNotes.filter(function(n) { return !n._deleted; }).sort(function(a, b) { return b.date.localeCompare(a.date); });
+
   if (sorted.length === 0) {
     list.innerHTML = '<div class="text-sm text-muted" style="padding:8px">暂无记录</div>';
     return;
   }
 
-  var html = '<div class="text-sm" style="font-weight:600;margin-bottom:8px;padding:4px 0">📝 历史记录</div>';
+  // Group by date and count
+  var dateGroups = {};
   sorted.forEach(function(n) {
-    var preview = n.content.replace(/\n/g, ' ').slice(0, 35);
-    if (n.content.length > 35) preview += '…';
-    var isActive = n.date === dailyDate;
+    if (!dateGroups[n.date]) dateGroups[n.date] = [];
+    dateGroups[n.date].push(n);
+  });
+  var dates = Object.keys(dateGroups).sort().reverse();
+
+  var html = '<div class="text-sm" style="font-weight:600;margin-bottom:8px;padding:4px 0">📝 历史记录</div>';
+  dates.forEach(function(d) {
+    var count = dateGroups[d].length;
+    var isActive = d === dailyDate;
     html += '<div '+
-      'onclick="shiftDailyDateTo(\''+n.date+'\')" '+
+      'onclick="shiftDailyDateTo(\''+d+'\')" '+
       'style="position:relative;padding:8px;border-radius:6px;cursor:pointer;margin-bottom:4px;'+
       (isActive ? 'background:var(--primary-bg);border:1px solid var(--primary-light);' : 'border:1px solid transparent;')+
       'transition:all .15s"'+
       'onmouseover="if(!'+isActive+')this.style.background=\'var(--surface-hover)\'" '+
       'onmouseout="if(!'+isActive+')this.style.background=\'\'">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center">'+
-        '<div style="font-size:12px;font-weight:600;color:'+(isActive?'var(--primary)':'var(--text)')+'">'+fmtDate(n.date)+'</div>'+
-        '<span onclick="event.stopPropagation();deleteDailyNote(\''+n.id+'\')" '+
-          'title="删除此记录" '+
-          'style="font-size:14px;color:var(--text-muted);padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;transition:all .15s"'+
-          'onmouseover="this.style.background=\'var(--danger-bg)\';this.style.color=\'var(--danger)\'" '+
-          'onmouseout="this.style.background=\'\';this.style.color=\'var(--text-muted)\'">×</span>'+
-      '</div>'+
-      '<div class="text-sm text-muted" style="font-size:11px;line-height:1.4;margin-top:2px">'+escapeHtml(preview)+'</div>'+
+      '<div style="font-size:12px;font-weight:600;color:'+(isActive?'var(--primary)':'var(--text)')+'">'+
+        fmtDate(d)+' <span style="font-weight:400;font-size:11px;color:var(--text-muted)">('+count+'条)</span></div>'+
+      '<div class="text-sm text-muted" style="font-size:11px;line-height:1.4;margin-top:2px">'+
+        escapeHtml(dateGroups[d][0].content.replace(/\n/g,' ').slice(0,30))+(dateGroups[d][0].content.length>30?'…':'')+'</div>'+
     '</div>';
   });
   list.innerHTML = html;
 }
 
-function deleteDailyNote(id) {
-  if (!confirm('确定要删除这条日记记录吗？')) return;
-  // If deleting the currently displayed note, clear the editor
-  var note = dailyNotes.find(function(n) { return n.id === id; });
-  if (note && note.date === dailyDate) {
-    document.getElementById('dailyEditor').value = '';
-    document.getElementById('dailyWordCount').textContent = '0 字';
-    document.getElementById('dailySavedTip').textContent = '';
-  }
-  dailyNotes = dailyNotes.filter(function(n) { return n.id !== id; });
-  saveDailyNotes();
-  saveAll();
-  toast('日记已删除');
-  renderDailyEntryList();
-}
-
 function shiftDailyDateTo(dateStr) {
-  autoSaveCurrent();
+  clearEditMode();
   dailyDate = dateStr;
   renderDaily();
 }
 
-// Auto-save on editor change (debounced)
-var _dailySaveTimer = null;
+// Live word count
 document.addEventListener('DOMContentLoaded', function() {
   var editor = document.getElementById('dailyEditor');
   if (editor) {
     editor.addEventListener('input', function() {
       document.getElementById('dailyWordCount').textContent = editor.value.length + ' 字';
-      clearTimeout(_dailySaveTimer);
-      _dailySaveTimer = setTimeout(autoSaveCurrent, 1500);
     });
   }
 });
