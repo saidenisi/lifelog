@@ -3623,16 +3623,39 @@ function renderDailyEntryList() {
     var isActive = n.date === dailyDate;
     html += '<div '+
       'onclick="shiftDailyDateTo(\''+n.date+'\')" '+
-      'style="padding:8px;border-radius:6px;cursor:pointer;margin-bottom:4px;'+
+      'style="position:relative;padding:8px;border-radius:6px;cursor:pointer;margin-bottom:4px;'+
       (isActive ? 'background:var(--primary-bg);border:1px solid var(--primary-light);' : 'border:1px solid transparent;')+
       'transition:all .15s"'+
       'onmouseover="if(!'+isActive+')this.style.background=\'var(--surface-hover)\'" '+
       'onmouseout="if(!'+isActive+')this.style.background=\'\'">'+
-      '<div style="font-size:12px;font-weight:600;color:'+(isActive?'var(--primary)':'var(--text)')+'">'+fmtDate(n.date)+'</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div style="font-size:12px;font-weight:600;color:'+(isActive?'var(--primary)':'var(--text)')+'">'+fmtDate(n.date)+'</div>'+
+        '<span onclick="event.stopPropagation();deleteDailyNote(\''+n.id+'\')" '+
+          'title="删除此记录" '+
+          'style="font-size:14px;color:var(--text-muted);padding:2px 6px;border-radius:4px;line-height:1;cursor:pointer;transition:all .15s"'+
+          'onmouseover="this.style.background=\'var(--danger-bg)\';this.style.color=\'var(--danger)\'" '+
+          'onmouseout="this.style.background=\'\';this.style.color=\'var(--text-muted)\'">×</span>'+
+      '</div>'+
       '<div class="text-sm text-muted" style="font-size:11px;line-height:1.4;margin-top:2px">'+escapeHtml(preview)+'</div>'+
     '</div>';
   });
   list.innerHTML = html;
+}
+
+function deleteDailyNote(id) {
+  if (!confirm('确定要删除这条日记记录吗？')) return;
+  // If deleting the currently displayed note, clear the editor
+  var note = dailyNotes.find(function(n) { return n.id === id; });
+  if (note && note.date === dailyDate) {
+    document.getElementById('dailyEditor').value = '';
+    document.getElementById('dailyWordCount').textContent = '0 字';
+    document.getElementById('dailySavedTip').textContent = '';
+  }
+  dailyNotes = dailyNotes.filter(function(n) { return n.id !== id; });
+  saveDailyNotes();
+  saveAll();
+  toast('日记已删除');
+  renderDailyEntryList();
 }
 
 function shiftDailyDateTo(dateStr) {
