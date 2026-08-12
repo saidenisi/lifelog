@@ -610,6 +610,33 @@ tbody tr:hover{background:var(--surface-hover)}
   .modal{max-width:100%}
 }
 
+/* ===== Top Sync Bar (visible on all devices) ===== */
+.top-sync-bar{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:5px 14px;
+  font-size:12px;font-weight:500;
+  border-radius:0 0 var(--radius-sm) var(--radius-sm);
+  margin:0 0 16px 0;
+  cursor:pointer;
+  transition:all .3s;
+  user-select:none;
+}
+.top-sync-bar:hover{opacity:.85}
+.top-sync-bar.online{background:var(--success-bg);color:var(--success)}
+.top-sync-bar.offline{background:var(--danger-bg);color:var(--danger)}
+.top-sync-bar.syncing{background:var(--warning-bg);color:var(--warning)}
+.top-sync-bar.synced{background:var(--success-bg);color:var(--success)}
+.top-sync-bar.error{background:var(--danger-bg);color:var(--danger)}
+
+@media(max-width:768px){
+  .top-sync-bar{
+    margin:0 -16px 12px -16px;
+    border-radius:0;
+    padding:6px 14px;
+    font-size:13px;
+  }
+}
+
 /* ===== Misc ===== */
 .text-muted{color:var(--text-muted)}
 .text-sm{font-size:13px}
@@ -709,6 +736,7 @@ tbody tr:hover{background:var(--surface-hover)}
 
   <!-- ===== Main ===== -->
   <main class="main">
+    <div class="top-sync-bar offline" id="topSyncBar" onclick="syncNow()" title="点击同步">☁️ 等待连接</div>
 
     <!-- ===== Fitness Page ===== -->
     <div class="page" id="page-fitness">
@@ -1508,9 +1536,15 @@ function syncStatusEl() { return document.getElementById('syncStatus'); }
 
 function setSyncStatus(text, cls) {
   var el = syncStatusEl();
-  if (!el) return;
-  el.textContent = text;
-  el.className = 'sync-status ' + (cls || '');
+  if (el) {
+    el.textContent = text;
+    el.className = 'sync-status ' + (cls || '');
+  }
+  var top = document.getElementById('topSyncBar');
+  if (top) {
+    top.textContent = '☁️ ' + text;
+    top.className = 'top-sync-bar ' + (cls || 'offline');
+  }
 }
 
 // Pull all data from cloud, merge into local
@@ -1610,6 +1644,29 @@ async function syncNow() {
   }
   await pullAllFromCloud();
   await pushAllToCloud();
+}
+
+// Supabase Realtime — detect cloud changes instantly
+function subscribeRealtime() {
+  if (!supabaseClient) return;
+  try {
+    supabaseClient.channel('lifelog-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'lifelog_data' },
+        function(payload) {
+          console.log('[Realtime] Cloud change detected, auto-pulling...', payload.eventType);
+          pullAllFromCloud();
+        }
+      )
+      .subscribe(function(status) {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime] Live sync active');
+          setSyncStatus('实时同步 ✅', 'online');
+        }
+      });
+  } catch(e) {
+    console.warn('[Realtime] Subscribe failed:', e);
+  }
 }
 
 // ===== Utility Functions =====
@@ -4312,7 +4369,12 @@ initTheme();
     if (ok) {
       setSyncStatus('在线', 'online');
       // Pull from cloud on load (delay to let the page render first)
-      setTimeout(pullAllFromCloud, 1500);
+      setTimeout(function() {
+        pullAllFromCloud().then(function() {
+          // After first pull, start realtime subscription
+          subscribeRealtime();
+        });
+      }, 1500);
     } else {
       setSyncStatus('离线', 'offline');
     }
