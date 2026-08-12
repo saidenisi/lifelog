@@ -9,6 +9,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// Fallback: if jsdelivr SDK fails (e.g. blocked in China), try unpkg
+(function(){
+  var loaded = false;
+  setTimeout(function(){
+    if (typeof supabase === 'undefined' || !supabase.createClient) {
+      var s = document.createElement('script');
+      s.src = 'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+      s.onload = function(){ console.log('[SDK] Fallback CDN loaded'); };
+      document.head.appendChild(s);
+    }
+  }, 5000);
+})();
+</script>
 <style>
 /* ===== CSS Reset & Variables ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1523,12 +1537,16 @@ function tryInitSupabase(maxRetries, callback) {
     if (initSupabase()) { if (callback) callback(true); return; }
     retries++;
     if (retries <= maxRetries) {
+      setSyncStatus('加载SDK中...('+retries+'/'+maxRetries+')', 'syncing');
       setTimeout(attempt, 300);
     } else {
       console.warn('[Sync] Supabase SDK failed to load after retries');
+      setSyncStatus('SDK加载失败 ⚠️', 'offline');
       if (callback) callback(false);
     }
   }
+  // Show initial status immediately
+  setSyncStatus('加载SDK中...', 'syncing');
   attempt();
 }
 
@@ -1550,13 +1568,15 @@ function setSyncStatus(text, cls) {
 // Pull all data from cloud, merge into local
 async function pullAllFromCloud() {
   if (!supabaseClient) { setSyncStatus('离线', 'offline'); return; }
-  setSyncStatus('同步中...', 'syncing');
+  setSyncStatus('拉取中...', 'syncing');
   var changed = false;
+  var errors = 0;
   for (var i = 0; i < SYNC_KEYS.length; i++) {
     var key = SYNC_KEYS[i];
     try {
       var resp = await supabaseClient.from('lifelog_data').select('*').eq('id', key).maybeSingle();
       if (resp.error) {
+        errors++;
         if (resp.error.code !== 'PGRST116') console.warn('[Sync] pull error', key, resp.error);
         continue;
       }
@@ -1594,9 +1614,11 @@ async function pullAllFromCloud() {
       }
       DB.set(key, merged);
       changed = true;
-    } catch(e) { console.warn('[Sync] pull failed', key, e); }
+    } catch(e) { errors++; console.warn('[Sync] pull failed', key, e); }
   }
-  if (changed) {
+  if (errors) {
+    setSyncStatus('拉取失败('+errors+') ⚠️', 'error');
+  } else if (changed) {
     setSyncStatus('已同步 ✅', 'synced');
     // Re-render current page
     var active = document.querySelector('.page.active');
@@ -1625,8 +1647,12 @@ async function pushAllToCloud() {
       if (resp.error) { errors++; console.warn('[Sync] push error', key, resp.error); }
     } catch(e) { errors++; console.warn('[Sync] push failed', key, e); }
   }
-  setSyncStatus(errors ? '部分失败 ⚠️' : '已同步 ✅', errors ? 'error' : 'synced');
-  setTimeout(function() { setSyncStatus('在线', 'online'); }, 3000);
+  setSyncStatus(errors ? '上传失败 ⚠️' : '已同步 ✅', errors ? 'error' : 'synced');
+  setTimeout(function() {
+    if (syncStatusEl() && syncStatusEl().textContent.indexOf('实时') === -1) {
+      setSyncStatus('在线', 'online');
+    }
+  }, 3000);
 }
 
 // Debounced push: called by saveAll(), batches writes within 2s
@@ -4365,7 +4391,7 @@ initTheme();
 })();
 // Init Supabase & sync
 (function initCloudSync() {
-  tryInitSupabase(20, function(ok) {
+  tryInitSupabase(35, function(ok) {
     if (ok) {
       setSyncStatus('在线', 'online');
       // Pull from cloud on load (delay to let the page render first)
