@@ -3470,14 +3470,26 @@ function coverPickFile() {
 }
 
 /* ===== Image paste / drag-drop → Supabase Storage ===== */
+let _coverUploadPromise = null; // tracks the in-flight cover upload
+
 function handleImageBlob(blob) {
   if (!blob || !blob.type.startsWith('image/')) return false;
   compressImageToBlob(blob, 400, function(compressedBlob) {
     if (!compressedBlob) { toast('图片处理失败'); return; }
-    uploadImageToStorage(compressedBlob).then(function(url) {
+    // Show local preview immediately (no network wait)
+    var localUrl = URL.createObjectURL(compressedBlob);
+    setCoverPreview(localUrl);
+    toast('封面上传中…');
+    // Upload to Storage in background
+    _coverUploadPromise = uploadImageToStorage(compressedBlob).then(function(url) {
       if (url) {
         setCoverPreview(url);
-        toast('封面已设置');
+        URL.revokeObjectURL(localUrl);
+        toast('封面已保存');
+        return url;
+      } else {
+        toast('封面上传失败，请重试');
+        return null;
       }
     });
   });
@@ -3666,14 +3678,22 @@ function openMediaModal(id) {
   initCoverPasteDrop();
 }
 
-function saveMedia() {
+async function saveMedia() {
   const id = document.getElementById('mediaId').value;
   const title = document.getElementById('mediaTitle').value.trim();
   if (!title) { toast('请输入标题'); return; }
   const type = document.getElementById('mediaType').value;
   const status = document.getElementById('mediaStatus').value;
   const notes = document.getElementById('mediaNotes').value.trim();
-  const cover = document.getElementById('mediaCover').value || document.getElementById('mediaCoverUrl').value.trim() || '';
+  let cover = document.getElementById('mediaCover').value || document.getElementById('mediaCoverUrl').value.trim() || '';
+
+  // If cover upload is still in flight, wait for it before saving
+  if (_coverUploadPromise) {
+    toast('封面保存中，请稍候…');
+    var uploaded = await _coverUploadPromise;
+    if (uploaded) cover = uploaded;
+    _coverUploadPromise = null;
+  }
 
   // Date: single or range based on type
   const isRange = (type === 'tv' || type === 'book');
