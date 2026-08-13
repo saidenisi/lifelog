@@ -1102,6 +1102,29 @@ tbody tr:hover{background:var(--surface-hover)}
 
 <!-- ===== Modals ===== -->
 
+<!-- Backup Reminder Modal -->
+<div class="modal-overlay" id="backupModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">📦 数据备份提醒</div>
+      <button class="btn-icon" onclick="closeModal('backupModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="text-align:center;padding:8px 0">
+        <div style="font-size:48px;margin-bottom:12px">💾</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:8px" id="backupDaysText"></div>
+        <p class="text-sm text-muted" style="line-height:1.7;margin-bottom:16px">
+          建议定期把数据导出保存到本地，<br>作为云端之外的额外保障，双重保险更安心。
+        </p>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" style="flex:1" onclick="closeModal('backupModal')">稍后再说</button>
+        <button class="btn btn-primary" style="flex:1" onclick="doBackupNow()">立即备份</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Fitness Modal -->
 <div class="modal-overlay" id="fitnessModal">
   <div class="modal">
@@ -3510,7 +3533,41 @@ function exportAllData() {
   a.download = `lifelog_backup_${todayStr()}.json`;
   a.click();
   URL.revokeObjectURL(url);
+  // Record last backup time
+  localStorage.setItem('lifelog_lastBackup', new Date().toISOString());
   toast('数据已导出 📦');
+}
+
+// Backup reminder: warn if no backup in 27 days
+function checkBackupReminder() {
+  try {
+    var last = localStorage.getItem('lifelog_lastBackup');
+    var now = Date.now();
+    var threshold = 27 * 24 * 3600 * 1000; // 27 days
+    var days = 0;
+    if (last) {
+      days = Math.floor((now - new Date(last).getTime()) / (24 * 3600 * 1000));
+    } else {
+      days = 99; // never backed up
+    }
+    if (!last || (now - new Date(last).getTime()) > threshold) {
+      var txt = document.getElementById('backupDaysText');
+      if (txt) {
+        txt.textContent = last
+          ? ('距上次备份已过去 ' + days + ' 天')
+          : '你还没有备份过数据';
+      }
+      // Delay a bit so page renders first
+      setTimeout(function() {
+        document.getElementById('backupModal').classList.add('active');
+      }, 2000);
+    }
+  } catch(e) { console.warn('[Backup] reminder failed', e); }
+}
+
+function doBackupNow() {
+  closeModal('backupModal');
+  exportAllData();
 }
 
 function importData(event) {
@@ -4519,6 +4576,8 @@ initTheme();
     }
   });
 })();
+// Backup reminder check
+checkBackupReminder();
 </script>
 
 </body>
