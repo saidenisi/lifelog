@@ -714,10 +714,11 @@ tbody tr:hover{background:var(--surface-hover)}
   font-size:11px;font-weight:600;padding:1px 8px;border-radius:10px;
 }
 .daily-textarea{
-  width:100%;min-height:90px;
+  width:100%;min-height:90px;max-height:480px;
   border:1px solid var(--border);border-radius:8px;padding:12px;
   font-size:14px;font-family:var(--font);line-height:1.7;
-  resize:vertical;background:var(--surface);color:var(--text);outline:none;
+  resize:none;background:var(--surface);color:var(--text);outline:none;
+  overflow-y:auto;
   transition:border-color .15s;
 }
 .daily-textarea:focus{border-color:var(--primary)}
@@ -3790,6 +3791,13 @@ function goToday() {
   renderDaily();
 }
 
+// Auto-grow textarea to fit content (within min/max height)
+function autoResizeTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 480) + 'px';
+}
+
 function renderDaily() {
   var dt = new Date(dailyDate + 'T00:00:00');
   var weekDays = ['日','一','二','三','四','五','六'];
@@ -3807,6 +3815,9 @@ function renderDaily() {
     if (expEl) expEl.value = note ? (note.experience || '') : '';
     if (knowEl) knowEl.value = note ? (note.knowledge || '') : '';
     if (reflEl) reflEl.value = note ? (note.reflection || '') : '';
+    autoResizeTextarea(expEl);
+    autoResizeTextarea(knowEl);
+    autoResizeTextarea(reflEl);
     currentImages = (note && note.images) ? note.images.slice() : [];
     var tip = document.getElementById('dailySavedTip');
     if (tip) tip.textContent = '';
@@ -4051,7 +4062,12 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   ['dailyExperience', 'dailyKnowledge', 'dailyReflection'].forEach(function(id) {
     var el = document.getElementById(id);
-    if (el) el.addEventListener('input', scheduleDailyAutoSave);
+    if (el) {
+      el.addEventListener('input', function() {
+        autoResizeTextarea(el);
+        scheduleDailyAutoSave();
+      });
+    }
   });
 });
 
