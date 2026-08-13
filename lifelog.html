@@ -1266,6 +1266,15 @@ tbody tr:hover{background:var(--surface-hover)}
       </div>
 
       <div class="card mt-16">
+        <div class="card-header"><div class="card-title">🖼️ 旧图片迁移</div></div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-16">把之前以 base64 形式存在数据库里的旧图片，迁移到文件存储（释放数据库空间）。迁移前建议先「导出全部数据」备份。</p>
+          <button class="btn btn-primary" id="migrateImagesBtn" onclick="migrateOldImages()">🚀 开始迁移</button>
+          <div class="text-sm text-muted mt-8" id="migrateImagesStatus"></div>
+        </div>
+      </div>
+
+      <div class="card mt-16">
         <div class="card-header"><div class="card-title">⚠️ 危险操作</div></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-16">清空所有数据，此操作不可撤销！</p>
@@ -3825,6 +3834,67 @@ function formatBytes(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+// Convert a data URL (base64) back to a Blob
+function dataUrlToBlob(dataUrl) {
+  var parts = dataUrl.split(',');
+  var mime = parts[0].match(/:(.*?);/)[1];
+  var bstr = atob(parts[1]);
+  var n = bstr.length;
+  var u8arr = new Uint8Array(n);
+  while (n--) u8arr[n] = bstr.charCodeAt(n);
+  return new Blob([u8arr], { type: mime });
+}
+
+// Migrate legacy base64 images (in DB) to Supabase Storage
+async function migrateOldImages() {
+  if (!supabaseClient) {
+    if (!initSupabase()) { toast('云端未连接，无法迁移'); return; }
+  }
+  var statusEl = document.getElementById('migrateImagesStatus');
+  var btn = document.getElementById('migrateImagesBtn');
+
+  // Collect all base64 images
+  var tasks = [];
+  dailyNotes.forEach(function(n) {
+    if (n._deleted) return;
+    (n.images || []).forEach(function(img, idx) {
+      if (typeof img === 'string' && img.indexOf('data:image/') === 0) {
+        tasks.push({ note: n, index: idx, dataUrl: img });
+      }
+    });
+  });
+
+  if (tasks.length === 0) {
+    if (statusEl) statusEl.textContent = '没有需要迁移的旧图片 ✅';
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  var migrated = 0, failed = 0;
+  for (var i = 0; i < tasks.length; i++) {
+    var t = tasks[i];
+    if (statusEl) statusEl.textContent = '迁移中 ' + (i + 1) + ' / ' + tasks.length + ' …';
+    try {
+      var blob = dataUrlToBlob(t.dataUrl);
+      var url = await uploadImageToStorage(blob);
+      if (url) {
+        t.note.images[t.index] = url;
+        t.note.updatedAt = new Date().toISOString();
+        migrated++;
+      } else {
+        failed++;
+      }
+    } catch(e) { failed++; console.warn('[Migrate] failed', e); }
+  }
+
+  saveDailyNotes();
+  saveAll();
+  if (statusEl) statusEl.textContent = '迁移完成：成功 ' + migrated + ' 张，失败 ' + failed + ' 张。可点上方「刷新」查看用量。';
+  if (btn) btn.disabled = false;
+  toast('图片迁移完成');
+  renderDaily();
 }
 
 // Backup reminder: warn if no backup in 27 days
