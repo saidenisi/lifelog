@@ -782,15 +782,29 @@ tbody tr:hover{background:var(--surface-hover)}
 .daily-tag-btn:hover{border-color:var(--primary);color:var(--primary)}
 .daily-tag-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
 .daily-tag-btn .cnt{font-size:10px;opacity:.7}
-.daily-tag-results{margin-top:8px;max-height:320px;overflow-y:auto}
+.daily-tag-results{margin-top:10px;max-height:480px;overflow-y:auto}
 .daily-tag-result{
-  padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px;
-  border:1px solid var(--border-light);transition:background .15s;
+  padding:12px;border-radius:10px;cursor:pointer;margin-bottom:8px;
+  border:1px solid var(--border);background:var(--surface);
+  transition:all .15s;
 }
-.daily-tag-result:hover{background:var(--surface-hover)}
-.daily-tag-result .date{font-size:11px;font-weight:700;color:var(--primary)}
-.daily-tag-result .snippet{font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:2px;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.daily-tag-result:hover{border-color:var(--primary);background:var(--surface-hover)}
+.daily-tag-result .date{font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px}
+.daily-tag-result .field{margin-bottom:8px}
+.daily-tag-result .field:last-child{margin-bottom:0}
+.daily-tag-result .flabel{
+  display:inline-block;font-size:10px;font-weight:700;
+  padding:1px 7px;border-radius:4px;margin-bottom:4px;
+}
+.daily-tag-result .ftext{
+  font-size:12px;line-height:1.65;color:var(--text-secondary);
+  white-space:pre-wrap;word-break:break-word;
+}
+.daily-tag-result .tags-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.daily-tag-result .mini-tag{
+  font-size:10px;padding:1px 7px;border-radius:10px;
+  background:var(--border-light);color:var(--text-muted);
+}
 
 /* ===== Misc ===== */
 .text-muted{color:var(--text-muted)}
@@ -4235,13 +4249,31 @@ function renderTagResults() {
     el.innerHTML = '<div class="text-muted" style="font-size:12px;margin-top:8px">无匹配记录</div>';
     return;
   }
-  var html = '<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:10px 0 6px">「'+escapeHtml(activeTag)+'」相关记录（'+results.length+'条）</div>';
+  var html = '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin:10px 0 8px">「'+escapeHtml(activeTag)+'」相关记录 · '+results.length+' 条</div>';
   results.forEach(function(n) {
-    var snippet = n.experience || n.knowledge || n.reflection || '';
     html += '<div class="daily-tag-result" onclick="selectDate(\''+n.date+'\')">'+
-      '<div class="date">'+fmtDate(n.date)+'</div>'+
-      (snippet ? '<div class="snippet">'+escapeHtml(snippet)+'</div>' : '')+
-    '</div>';
+      '<div class="date">📅 '+fmtDate(n.date)+'</div>';
+    if (n.experience) {
+      html += '<div class="field"><span class="flabel" style="background:var(--info-bg);color:var(--info)">经历</span>'+
+        '<div class="ftext">'+escapeHtml(n.experience)+'</div></div>';
+    }
+    if (n.knowledge) {
+      html += '<div class="field"><span class="flabel" style="background:var(--success-bg);color:var(--success)">新知</span>'+
+        '<div class="ftext">'+escapeHtml(n.knowledge)+'</div></div>';
+    }
+    if (n.reflection) {
+      html += '<div class="field"><span class="flabel" style="background:var(--purple-bg);color:var(--purple)">感悟</span>'+
+        '<div class="ftext">'+escapeHtml(n.reflection)+'</div></div>';
+    }
+    var otherTags = (n.tags || []).filter(function(t) { return t !== activeTag; });
+    if (otherTags.length) {
+      html += '<div class="tags-row">';
+      otherTags.forEach(function(t) {
+        html += '<span class="mini-tag">'+escapeHtml(t)+'</span>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
   });
   el.innerHTML = html;
 }
