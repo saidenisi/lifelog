@@ -3469,38 +3469,17 @@ function coverPickFile() {
   input.click();
 }
 
-/* ===== Image paste / drag-drop → base64 ===== */
-function compressImage(blob, maxW, quality, cb) {
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var img = new Image();
-    img.onload = function() {
-      var w = img.width, h = img.height;
-      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
-      var cv = document.createElement('canvas');
-      cv.width = w; cv.height = h;
-      var ctx = cv.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      var isPng = blob.type === 'image/png';
-      var dataUrl = cv.toDataURL(isPng ? 'image/png' : 'image/jpeg', quality);
-      cb(dataUrl);
-    };
-    img.onerror = function() { cb(null); };
-    img.src = e.target.result;
-  };
-  reader.onerror = function() { cb(null); };
-  reader.readAsDataURL(blob);
-}
-
+/* ===== Image paste / drag-drop → Supabase Storage ===== */
 function handleImageBlob(blob) {
   if (!blob || !blob.type.startsWith('image/')) return false;
-  compressImage(blob, 400, 0.82, function(dataUrl) {
-    if (dataUrl) {
-      setCoverPreview(dataUrl);
-      toast('封面已设置');
-    } else {
-      toast('图片处理失败');
-    }
+  compressImageToBlob(blob, 400, function(compressedBlob) {
+    if (!compressedBlob) { toast('图片处理失败'); return; }
+    uploadImageToStorage(compressedBlob).then(function(url) {
+      if (url) {
+        setCoverPreview(url);
+        toast('封面已设置');
+      }
+    });
   });
   return true;
 }
@@ -3855,15 +3834,20 @@ async function migrateOldImages() {
   var statusEl = document.getElementById('migrateImagesStatus');
   var btn = document.getElementById('migrateImagesBtn');
 
-  // Collect all base64 images
+  // Collect all base64 images: daily notes + media covers
   var tasks = [];
   dailyNotes.forEach(function(n) {
     if (n._deleted) return;
     (n.images || []).forEach(function(img, idx) {
       if (typeof img === 'string' && img.indexOf('data:image/') === 0) {
-        tasks.push({ note: n, index: idx, dataUrl: img });
+        tasks.push({ kind: 'daily', note: n, index: idx, dataUrl: img });
       }
     });
+  });
+  mediaData.forEach(function(m) {
+    if (m.cover && typeof m.cover === 'string' && m.cover.indexOf('data:image/') === 0) {
+      tasks.push({ kind: 'media', item: m, dataUrl: m.cover });
+    }
   });
 
   if (tasks.length === 0) {
@@ -3880,8 +3864,12 @@ async function migrateOldImages() {
       var blob = dataUrlToBlob(t.dataUrl);
       var url = await uploadImageToStorage(blob);
       if (url) {
-        t.note.images[t.index] = url;
-        t.note.updatedAt = new Date().toISOString();
+        if (t.kind === 'daily') {
+          t.note.images[t.index] = url;
+          t.note.updatedAt = new Date().toISOString();
+        } else {
+          t.item.cover = url;
+        }
         migrated++;
       } else {
         failed++;
@@ -3890,11 +3878,13 @@ async function migrateOldImages() {
   }
 
   saveDailyNotes();
+  saveMediaData();
   saveAll();
   if (statusEl) statusEl.textContent = '迁移完成：成功 ' + migrated + ' 张，失败 ' + failed + ' 张。可点上方「刷新」查看用量。';
   if (btn) btn.disabled = false;
   toast('图片迁移完成');
   renderDaily();
+  renderMedia();
 }
 
 // Backup reminder: warn if no backup in 27 days
@@ -4278,7 +4268,7 @@ function handleDailyImageUpload(input) {
   if (!files || !files.length) return;
   Array.prototype.forEach.call(files, function(file) {
     if (!file.type || !file.type.startsWith('image/')) return;
-    compressImage(file, function(blob) {
+    compressImageToBlob(file, 1200, function(blob) {
       if (!blob) { toast('图片处理失败'); return; }
       uploadImageToStorage(blob).then(function(url) {
         if (url) {
@@ -4291,13 +4281,14 @@ function handleDailyImageUpload(input) {
   input.value = '';
 }
 
-function compressImage(file, callback) {
+// Compress an image (File/Blob) to a JPEG blob, scaled to maxW width
+function compressImageToBlob(file, maxW, callback) {
   var reader = new FileReader();
   reader.onload = function(e) {
     var img = new Image();
     img.onload = function() {
-      var maxW = 1200, maxH = 1200;
       var w = img.width, h = img.height;
+      var maxH = maxW * 2;
       if (w > maxW || h > maxH) {
         var ratio = Math.min(maxW / w, maxH / h);
         w = Math.round(w * ratio);
@@ -4309,7 +4300,7 @@ function compressImage(file, callback) {
       ctx.drawImage(img, 0, 0, w, h);
       canvas.toBlob(function(blob) {
         callback(blob || null);
-      }, 'image/jpeg', 0.72);
+      }, 'image/jpeg', 0.8);
     };
     img.onerror = function() { callback(null); };
     img.src = e.target.result;
