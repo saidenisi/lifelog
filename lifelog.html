@@ -3736,6 +3736,8 @@ let dailyDate = todayStr();
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth(); // 0-based
 let currentImages = []; // base64 images for the date being edited
+let renderedDate = null; // which date is currently loaded into the form
+let _dailyAutoSaveTimer = null;
 
 function saveDailyNotes() { DB.set('dailyNotes', dailyNotes); }
 
@@ -3774,7 +3776,14 @@ function migrateDailyNotes() {
   if (changed) { saveDailyNotes(); saveAll(); }
 }
 
+// Flush any pending input before switching date (avoid losing unsaved typing)
+function flushDailyInput() {
+  clearTimeout(_dailyAutoSaveTimer);
+  saveDailyNoteSilent();
+}
+
 function goToday() {
+  flushDailyInput();
   dailyDate = todayStr();
   calYear = new Date().getFullYear();
   calMonth = new Date().getMonth();
@@ -3788,29 +3797,42 @@ function renderDaily() {
   if (label) label.textContent =
     dt.getFullYear()+'年'+(dt.getMonth()+1)+'月'+dt.getDate()+'日 星期'+weekDays[dt.getDay()];
 
-  var note = getDailyNote(dailyDate);
-  var expEl = document.getElementById('dailyExperience');
-  var knowEl = document.getElementById('dailyKnowledge');
-  var reflEl = document.getElementById('dailyReflection');
-  if (expEl) expEl.value = note ? (note.experience || '') : '';
-  if (knowEl) knowEl.value = note ? (note.knowledge || '') : '';
-  if (reflEl) reflEl.value = note ? (note.reflection || '') : '';
-  currentImages = (note && note.images) ? note.images.slice() : [];
-  var tip = document.getElementById('dailySavedTip');
-  if (tip) tip.textContent = '';
+  // Only reload the form when the date actually changes.
+  // This prevents switching pages (or re-renders) from wiping unsaved input.
+  if (renderedDate !== dailyDate) {
+    var note = getDailyNote(dailyDate);
+    var expEl = document.getElementById('dailyExperience');
+    var knowEl = document.getElementById('dailyKnowledge');
+    var reflEl = document.getElementById('dailyReflection');
+    if (expEl) expEl.value = note ? (note.experience || '') : '';
+    if (knowEl) knowEl.value = note ? (note.knowledge || '') : '';
+    if (reflEl) reflEl.value = note ? (note.reflection || '') : '';
+    currentImages = (note && note.images) ? note.images.slice() : [];
+    var tip = document.getElementById('dailySavedTip');
+    if (tip) tip.textContent = '';
+    renderedDate = dailyDate;
+  }
 
   renderImages();
   renderCalendar();
 }
 
-function saveDailyNote() {
-  var exp = document.getElementById('dailyExperience').value.trim();
-  var know = document.getElementById('dailyKnowledge').value.trim();
-  var refl = document.getElementById('dailyReflection').value.trim();
-  if (!exp && !know && !refl && currentImages.length === 0) {
-    toast('请填写内容或上传图片');
-    return;
-  }
+// Auto-save: debounce 1.5s after typing, silently persist to avoid data loss
+function scheduleDailyAutoSave() {
+  clearTimeout(_dailyAutoSaveTimer);
+  _dailyAutoSaveTimer = setTimeout(saveDailyNoteSilent, 1500);
+}
+
+function saveDailyNoteSilent() {
+  var expEl = document.getElementById('dailyExperience');
+  var knowEl = document.getElementById('dailyKnowledge');
+  var reflEl = document.getElementById('dailyReflection');
+  if (!expEl || !knowEl || !reflEl) return;
+  var exp = expEl.value.trim();
+  var know = knowEl.value.trim();
+  var refl = reflEl.value.trim();
+  if (!exp && !know && !refl && currentImages.length === 0) return; // nothing to save
+
   var note = getDailyNote(dailyDate);
   if (note) {
     note.experience = exp;
@@ -3829,11 +3851,51 @@ function saveDailyNote() {
   }
   saveDailyNotes();
   saveAll();
+  renderCalendar();
+}
+
+function saveDailyNote() {
+  var exp = document.getElementById('dailyExperience').value.trim();
+  var know = document.getElementById('dailyKnowledge').value.trim();
+  var refl = document.getElementById('dailyReflection').value.trim();
   var tip = document.getElementById('dailySavedTip');
-  if (tip) {
-    tip.textContent = '已保存 ✅';
-    setTimeout(function() { tip.textContent = ''; }, 2000);
+
+  if (!exp && !know && !refl && currentImages.length === 0) {
+    // Empty: remove existing note for this date if any
+    var existing = getDailyNote(dailyDate);
+    if (existing) {
+      existing._deleted = true;
+      existing.updatedAt = new Date().toISOString();
+      saveDailyNotes();
+      saveAll();
+      if (tip) { tip.textContent = '已清空该日记录'; }
+      renderCalendar();
+    } else {
+      toast('请填写内容或上传图片');
+      return;
+    }
+  } else {
+    var note = getDailyNote(dailyDate);
+    if (note) {
+      note.experience = exp;
+      note.knowledge = know;
+      note.reflection = refl;
+      note.images = currentImages.slice();
+      note.updatedAt = new Date().toISOString();
+      note._deleted = false;
+    } else {
+      dailyNotes.push({
+        id: uid(), date: dailyDate,
+        experience: exp, knowledge: know, reflection: refl,
+        images: currentImages.slice(),
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+    saveDailyNotes();
+    saveAll();
+    if (tip) { tip.textContent = '已保存 ✅'; }
   }
+  if (tip) { setTimeout(function() { tip.textContent = ''; }, 2000); }
   renderCalendar();
 }
 
@@ -3846,6 +3908,7 @@ function shiftMonth(delta) {
 }
 
 function calToToday() {
+  flushDailyInput();
   calYear = new Date().getFullYear();
   calMonth = new Date().getMonth();
   dailyDate = todayStr();
@@ -3853,6 +3916,8 @@ function calToToday() {
 }
 
 function selectDate(dateStr) {
+  if (dateStr === dailyDate) return;
+  flushDailyInput();
   dailyDate = dateStr;
   var parts = dateStr.split('-');
   calYear = parseInt(parts[0], 10);
@@ -3978,12 +4043,16 @@ function renderImages() {
   el.innerHTML = html;
 }
 
-// Bind file input
+// Bind file input + auto-save on typing
 document.addEventListener('DOMContentLoaded', function() {
   var input = document.getElementById('dailyImageInput');
   if (input) {
     input.addEventListener('change', function() { handleDailyImageUpload(this); });
   }
+  ['dailyExperience', 'dailyKnowledge', 'dailyReflection'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', scheduleDailyAutoSave);
+  });
 });
 
 // 迁移旧数据（本地已有）
