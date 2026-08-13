@@ -745,6 +745,53 @@ tbody tr:hover{background:var(--surface-hover)}
 .daily-img-add span{font-size:10px}
 .daily-img-add:hover{border-color:var(--primary);color:var(--primary)}
 
+/* ===== Daily tags ===== */
+.daily-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.daily-tag-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:16px;
+  background:var(--primary-bg);color:var(--primary);
+  font-size:12px;font-weight:600;
+}
+.daily-tag-chip button{
+  border:none;background:none;color:var(--primary);cursor:pointer;
+  font-size:14px;line-height:1;padding:0 2px;
+}
+.daily-tag-chip button:hover{color:var(--danger)}
+.daily-tag-input{
+  flex:1;min-width:120px;
+  border:1px solid var(--border);border-radius:8px;padding:7px 12px;
+  font-size:13px;font-family:var(--font);background:var(--surface);color:var(--text);outline:none;
+}
+.daily-tag-input:focus{border-color:var(--primary)}
+
+/* Tag filter list (left sidebar) */
+.daily-tag-filter{margin-top:12px}
+.daily-tag-filter-title{
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:13px;font-weight:700;margin-bottom:8px;
+}
+.daily-tag-list{display:flex;flex-wrap:wrap;gap:6px}
+.daily-tag-btn{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:4px 10px;border-radius:16px;cursor:pointer;
+  font-size:12px;font-weight:500;
+  border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);
+  transition:all .15s;
+}
+.daily-tag-btn:hover{border-color:var(--primary);color:var(--primary)}
+.daily-tag-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.daily-tag-btn .cnt{font-size:10px;opacity:.7}
+.daily-tag-results{margin-top:8px;max-height:320px;overflow-y:auto}
+.daily-tag-result{
+  padding:8px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px;
+  border:1px solid var(--border-light);transition:background .15s;
+}
+.daily-tag-result:hover{background:var(--surface-hover)}
+.daily-tag-result .date{font-size:11px;font-weight:700;color:var(--primary)}
+.daily-tag-result .snippet{font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:2px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
 /* ===== Misc ===== */
 .text-muted{color:var(--text-muted)}
 .text-sm{font-size:13px}
@@ -1096,11 +1143,21 @@ tbody tr:hover{background:var(--surface-hover)}
       </div>
 
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
-        <!-- Left: Calendar -->
+        <!-- Left: Calendar + Tag filter -->
         <div style="width:300px;flex-shrink:0">
           <div class="card">
             <div class="card-body" style="padding:12px">
               <div class="daily-calendar" id="dailyCalendar"></div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <div class="card-body" style="padding:12px">
+              <div class="daily-tag-filter-title">
+                <span>🏷️ 标签</span>
+                <span class="text-muted" style="font-size:11px;font-weight:400;cursor:pointer" onclick="clearTagFilter()">清除筛选</span>
+              </div>
+              <div class="daily-tag-list" id="dailyTagList"></div>
+              <div class="daily-tag-results" id="dailyTagResults"></div>
             </div>
           </div>
         </div>
@@ -1134,6 +1191,18 @@ tbody tr:hover{background:var(--surface-hover)}
                 <div class="daily-section-label"><span>🖼️ 图片</span></div>
                 <div class="daily-images" id="dailyImages"></div>
                 <input type="file" id="dailyImageInput" accept="image/*" multiple style="display:none">
+              </div>
+              <div class="daily-section">
+                <div class="daily-section-label">
+                  <span>🏷️ 标签</span>
+                  <span class="tag" style="background:var(--warning-bg);color:var(--warning)">回车添加</span>
+                </div>
+                <div class="daily-tags" id="dailyTags"></div>
+                <div style="display:flex;gap:8px">
+                  <input type="text" class="daily-tag-input" id="dailyTagInput" placeholder="输入标签后回车" list="dailyTagSuggestions" autocomplete="off">
+                  <datalist id="dailyTagSuggestions"></datalist>
+                  <button class="btn btn-ghost btn-sm" onclick="addDailyTag()">添加</button>
+                </div>
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
                 <span class="text-sm text-muted" id="dailySavedTip"></span>
@@ -3737,6 +3806,8 @@ let dailyDate = todayStr();
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth(); // 0-based
 let currentImages = []; // base64 images for the date being edited
+let currentTags = [];  // tags for the date being edited
+let activeTag = null;  // currently filtered tag (null = show all)
 let renderedDate = null; // which date is currently loaded into the form
 let _dailyAutoSaveTimer = null;
 
@@ -3744,6 +3815,18 @@ function saveDailyNotes() { DB.set('dailyNotes', dailyNotes); }
 
 function getDailyNote(dateStr) {
   return dailyNotes.find(function(n) { return n.date === dateStr && !n._deleted; });
+}
+
+// Collect all tags with usage counts
+function getAllTags() {
+  var map = {};
+  dailyNotes.forEach(function(n) {
+    if (n._deleted) return;
+    (n.tags || []).forEach(function(t) {
+      if (t) map[t] = (map[t] || 0) + 1;
+    });
+  });
+  return map;
 }
 
 // 迁移旧数据：旧的 content 字段 → experience
@@ -3819,6 +3902,8 @@ function renderDaily() {
     autoResizeTextarea(knowEl);
     autoResizeTextarea(reflEl);
     currentImages = (note && note.images) ? note.images.slice() : [];
+    currentTags = (note && note.tags) ? note.tags.slice() : [];
+    renderDailyTags();
     var tip = document.getElementById('dailySavedTip');
     if (tip) tip.textContent = '';
     renderedDate = dailyDate;
@@ -3826,6 +3911,7 @@ function renderDaily() {
 
   renderImages();
   renderCalendar();
+  renderTagList();
 }
 
 // Auto-save: debounce 1.5s after typing, silently persist to avoid data loss
@@ -3842,7 +3928,7 @@ function saveDailyNoteSilent() {
   var exp = expEl.value.trim();
   var know = knowEl.value.trim();
   var refl = reflEl.value.trim();
-  if (!exp && !know && !refl && currentImages.length === 0) return; // nothing to save
+  if (!exp && !know && !refl && currentImages.length === 0 && currentTags.length === 0) return; // nothing to save
 
   var note = getDailyNote(dailyDate);
   if (note) {
@@ -3850,19 +3936,21 @@ function saveDailyNoteSilent() {
     note.knowledge = know;
     note.reflection = refl;
     note.images = currentImages.slice();
+    note.tags = currentTags.slice();
     note.updatedAt = new Date().toISOString();
     note._deleted = false;
   } else {
     dailyNotes.push({
       id: uid(), date: dailyDate,
       experience: exp, knowledge: know, reflection: refl,
-      images: currentImages.slice(),
+      images: currentImages.slice(), tags: currentTags.slice(),
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     });
   }
   saveDailyNotes();
   saveAll();
   renderCalendar();
+  renderTagList();
 }
 
 function saveDailyNote() {
@@ -3871,7 +3959,7 @@ function saveDailyNote() {
   var refl = document.getElementById('dailyReflection').value.trim();
   var tip = document.getElementById('dailySavedTip');
 
-  if (!exp && !know && !refl && currentImages.length === 0) {
+  if (!exp && !know && !refl && currentImages.length === 0 && currentTags.length === 0) {
     // Empty: remove existing note for this date if any
     var existing = getDailyNote(dailyDate);
     if (existing) {
@@ -3881,8 +3969,9 @@ function saveDailyNote() {
       saveAll();
       if (tip) { tip.textContent = '已清空该日记录'; }
       renderCalendar();
+      renderTagList();
     } else {
-      toast('请填写内容或上传图片');
+      toast('请填写内容、上传图片或添加标签');
       return;
     }
   } else {
@@ -3892,13 +3981,14 @@ function saveDailyNote() {
       note.knowledge = know;
       note.reflection = refl;
       note.images = currentImages.slice();
+      note.tags = currentTags.slice();
       note.updatedAt = new Date().toISOString();
       note._deleted = false;
     } else {
       dailyNotes.push({
         id: uid(), date: dailyDate,
         experience: exp, knowledge: know, reflection: refl,
-        images: currentImages.slice(),
+        images: currentImages.slice(), tags: currentTags.slice(),
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
       });
     }
@@ -3908,6 +3998,7 @@ function saveDailyNote() {
   }
   if (tip) { setTimeout(function() { tip.textContent = ''; }, 2000); }
   renderCalendar();
+  renderTagList();
 }
 
 // --- Calendar ---
@@ -4054,7 +4145,108 @@ function renderImages() {
   el.innerHTML = html;
 }
 
-// Bind file input + auto-save on typing
+// --- Tags (editor) ---
+function renderDailyTags() {
+  var el = document.getElementById('dailyTags');
+  if (!el) return;
+  var html = '';
+  currentTags.forEach(function(t) {
+    html += '<span class="daily-tag-chip">'+escapeHtml(t)+
+      '<button onclick="removeDailyTag(\''+t.replace(/'/g, "\\'")+'\')" title="删除">×</button></span>';
+  });
+  el.innerHTML = html;
+  updateTagSuggestions();
+}
+
+function addDailyTag() {
+  var input = document.getElementById('dailyTagInput');
+  if (!input) return;
+  var tag = input.value.trim();
+  if (!tag) return;
+  if (currentTags.indexOf(tag) === -1) {
+    currentTags.push(tag);
+    renderDailyTags();
+    scheduleDailyAutoSave();
+  }
+  input.value = '';
+}
+
+function removeDailyTag(tag) {
+  currentTags = currentTags.filter(function(t) { return t !== tag; });
+  renderDailyTags();
+  scheduleDailyAutoSave();
+}
+
+function updateTagSuggestions() {
+  var dl = document.getElementById('dailyTagSuggestions');
+  if (!dl) return;
+  var all = getAllTags();
+  var existing = {};
+  currentTags.forEach(function(t) { existing[t] = true; });
+  var html = '';
+  Object.keys(all).sort(function(a,b){ return all[b]-all[a]; }).forEach(function(t) {
+    if (!existing[t]) html += '<option value="'+escapeHtml(t)+'"></option>';
+  });
+  dl.innerHTML = html;
+}
+
+// --- Tags (filter list) ---
+function renderTagList() {
+  var el = document.getElementById('dailyTagList');
+  if (!el) return;
+  var all = getAllTags();
+  var keys = Object.keys(all).sort(function(a,b){ return all[b]-all[a]; });
+  if (keys.length === 0) {
+    el.innerHTML = '<div class="text-muted" style="font-size:12px">暂无标签</div>';
+  } else {
+    var html = '';
+    keys.forEach(function(t) {
+      var active = (activeTag === t) ? ' active' : '';
+      html += '<span class="daily-tag-btn'+active+'" onclick="filterByTag(\''+t.replace(/'/g, "\\'")+'\')">'+
+        escapeHtml(t)+'<span class="cnt">'+all[t]+'</span></span>';
+    });
+    el.innerHTML = html;
+  }
+  renderTagResults();
+}
+
+function filterByTag(tag) {
+  activeTag = (activeTag === tag) ? null : tag;
+  renderTagList();
+}
+
+function clearTagFilter() {
+  activeTag = null;
+  renderTagList();
+}
+
+function renderTagResults() {
+  var el = document.getElementById('dailyTagResults');
+  if (!el) return;
+  if (!activeTag) {
+    el.innerHTML = '';
+    return;
+  }
+  var results = dailyNotes.filter(function(n) {
+    return !n._deleted && (n.tags || []).indexOf(activeTag) !== -1;
+  }).sort(function(a, b) { return b.date.localeCompare(a.date); });
+
+  if (results.length === 0) {
+    el.innerHTML = '<div class="text-muted" style="font-size:12px;margin-top:8px">无匹配记录</div>';
+    return;
+  }
+  var html = '<div style="font-size:11px;font-weight:700;color:var(--text-muted);margin:10px 0 6px">「'+escapeHtml(activeTag)+'」相关记录（'+results.length+'条）</div>';
+  results.forEach(function(n) {
+    var snippet = n.experience || n.knowledge || n.reflection || '';
+    html += '<div class="daily-tag-result" onclick="selectDate(\''+n.date+'\')">'+
+      '<div class="date">'+fmtDate(n.date)+'</div>'+
+      (snippet ? '<div class="snippet">'+escapeHtml(snippet)+'</div>' : '')+
+    '</div>';
+  });
+  el.innerHTML = html;
+}
+
+// Bind file input + auto-save on typing + tag enter
 document.addEventListener('DOMContentLoaded', function() {
   var input = document.getElementById('dailyImageInput');
   if (input) {
@@ -4069,6 +4261,12 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
   });
+  var tagInput = document.getElementById('dailyTagInput');
+  if (tagInput) {
+    tagInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); addDailyTag(); scheduleDailyAutoSave(); }
+    });
+  }
 });
 
 // 迁移旧数据（本地已有）
