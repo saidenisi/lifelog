@@ -3749,38 +3749,82 @@ async function loadDbUsage() {
     if (!initSupabase()) { body.innerHTML = '<p class="text-sm text-muted">云端未连接（Supabase SDK 未加载）</p>'; return; }
   }
   body.innerHTML = '<p class="text-sm text-muted">查询中…</p>';
+
+  var dbBytes = null, dbPretty = '', tablePretty = '';
+  var storageBytes = 0, storageCount = 0;
+
   try {
+    // 1. Database usage via RPC
     var resp = await supabaseClient.rpc('get_db_usage');
     if (resp.error) {
       body.innerHTML = '<p class="text-sm text-danger">无法获取用量：请确认已在 Supabase SQL Editor 执行 supabase_setup.sql 第 6 步（get_db_usage 函数）。<br>错误：'+escapeHtml(resp.error.message)+'</p>';
       return;
     }
     var d = resp.data;
-    if (!d || typeof d.db_bytes === 'undefined') {
+    if (d && typeof d.db_bytes !== 'undefined') {
+      dbBytes = d.db_bytes;
+      dbPretty = d.db_pretty;
+      tablePretty = d.table_pretty;
+    }
+
+    // 2. File storage usage (list images folder)
+    try {
+      var sResp = await supabaseClient.storage.from('saidenisi').list('images', { limit: 1000 });
+      if (!sResp.error && sResp.data) {
+        sResp.data.forEach(function(f) {
+          if (f.metadata && f.metadata.size) { storageBytes += f.metadata.size; storageCount++; }
+        });
+      }
+    } catch(e) { console.warn('[Storage] usage query failed', e); }
+
+    if (dbBytes === null) {
       body.innerHTML = '<p class="text-sm text-muted">未获取到数据</p>';
       return;
     }
-    var quota = 500 * 1024 * 1024; // 500 MB
-    var pct = Math.min(100, (d.db_bytes / quota) * 100);
-    var color = pct > 80 ? 'var(--danger)' : (pct > 60 ? 'var(--warning)' : 'var(--success)');
-    body.innerHTML =
-      '<div style="margin-bottom:12px">'+
-        '<div class="flex-between" style="margin-bottom:6px">'+
-          '<span class="text-sm" style="font-weight:600">数据库总大小</span>'+
-          '<span class="text-sm" style="font-weight:700;color:'+color+'">'+escapeHtml(d.db_pretty)+' / 500 MB</span>'+
-        '</div>'+
-        '<div class="progress-bar" style="height:10px">'+
-          '<div class="progress-fill" style="width:'+pct.toFixed(2)+'%;background:'+color+'"></div>'+
-        '</div>'+
-        '<div class="text-sm text-muted" style="margin-top:4px;font-size:11px">已用 '+pct.toFixed(1)+'%</div>'+
+
+    var html = '';
+    // Database bar
+    var dbQuota = 500 * 1024 * 1024; // 500 MB
+    var dbPct = Math.min(100, (dbBytes / dbQuota) * 100);
+    var dbColor = dbPct > 80 ? 'var(--danger)' : (dbPct > 60 ? 'var(--warning)' : 'var(--success)');
+    html += '<div style="margin-bottom:16px">'+
+      '<div class="flex-between" style="margin-bottom:6px">'+
+        '<span class="text-sm" style="font-weight:600">🗄️ 数据库（文字）</span>'+
+        '<span class="text-sm" style="font-weight:700;color:'+dbColor+'">'+escapeHtml(dbPretty)+' / 500 MB</span>'+
       '</div>'+
-      '<div class="flex-between" style="padding-top:10px;border-top:1px solid var(--border-light)">'+
-        '<span class="text-sm text-muted">其中 lifelog_data 表（含图片）</span>'+
-        '<span class="text-sm" style="font-weight:600">'+escapeHtml(d.table_pretty)+'</span>'+
-      '</div>';
+      '<div class="progress-bar" style="height:10px">'+
+        '<div class="progress-fill" style="width:'+dbPct.toFixed(2)+'%;background:'+dbColor+'"></div>'+
+      '</div>'+
+      '<div class="text-sm text-muted" style="margin-top:4px;font-size:11px">已用 '+dbPct.toFixed(1)+'%（其中 lifelog_data 表 '+escapeHtml(tablePretty)+'）</div>'+
+    '</div>';
+
+    // Storage bar
+    var stQuota = 1 * 1024 * 1024 * 1024; // 1 GB
+    var stPct = Math.min(100, (storageBytes / stQuota) * 100);
+    var stColor = stPct > 80 ? 'var(--danger)' : (stPct > 60 ? 'var(--warning)' : 'var(--success)');
+    html += '<div>'+
+      '<div class="flex-between" style="margin-bottom:6px">'+
+        '<span class="text-sm" style="font-weight:600">🖼️ 文件存储（图片）</span>'+
+        '<span class="text-sm" style="font-weight:700;color:'+stColor+'">'+formatBytes(storageBytes)+' / 1 GB</span>'+
+      '</div>'+
+      '<div class="progress-bar" style="height:10px">'+
+        '<div class="progress-fill" style="width:'+stPct.toFixed(2)+'%;background:'+stColor+'"></div>'+
+      '</div>'+
+      '<div class="text-sm text-muted" style="margin-top:4px;font-size:11px">已用 '+stPct.toFixed(1)+'%（'+storageCount+' 张图片）</div>'+
+    '</div>';
+
+    body.innerHTML = html;
   } catch(e) {
     body.innerHTML = '<p class="text-sm text-danger">查询失败：'+escapeHtml(String(e))+'. 请确认已执行 supabase_setup.sql。</p>';
   }
+}
+
+// Format bytes to human-readable
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 KB';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
 }
 
 // Backup reminder: warn if no backup in 27 days
@@ -4150,7 +4194,10 @@ function renderCalendar() {
   el.innerHTML = html;
 }
 
-// --- Images ---
+// --- Images (stored in Supabase Storage) ---
+const STORAGE_BUCKET = 'saidenisi';
+const STORAGE_PUBLIC_PREFIX = 'https://byxqubrxnwqxgxqvlgey.supabase.co/storage/v1/object/public/saidenisi/';
+
 function triggerImageUpload() {
   var input = document.getElementById('dailyImageInput');
   if (input) input.click();
@@ -4161,9 +4208,14 @@ function handleDailyImageUpload(input) {
   if (!files || !files.length) return;
   Array.prototype.forEach.call(files, function(file) {
     if (!file.type || !file.type.startsWith('image/')) return;
-    compressImage(file, function(dataUrl) {
-      currentImages.push(dataUrl);
-      renderImages();
+    compressImage(file, function(blob) {
+      if (!blob) { toast('图片处理失败'); return; }
+      uploadImageToStorage(blob).then(function(url) {
+        if (url) {
+          currentImages.push(url);
+          renderImages();
+        }
+      });
     });
   });
   input.value = '';
@@ -4185,17 +4237,46 @@ function compressImage(file, callback) {
       canvas.width = w; canvas.height = h;
       var ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, w, h);
-      callback(canvas.toDataURL('image/jpeg', 0.72));
+      canvas.toBlob(function(blob) {
+        callback(blob || null);
+      }, 'image/jpeg', 0.72);
     };
-    img.onerror = function() { callback(e.target.result); };
+    img.onerror = function() { callback(null); };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
 
+async function uploadImageToStorage(blob) {
+  if (!supabaseClient) {
+    if (!initSupabase()) { toast('云端未连接，图片未上传'); return null; }
+  }
+  var filename = 'img_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.jpg';
+  var path = 'images/' + filename;
+  try {
+    var resp = await supabaseClient.storage.from(STORAGE_BUCKET).upload(path, blob, {
+      contentType: 'image/jpeg',
+      cacheControl: '3600',
+      upsert: false
+    });
+    if (resp.error) { console.warn('[Image] upload failed', resp.error); toast('图片上传失败'); return null; }
+    return STORAGE_PUBLIC_PREFIX + path;
+  } catch(e) { console.warn('[Image] upload error', e); toast('图片上传失败'); return null; }
+}
+
 function deleteDailyImage(index) {
+  var url = currentImages[index];
   currentImages.splice(index, 1);
   renderImages();
+  // If it's a Storage URL, delete the file from cloud too
+  if (url && url.indexOf(STORAGE_PUBLIC_PREFIX) === 0) {
+    var path = url.slice(STORAGE_PUBLIC_PREFIX.length);
+    if (supabaseClient) {
+      supabaseClient.storage.from(STORAGE_BUCKET).remove([path]).then(function(res) {
+        if (res.error) console.warn('[Image] delete failed', res.error);
+      });
+    }
+  }
 }
 
 function renderImages() {
