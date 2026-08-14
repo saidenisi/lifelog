@@ -811,7 +811,7 @@ tbody tr:hover{background:var(--surface-hover)}
 .todo-cal-cell{
   position:relative;border-radius:6px;cursor:pointer;
   display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;
-  padding:3px;height:72px;overflow:hidden;
+  padding:3px;height:80px;overflow:hidden;
   font-size:10px;line-height:1.3;color:var(--text);
   transition:background .15s;
 }
@@ -4904,7 +4904,7 @@ function renderTodoBars() {
       var ec = cells[row * 7 + ce];
       if (!sc || !ec) return;
       var left = sc.offsetLeft;
-      var top = sc.offsetTop + 16 + lane * 19;
+      var top = sc.offsetTop + 18 + lane * 19;
       var width = ec.offsetLeft + ec.offsetWidth - sc.offsetLeft;
       var style = 'left:'+left+'px;top:'+top+'px;width:'+width+'px;background:'+color;
       if (t.done) style += ';opacity:.5;text-decoration:line-through';
