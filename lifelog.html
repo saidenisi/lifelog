@@ -883,7 +883,7 @@ tbody tr:hover{background:var(--surface-hover)}
 }
 .todo-add-input:focus{border-color:var(--primary)}
 .todo-expand{
-  grid-column:1/-1;
+  grid-column:1 / span 7;
   border:1px solid var(--border);border-radius:8px;
   margin-top:6px;padding:10px 12px;
   background:var(--surface);
@@ -4825,7 +4825,7 @@ function renderTodosCalendar() {
     html += '<div class="'+cls+'" data-date="'+c.dateStr+'" onclick="todosSelectDate(\''+c.dateStr+'\')">'+inner+'</div>';
 
     if (todosExpanded && idx % 7 === 6 && Math.floor(idx / 7) === selectedRow) {
-      html += renderTodoExpand();
+      html += renderTodoExpand(selectedRow + 2);
     }
   }
   html += '</div>';
@@ -4955,7 +4955,7 @@ function todoCalItemHtml(t) {
 }
 
 // Expand panel: shown inline under the selected date's row (spans all 7 cols)
-function renderTodoExpand() {
+function renderTodoExpand(panelRow) {
   var dt = new Date(todosDate + 'T00:00:00');
   var items = getTodosForDate(todosDate);
   items.sort(function(a, b) {
@@ -4963,7 +4963,9 @@ function renderTodoExpand() {
     return (a.createdAt || '').localeCompare(b.createdAt || '');
   });
 
-  var html = '<div class="todo-expand">';
+  var style = 'grid-column:1 / span 7;';
+  if (panelRow) style += 'grid-row:'+panelRow+';';
+  var html = '<div class="todo-expand" style="'+style+'">';
   html += '<div class="todo-expand-title">📋 '+(dt.getMonth()+1)+'月'+dt.getDate()+'日 待办</div>';
   if (items.length === 0) {
     html += '<div class="todo-empty" style="padding:6px 0">这天还没有待办事项</div>';
