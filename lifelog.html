@@ -817,11 +817,11 @@ tbody tr:hover{background:var(--surface-hover)}
   transition:background .15s;
 }
 .todo-cal-cell:hover{background:var(--surface-hover)}
-.todo-cal-cell .d{font-size:10px;font-weight:600;margin-bottom:3px;line-height:1.2}
+.todo-cal-cell .d{font-size:10px;font-weight:600;height:16px;line-height:16px;margin-bottom:2px}
 .todo-cal-cell.other{color:var(--text-muted);opacity:.45}
 .todo-cal-cell.today .d{
   background:var(--primary);color:#fff;font-weight:700;
-  width:18px;height:18px;border-radius:50%;
+  width:16px;height:16px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
 }
 .todo-cal-cell.selected{background:var(--primary-bg)}
@@ -4838,7 +4838,7 @@ function renderTodosCalendar() {
     // cell, so single-day items sit below the bars instead of being overlapped.
     var maxLane = todoMaxLaneByDate[c.dateStr];
     if (typeof maxLane === 'number' && items.length > 0) {
-      inner += '<div style="height:'+(10 + maxLane * 19)+'px"></div>';
+      inner += '<div style="height:'+(20 + maxLane * 19)+'px"></div>';
     }
     if (items.length) {
       var shown = items.slice(0, 3);
@@ -4985,7 +4985,7 @@ function renderTodoBars() {
       var ec = cells[row * 7 + ce];
       if (!sc || !ec) return;
       var left = sc.offsetLeft;
-      var top = sc.offsetTop + 18 + lane * 19;
+      var top = sc.offsetTop + 22 + lane * 19;
       var width = ec.offsetLeft + ec.offsetWidth - sc.offsetLeft;
       var style = 'left:'+left+'px;top:'+top+'px;width:'+width+'px;background:'+bg+';color:'+color;
       if (t.done) style += ';opacity:.5;text-decoration:line-through';
@@ -5969,7 +5969,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260814g';
+  b.textContent = 'build 20260814h';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
