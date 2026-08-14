@@ -808,14 +808,13 @@ tbody tr:hover{background:var(--surface-hover)}
 }
 
 /* ===== Todos ===== */
-.todo-cal-grid{position:relative;gap:4px}
+.todo-cal-grid{position:relative;gap:2px}
 .todo-cal-cell{
   position:relative;border-radius:10px;cursor:pointer;
   display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;
-  padding:4px 6px;min-height:80px;overflow:hidden;
+  padding:4px 1px;min-height:80px;overflow:hidden;
   font-size:10px;line-height:1.3;color:var(--text);
-  border:1px solid transparent;
-  transition:background .15s,border-color .15s;
+  transition:background .15s;
 }
 .todo-cal-cell:hover{background:var(--surface-hover)}
 .todo-cal-cell .d{font-size:10px;font-weight:600;margin-bottom:3px;line-height:1.2}
@@ -825,7 +824,7 @@ tbody tr:hover{background:var(--surface-hover)}
   width:18px;height:18px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
 }
-.todo-cal-cell.selected{background:var(--primary-bg);border-color:var(--primary)}
+.todo-cal-cell.selected{background:var(--primary-bg)}
 .todo-bar-layer{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:1}
 .todo-bar{
   position:absolute;height:18px;border-radius:9px;
@@ -833,12 +832,11 @@ tbody tr:hover{background:var(--surface-hover)}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;
 }
 .todo-cal-item{
-  margin-top:2px;font-size:9px;line-height:1.5;
-  border-radius:8px;padding:0 5px;
+  margin-top:2px;font-size:8px;line-height:1.5;
+  border-radius:6px;padding:0;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  display:flex;align-items:center;
+  display:block;
 }
-.todo-cal-item .dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:3px;flex-shrink:0}
 .todo-cal-item.done{text-decoration:line-through;color:var(--text-muted)!important;background:var(--surface-hover)!important}
 .todo-cal-more{font-size:9px;color:var(--text-muted);margin-top:1px}
 .todo-tag-chip{
@@ -1338,7 +1336,7 @@ tbody tr:hover{background:var(--surface-hover)}
 
       <!-- 月历（全宽，点击日期在该日下方展开事项） -->
       <div class="card">
-        <div class="card-body" style="padding:12px">
+        <div class="card-body" style="padding:8px">
           <div class="daily-calendar" id="todosCalendar"></div>
         </div>
       </div>
@@ -4726,7 +4724,14 @@ function renderTodos() {
   renderTodosCalendar();
 }
 
+function clearTodoEditing() {
+  editingTodoId = null;
+  todoInputActive = false;
+  currentTodoTag = '';
+}
+
 function todosGoToday() {
+  clearTodoEditing();
   todosDate = todayStr();
   todosCalYear = new Date().getFullYear();
   todosCalMonth = new Date().getMonth();
@@ -4735,6 +4740,8 @@ function todosGoToday() {
 }
 
 function todosSelectDate(dateStr) {
+  // Clicking a date exits any in-progress edit/input so it never gets stuck
+  clearTodoEditing();
   // Toggle: clicking the same date again collapses the panel
   if (dateStr === todosDate && todosExpanded) {
     todosExpanded = false;
@@ -4750,6 +4757,7 @@ function todosSelectDate(dateStr) {
 }
 
 function todosShiftMonth(delta) {
+  clearTodoEditing();
   todosCalMonth += delta;
   if (todosCalMonth < 0) { todosCalMonth = 11; todosCalYear--; }
   if (todosCalMonth > 11) { todosCalMonth = 0; todosCalYear++; }
@@ -4757,6 +4765,7 @@ function todosShiftMonth(delta) {
 }
 
 function todosCalToToday() {
+  clearTodoEditing();
   todosCalYear = new Date().getFullYear();
   todosCalMonth = new Date().getMonth();
   todosDate = todayStr();
@@ -4829,7 +4838,7 @@ function renderTodosCalendar() {
     // cell, so single-day items sit below the bars instead of being overlapped.
     var maxLane = todoMaxLaneByDate[c.dateStr];
     if (typeof maxLane === 'number' && items.length > 0) {
-      inner += '<div style="height:'+(20 + maxLane * 19)+'px"></div>';
+      inner += '<div style="height:'+(10 + maxLane * 19)+'px"></div>';
     }
     if (items.length) {
       var shown = items.slice(0, 3);
@@ -4991,10 +5000,9 @@ function todoCalItemHtml(t) {
   var tag = getTodoTag(t.tag);
   var color = tag ? tag.color : 'var(--primary)';
   var bg = tag ? tag.bg : 'var(--surface-hover)';
-  var dot = '<span class="dot" style="background:'+color+'"></span>';
   var cls = 'todo-cal-item' + (t.done ? ' done' : '');
   var st = 'background:'+bg+';color:'+(t.done ? '' : color);
-  return '<div class="'+cls+'" style="'+st+'">'+dot+escapeHtml(t.content)+'</div>';
+  return '<div class="'+cls+'" style="'+st+'">'+escapeHtml(t.content)+'</div>';
 }
 
 // Expand panel content (rendered into an absolute overlay below the selected row)
@@ -5164,10 +5172,18 @@ function saveEditTodo() {
 }
 
 function cancelEditTodo() {
-  editingTodoId = null;
-  currentTodoTag = '';
+  clearTodoEditing();
   renderTodosCalendar();
 }
+
+// Clicking anywhere outside the edit row / a todo row cancels the in-progress edit
+document.addEventListener('click', function(e) {
+  if (!editingTodoId) return;
+  var t = e.target;
+  if (t && t.closest && (t.closest('.todo-edit-row') || t.closest('.todo-row') || t.closest('#todosAddArea'))) return;
+  clearTodoEditing();
+  renderTodosCalendar();
+});
 
 function toggleTodo(id) {
   var t = todosData.find(function(x) { return x.id === id; });
@@ -5953,7 +5969,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260814f';
+  b.textContent = 'build 20260814g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
