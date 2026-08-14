@@ -807,17 +807,29 @@ tbody tr:hover{background:var(--surface-hover)}
 }
 
 /* ===== Todos ===== */
+.todo-cal-cell{
+  position:relative;border-radius:6px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;
+  padding:3px;min-height:60px;max-height:76px;overflow:hidden;
+  font-size:10px;line-height:1.3;color:var(--text);
+  transition:background .15s;
+}
+.todo-cal-cell:hover{background:var(--surface-hover)}
+.todo-cal-cell .d{font-size:10px;font-weight:600;margin-bottom:2px}
+.todo-cal-cell.other{color:var(--text-muted);opacity:.45}
+.todo-cal-cell.today .d{color:var(--primary);font-weight:700}
+.todo-cal-cell.selected{background:var(--primary-bg);border:1px solid var(--primary)}
 .todo-cal-item{
-  margin-top:3px;font-size:11px;line-height:1.4;
+  margin-top:2px;font-size:9px;line-height:1.25;
   background:var(--primary-bg);color:var(--primary);
-  border-radius:3px;padding:1px 4px;
+  border-radius:2px;padding:0 3px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .todo-cal-item.done{
   text-decoration:line-through;color:var(--text-muted);
   background:var(--surface-hover);
 }
-.todo-cal-more{font-size:11px;color:var(--text-muted);margin-top:2px}
+.todo-cal-more{font-size:9px;color:var(--text-muted);margin-top:1px}
 .todo-row{
   display:flex;align-items:center;gap:10px;
   padding:10px 4px;border-bottom:1px solid var(--border-light);
@@ -842,6 +854,19 @@ tbody tr:hover{background:var(--surface-hover)}
 }
 .todo-del:hover{background:var(--danger-bg);color:var(--danger)}
 .todo-empty{text-align:center;color:var(--text-muted);padding:24px 0;font-size:13px}
+.todo-add-btn{
+  width:100%;padding:10px;border:1px dashed var(--border);border-radius:8px;
+  background:transparent;color:var(--text-muted);font-size:14px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all .15s;
+}
+.todo-add-btn:hover{border-color:var(--primary);color:var(--primary)}
+.todo-add-input{
+  width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;
+  padding:10px 14px;font-size:14px;font-family:var(--font);
+  background:var(--surface);color:var(--text);outline:none;
+}
+.todo-add-input:focus{border-color:var(--primary)}
 
 /* ===== Misc ===== */
 .text-muted{color:var(--text-muted)}
@@ -1281,27 +1306,21 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
       </div>
 
-      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
-        <!-- Left: Calendar -->
-        <div style="width:300px;flex-shrink:0">
-          <div class="card">
-            <div class="card-body" style="padding:12px">
-              <div class="daily-calendar" id="todosCalendar"></div>
-            </div>
-          </div>
+      <!-- 月历（全宽，字体极小） -->
+      <div class="card">
+        <div class="card-body" style="padding:12px">
+          <div class="daily-calendar" id="todosCalendar"></div>
         </div>
+      </div>
 
-        <!-- Right: Todo list -->
-        <div style="flex:1;min-width:300px">
-          <div class="card">
-            <div class="card-body" style="padding:16px">
-              <div style="display:flex;gap:8px;margin-bottom:12px">
-                <input type="text" id="todoInput" placeholder="输入待办，回车添加" autocomplete="off" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;font-family:var(--font);background:var(--surface);color:var(--text);outline:none">
-                <button class="btn btn-primary" onclick="addTodo()">添加</button>
-              </div>
-              <div id="todosList"></div>
-            </div>
-          </div>
+      <!-- 选中日期的事项（下方整行） -->
+      <div class="card mt-16" id="todosDetailCard">
+        <div class="card-header">
+          <div class="card-title" id="todosDetailTitle">📋 待办</div>
+        </div>
+        <div class="card-body">
+          <div id="todosList"></div>
+          <div id="todosAddArea" style="margin-top:12px"></div>
         </div>
       </div>
     </div>
@@ -4628,6 +4647,7 @@ function renderTodos() {
     dt.getFullYear()+'年'+(dt.getMonth()+1)+'月'+dt.getDate()+'日 星期'+weekDays[dt.getDay()];
   renderTodosCalendar();
   renderTodosList();
+  renderTodosAddArea();
 }
 
 function todosGoToday() {
@@ -4665,7 +4685,6 @@ function renderTodosCalendar() {
   var weekDays = ['日','一','二','三','四','五','六'];
   var year = todosCalYear, month = todosCalMonth;
 
-  // Build a map: date -> todos (sorted: undone first, then done)
   var todoByDate = {};
   todosData.forEach(function(t) {
     if (t._deleted) return;
@@ -4673,9 +4692,7 @@ function renderTodosCalendar() {
     todoByDate[t.date].push(t);
   });
   Object.keys(todoByDate).forEach(function(d) {
-    todoByDate[d].sort(function(a, b) {
-      return (a.done ? 1 : 0) - (b.done ? 1 : 0);
-    });
+    todoByDate[d].sort(function(a, b) { return (a.done ? 1 : 0) - (b.done ? 1 : 0); });
   });
 
   var firstDay = new Date(year, month, 1).getDay();
@@ -4708,23 +4725,21 @@ function renderTodosCalendar() {
     if (m < 0) { m = 11; y--; }
     if (m > 11) { m = 0; y++; }
     var dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(c.day).padStart(2,'0');
-    var cls = 'daily-cal-cell';
-    if (c.other) cls += ' other-month';
+    var cls = 'todo-cal-cell';
+    if (c.other) cls += ' other';
     if (dateStr === today) cls += ' today';
     if (dateStr === todosDate) cls += ' selected';
-    var items = todoByDate[dateStr] || [];
-    if (items.length) cls += ' has-note';
 
-    var inner = '<div>'+c.day+'</div>';
+    var inner = '<div class="d">'+c.day+'</div>';
+    var items = todoByDate[dateStr] || [];
     if (items.length) {
-      // Scheme A: show up to 2 short summaries
       var shown = items.slice(0, 2);
       shown.forEach(function(t) {
         inner += '<div class="todo-cal-item'+(t.done?' done':'')+'">'+escapeHtml(t.content)+'</div>';
       });
       if (items.length > 2) inner += '<div class="todo-cal-more">+'+(items.length - 2)+'</div>';
     }
-    html += '<div class="'+cls+'" onclick="todosSelectDate(\''+dateStr+'\')" style="align-items:stretch;justify-content:flex-start;flex-direction:column;padding:4px;min-height:64px;aspect-ratio:auto">'+inner+'</div>';
+    html += '<div class="'+cls+'" onclick="todosSelectDate(\''+dateStr+'\')">'+inner+'</div>';
   });
   html += '</div>';
   el.innerHTML = html;
@@ -4733,15 +4748,18 @@ function renderTodosCalendar() {
 function renderTodosList() {
   var el = document.getElementById('todosList');
   if (!el) return;
+  var title = document.getElementById('todosDetailTitle');
+  var dt = new Date(todosDate + 'T00:00:00');
+  if (title) title.textContent = '📋 '+(dt.getMonth()+1)+'月'+dt.getDate()+'日 待办';
+
   var items = getTodosForDate(todosDate);
-  // Sort: undone first, then done (each by createdAt)
   items.sort(function(a, b) {
     if (a.done !== b.done) return a.done ? 1 : -1;
     return (a.createdAt || '').localeCompare(b.createdAt || '');
   });
 
   if (items.length === 0) {
-    el.innerHTML = '<div class="todo-empty">今天还没有待办，输入一条吧</div>';
+    el.innerHTML = '<div class="todo-empty">这天还没有待办事项</div>';
     return;
   }
 
@@ -4756,6 +4774,34 @@ function renderTodosList() {
   el.innerHTML = html;
 }
 
+// Add area: toggle between "add button" and "input + send"
+function renderTodosAddArea() {
+  var el = document.getElementById('todosAddArea');
+  if (!el) return;
+  el.innerHTML = '<button class="todo-add-btn" onclick="showTodoInput()">＋ 添加事项</button>';
+}
+
+function showTodoInput() {
+  var el = document.getElementById('todosAddArea');
+  if (!el) return;
+  el.innerHTML = '<div style="display:flex;gap:8px;align-items:center">'+
+    '<input type="text" id="todoInput" class="todo-add-input" placeholder="输入待办内容" autocomplete="off">'+
+    '<button class="btn btn-primary" id="todoSendBtn" onclick="addTodo()" style="display:none;flex-shrink:0">发送</button>'+
+    '<button class="btn btn-ghost" onclick="renderTodosAddArea()" style="flex-shrink:0">取消</button>'+
+  '</div>';
+  var input = document.getElementById('todoInput');
+  if (input) {
+    input.focus();
+    input.addEventListener('input', function() {
+      var btn = document.getElementById('todoSendBtn');
+      if (btn) btn.style.display = input.value.trim() ? '' : 'none';
+    });
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); addTodo(); }
+    });
+  }
+}
+
 function addTodo() {
   var input = document.getElementById('todoInput');
   if (!input) return;
@@ -4765,7 +4811,6 @@ function addTodo() {
     id: uid(), date: todosDate, content: content, done: false,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   });
-  input.value = '';
   saveTodos();
   saveAll();
   renderTodos();
@@ -4791,16 +4836,6 @@ function deleteTodo(id) {
   saveAll();
   renderTodos();
 }
-
-// Bind enter key on todo input
-document.addEventListener('DOMContentLoaded', function() {
-  var input = document.getElementById('todoInput');
-  if (input) {
-    input.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') { e.preventDefault(); addTodo(); }
-    });
-  }
-});
 
 /* CSV exports */
 function exportCSV(filename, headers, rows) {
