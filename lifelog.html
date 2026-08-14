@@ -820,16 +820,24 @@ tbody tr:hover{background:var(--surface-hover)}
 .todo-cal-cell.today .d{color:var(--primary);font-weight:700}
 .todo-cal-cell.selected{background:var(--primary-bg);border:1px solid var(--primary)}
 .todo-cal-item{
-  margin-top:2px;font-size:9px;line-height:1.25;
-  background:var(--primary-bg);color:var(--primary);
-  border-radius:2px;padding:0 3px;
+  margin-top:2px;font-size:9px;line-height:1.3;
+  border-radius:2px;padding:0 2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  display:flex;align-items:center;
 }
-.todo-cal-item.done{
-  text-decoration:line-through;color:var(--text-muted);
-  background:var(--surface-hover);
-}
+.todo-cal-item .dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:3px;flex-shrink:0}
+.todo-cal-item.done{text-decoration:line-through;color:var(--text-muted)!important}
 .todo-cal-more{font-size:9px;color:var(--text-muted);margin-top:1px}
+.todo-tag-chip{
+  font-size:12px;padding:4px 12px;border-radius:16px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);
+  transition:all .15s;white-space:nowrap;
+}
+.todo-tag-chip:hover{border-color:var(--primary);color:var(--primary)}
+.todo-tag-chip.active{border-color:transparent;color:#fff;font-weight:500}
+.todo-tag-badge{
+  font-size:10px;padding:1px 7px;border-radius:10px;flex-shrink:0;font-weight:500;
+}
 .todo-row{
   display:flex;align-items:center;gap:10px;
   padding:10px 4px;border-bottom:1px solid var(--border-light);
@@ -4631,6 +4639,19 @@ let todosDate = todayStr();
 let todosCalYear = new Date().getFullYear();
 let todosCalMonth = new Date().getMonth(); // 0-based
 let todosExpanded = false; // whether the selected date's panel is expanded
+let currentTodoTag = ''; // tag selected when adding a todo
+
+// Preset todo tags + colors
+const TODO_TAGS = {
+  work:    { label: '事务所工作', color: '#378ADD', bg: '#E6F1FB' },
+  project: { label: '相关项目',   color: '#7F77DD', bg: '#EEEDFE' },
+  home:    { label: '家事',       color: '#D85A30', bg: '#FAECE7' },
+  private: { label: '私事',       color: '#D4537E', bg: '#FBEAF0' },
+  friends: { label: '朋友同学',   color: '#1D9E75', bg: '#E1F5EE' },
+  fun:     { label: '娱乐',       color: '#BA7517', bg: '#FAEEDA' }
+};
+
+function getTodoTag(tag) { return TODO_TAGS[tag] || null; }
 
 function getTodosForDate(dateStr) {
   return todosData.filter(function(t) { return t.date === dateStr && !t._deleted; });
@@ -4747,7 +4768,7 @@ function renderTodosCalendar() {
     if (items.length) {
       var shown = items.slice(0, 4);
       shown.forEach(function(t) {
-        inner += '<div class="todo-cal-item'+(t.done?' done':'')+'">'+escapeHtml(t.content)+'</div>';
+        inner += todoCalItemHtml(t);
       });
       if (items.length > 4) inner += '<div class="todo-cal-more">+'+(items.length - 4)+'</div>';
     }
@@ -4760,6 +4781,15 @@ function renderTodosCalendar() {
   }
   html += '</div>';
   el.innerHTML = html;
+}
+
+// A single todo summary in the calendar cell (colored dot + text)
+function todoCalItemHtml(t) {
+  var tag = getTodoTag(t.tag);
+  var color = tag ? tag.color : 'var(--primary)';
+  var dot = '<span class="dot" style="background:'+color+'"></span>';
+  var cls = 'todo-cal-item' + (t.done ? ' done' : '');
+  return '<div class="'+cls+'" style="color:'+(t.done ? '' : color)+'">'+dot+escapeHtml(t.content)+'</div>';
 }
 
 // Expand panel: shown inline under the selected date's row (spans all 7 cols)
@@ -4777,9 +4807,11 @@ function renderTodoExpand() {
     html += '<div class="todo-empty" style="padding:6px 0">这天还没有待办事项</div>';
   } else {
     items.forEach(function(t) {
+      var tag = getTodoTag(t.tag);
+      var badge = tag ? '<span class="todo-tag-badge" style="background:'+tag.bg+';color:'+tag.color+'">'+tag.label+'</span>' : '';
       html += '<div class="todo-row">'+
         '<div class="todo-check'+(t.done?' done':'')+'" onclick="toggleTodo(\''+t.id+'\')">'+(t.done?'✓':'')+'</div>'+
-        '<div class="todo-content'+(t.done?' done':'')+'">'+escapeHtml(t.content)+'</div>'+
+        '<div class="todo-content'+(t.done?' done':'')+'">'+(badge ? badge+' ' : '')+escapeHtml(t.content)+'</div>'+
         '<button class="todo-del" onclick="deleteTodo(\''+t.id+'\')" title="删除">×</button>'+
       '</div>';
     });
@@ -4793,14 +4825,42 @@ function renderTodosAddBtn() {
   return '<button class="todo-add-btn" onclick="showTodoInput()">＋ 添加事项</button>';
 }
 
+function todoTagChipsHtml() {
+  var html = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+  Object.keys(TODO_TAGS).forEach(function(key) {
+    var t = TODO_TAGS[key];
+    var active = currentTodoTag === key;
+    html += '<span class="todo-tag-chip'+(active?' active':'')+'" data-key="'+key+'" onclick="selectTodoTag(\''+key+'\')" style="'+(active ? 'background:'+t.color+';color:#fff;border-color:'+t.color : '')+'">'+t.label+'</span>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function selectTodoTag(key) {
+  currentTodoTag = (currentTodoTag === key) ? '' : key;
+  var chips = document.querySelectorAll('#todosAddArea .todo-tag-chip');
+  chips.forEach(function(chip) {
+    var k = chip.getAttribute('data-key');
+    var t = TODO_TAGS[k];
+    if (currentTodoTag === k) {
+      chip.className = 'todo-tag-chip active';
+      chip.style.background = t.color; chip.style.color = '#fff'; chip.style.borderColor = t.color;
+    } else {
+      chip.className = 'todo-tag-chip';
+      chip.style.background = ''; chip.style.color = ''; chip.style.borderColor = '';
+    }
+  });
+}
+
 function showTodoInput() {
   var el = document.getElementById('todosAddArea');
   if (!el) return;
-  el.innerHTML = '<div style="display:flex;gap:8px;align-items:center">'+
+  el.innerHTML = todoTagChipsHtml() +
+    '<div style="display:flex;gap:8px;align-items:center">'+
     '<input type="text" id="todoInput" class="todo-add-input" placeholder="输入待办内容" autocomplete="off">'+
     '<button class="btn btn-primary" id="todoSendBtn" onclick="addTodo()" style="display:none;flex-shrink:0">发送</button>'+
     '<button class="btn btn-ghost" onclick="renderTodosCalendar()" style="flex-shrink:0">取消</button>'+
-  '</div>';
+    '</div>';
   var input = document.getElementById('todoInput');
   if (input) {
     input.focus();
@@ -4821,8 +4881,10 @@ function addTodo() {
   if (!content) return;
   todosData.push({
     id: uid(), date: todosDate, content: content, done: false,
+    tag: currentTodoTag,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   });
+  currentTodoTag = '';
   saveTodos();
   saveAll();
   renderTodos();
