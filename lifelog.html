@@ -808,33 +808,38 @@ tbody tr:hover{background:var(--surface-hover)}
 }
 
 /* ===== Todos ===== */
-.todo-cal-grid{position:relative}
+.todo-cal-grid{position:relative;gap:4px}
 .todo-cal-cell{
-  position:relative;border-radius:6px;cursor:pointer;
+  position:relative;border-radius:10px;cursor:pointer;
   display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;
-  padding:3px;min-height:80px;overflow:hidden;
+  padding:4px 6px;min-height:80px;overflow:hidden;
   font-size:10px;line-height:1.3;color:var(--text);
-  transition:background .15s;
+  border:1px solid transparent;
+  transition:background .15s,border-color .15s;
 }
 .todo-cal-cell:hover{background:var(--surface-hover)}
-.todo-cal-cell .d{font-size:10px;font-weight:600;margin-bottom:2px}
+.todo-cal-cell .d{font-size:10px;font-weight:600;margin-bottom:3px;line-height:1.2}
 .todo-cal-cell.other{color:var(--text-muted);opacity:.45}
-.todo-cal-cell.today .d{color:var(--primary);font-weight:700}
-.todo-cal-cell.selected{background:var(--primary-bg);border:1px solid var(--primary)}
+.todo-cal-cell.today .d{
+  background:var(--primary);color:#fff;font-weight:700;
+  width:18px;height:18px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+}
+.todo-cal-cell.selected{background:var(--primary-bg);border-color:var(--primary)}
 .todo-bar-layer{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:1}
 .todo-bar{
-  position:absolute;height:18px;border-radius:3px;
-  font-size:9px;line-height:18px;color:#fff;padding:0 6px;
+  position:absolute;height:18px;border-radius:9px;
+  font-size:9px;line-height:18px;padding:0 7px;font-weight:500;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;
 }
 .todo-cal-item{
-  margin-top:2px;font-size:9px;line-height:1.3;
-  border-radius:2px;padding:0 2px;
+  margin-top:2px;font-size:9px;line-height:1.5;
+  border-radius:8px;padding:0 5px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   display:flex;align-items:center;
 }
 .todo-cal-item .dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:3px;flex-shrink:0}
-.todo-cal-item.done{text-decoration:line-through;color:var(--text-muted)!important}
+.todo-cal-item.done{text-decoration:line-through;color:var(--text-muted)!important;background:var(--surface-hover)!important}
 .todo-cal-more{font-size:9px;color:var(--text-muted);margin-top:1px}
 .todo-tag-chip{
   font-size:12px;padding:4px 12px;border-radius:16px;cursor:pointer;
@@ -884,13 +889,13 @@ tbody tr:hover{background:var(--surface-hover)}
 }
 .todo-add-input:focus{border-color:var(--primary)}
 .todo-expand{
-  border:1px solid var(--border);border-radius:8px;
-  padding:10px 12px;
+  border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;
   background:var(--surface);
-  box-shadow:0 4px 14px rgba(0,0,0,.12);
+  box-shadow:0 6px 20px rgba(0,0,0,.08);
   max-height:60vh;overflow:auto;
 }
-.todo-expand-title{font-size:13px;font-weight:600;margin-bottom:6px}
+.todo-expand-title{font-size:13px;font-weight:600;margin-bottom:8px}
 .todo-edit-row{padding:8px;border:1px solid var(--primary);border-radius:8px;background:var(--primary-bg);margin:6px 0}
 
 /* ===== Misc ===== */
@@ -4676,12 +4681,12 @@ let editingTodoId = null;    // id of the todo being edited (null = none)
 
 // Preset todo tags + colors (rainbow palette, clearly distinct)
 const TODO_TAGS = {
-  work:    { label: '事务所工作', color: '#3B82F6', bg: '#DBEAFE' },
-  project: { label: '相关项目',   color: '#8B5CF6', bg: '#EDE9FE' },
-  home:    { label: '家事',       color: '#F97316', bg: '#FFEDD5' },
-  private: { label: '私事',       color: '#EC4899', bg: '#FCE7F3' },
-  friends: { label: '朋友同学',   color: '#10B981', bg: '#D1FAE5' },
-  fun:     { label: '娱乐',       color: '#EAB308', bg: '#FEF9C3' }
+  work:    { label: '事务所工作', color: '#3B82F6', bg: '#EAF2FE' },
+  project: { label: '相关项目',   color: '#8B5CF6', bg: '#F0EBFE' },
+  home:    { label: '家事',       color: '#F08C3C', bg: '#FDF0E3' },
+  private: { label: '私事',       color: '#E05D8F', bg: '#FBEAF1' },
+  friends: { label: '朋友同学',   color: '#0FA57F', bg: '#E1F5EC' },
+  fun:     { label: '娱乐',       color: '#C08A1E', bg: '#FAF2D9' }
 };
 
 function getTodoTag(tag) { return TODO_TAGS[tag] || null; }
@@ -4953,6 +4958,7 @@ function renderTodoBars() {
 
     var tag = getTodoTag(t.tag);
     var color = tag ? tag.color : '#3B82F6';
+    var bg = tag ? tag.bg : '#EAF2FE';
     var lane = todoBarLaneOf[t.id] || 0;
 
     var sRow = Math.floor(sIdx / 7), sCol = sIdx % 7;
@@ -4972,7 +4978,7 @@ function renderTodoBars() {
       var left = sc.offsetLeft;
       var top = sc.offsetTop + 18 + lane * 19;
       var width = ec.offsetLeft + ec.offsetWidth - sc.offsetLeft;
-      var style = 'left:'+left+'px;top:'+top+'px;width:'+width+'px;background:'+color;
+      var style = 'left:'+left+'px;top:'+top+'px;width:'+width+'px;background:'+bg+';color:'+color;
       if (t.done) style += ';opacity:.5;text-decoration:line-through';
       html += '<div class="todo-bar" style="'+style+'">'+escapeHtml(t.content)+'</div>';
     });
@@ -4984,9 +4990,11 @@ function renderTodoBars() {
 function todoCalItemHtml(t) {
   var tag = getTodoTag(t.tag);
   var color = tag ? tag.color : 'var(--primary)';
+  var bg = tag ? tag.bg : 'var(--surface-hover)';
   var dot = '<span class="dot" style="background:'+color+'"></span>';
   var cls = 'todo-cal-item' + (t.done ? ' done' : '');
-  return '<div class="'+cls+'" style="color:'+(t.done ? '' : color)+'">'+dot+escapeHtml(t.content)+'</div>';
+  var st = 'background:'+bg+';color:'+(t.done ? '' : color);
+  return '<div class="'+cls+'" style="'+st+'">'+dot+escapeHtml(t.content)+'</div>';
 }
 
 // Expand panel content (rendered into an absolute overlay below the selected row)
@@ -5945,7 +5953,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260814e';
+  b.textContent = 'build 20260814f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
