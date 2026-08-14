@@ -4830,9 +4830,24 @@ function renderTodoBars() {
   var firstDate = cells[0].getAttribute('data-date');
   var lastDate = cells[cells.length - 1].getAttribute('data-date');
 
+  // Collect multi-day todos, assign a lane so overlapping ones stack on separate rows
+  var multi = todosData.filter(function(t) { return !t._deleted && isMultiDay(t); });
+  multi.sort(function(a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+  var laneEnds = [];
+  var laneOf = {};
+  multi.forEach(function(t) {
+    var end = t.dateEnd || t.date;
+    var lane = -1;
+    for (var i = 0; i < laneEnds.length; i++) {
+      if (laneEnds[i] < t.date) { lane = i; break; }
+    }
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(end); }
+    else { laneEnds[lane] = end; }
+    laneOf[t.id] = lane;
+  });
+
   var html = '';
-  todosData.forEach(function(t) {
-    if (t._deleted || !isMultiDay(t)) return;
+  multi.forEach(function(t) {
     var sIdx = -1, eIdx = -1;
     for (var i = 0; i < cells.length; i++) {
       var ds = cells[i].getAttribute('data-date');
@@ -4848,6 +4863,7 @@ function renderTodoBars() {
 
     var tag = getTodoTag(t.tag);
     var color = tag ? tag.color : '#3B82F6';
+    var lane = laneOf[t.id] || 0;
 
     var sRow = Math.floor(sIdx / 7), sCol = sIdx % 7;
     var eRow = Math.floor(eIdx / 7), eCol = eIdx % 7;
@@ -4864,7 +4880,7 @@ function renderTodoBars() {
       var ec = cells[row * 7 + ce];
       if (!sc || !ec) return;
       var left = sc.offsetLeft;
-      var top = sc.offsetTop + 16;
+      var top = sc.offsetTop + 16 + lane * 19;
       var width = ec.offsetLeft + ec.offsetWidth - sc.offsetLeft;
       var style = 'left:'+left+'px;top:'+top+'px;width:'+width+'px;background:'+color;
       if (t.done) style += ';opacity:.5;text-decoration:line-through';
