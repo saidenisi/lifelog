@@ -1926,50 +1926,71 @@ function setSyncStatus(text, cls) {
   }
 }
 
-// Pull all data from cloud, merge into local
+// Wrap a promise with a timeout so a hung network request never blocks the UI
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise(function(_, reject) {
+      setTimeout(function() { reject(new Error('timeout after ' + ms + 'ms')); }, ms);
+    })
+  ]);
+}
+
+// Pull all data from cloud (in parallel, each with timeout), merge into local
 async function pullAllFromCloud() {
   if (!supabaseClient) { setSyncStatus('离线', 'offline'); return; }
   setSyncStatus('拉取中...', 'syncing');
   var changed = false;
   var errors = 0;
-  for (var i = 0; i < SYNC_KEYS.length; i++) {
+
+  var settled = await Promise.allSettled(SYNC_KEYS.map(function(key) {
+    return withTimeout(
+      supabaseClient.from('lifelog_data').select('*').eq('id', key).maybeSingle(),
+      8000
+    );
+  }));
+
+  settled.forEach(function(r, i) {
     var key = SYNC_KEYS[i];
-    try {
-      var resp = await supabaseClient.from('lifelog_data').select('*').eq('id', key).maybeSingle();
-      if (resp.error) {
-        errors++;
-        if (resp.error.code !== 'PGRST116') console.warn('[Sync] pull error', key, resp.error);
-        continue;
-      }
-      if (!resp.data) continue;
+    if (r.status === 'rejected') {
+      errors++;
+      console.warn('[Sync] pull timeout/failed', key, r.reason);
+      return;
+    }
+    var resp = r.value;
+    if (resp.error) {
+      errors++;
+      if (resp.error.code !== 'PGRST116') console.warn('[Sync] pull error', key, resp.error);
+      return;
+    }
+    if (!resp.data) return;
 
-      // rates is a single object
-      if (key === 'rates') {
-        exchangeRates = resp.data.data;
-        DB.set('rates', exchangeRates);
-        changed = true;
-        continue;
-      }
-
-      // Other keys are arrays — merge by updatedAt (newest wins)
-      var remoteArr = resp.data.data || [];
-      var localArr = DB.get(key);
-      var merged = mergeRecords(remoteArr, localArr);
-
-      // Update global variable
-      switch(key) {
-        case 'fitness': fitnessData = merged; break;
-        case 'sleep': sleepData = merged; break;
-        case 'accounts': accountData = merged; break;
-        case 'stock': stockData = merged; break;
-        case 'media': mediaData = merged; break;
-        case 'dailyNotes': dailyNotes = merged; break;
-        case 'todos': todosData = merged; break;
-      }
-      DB.set(key, merged);
+    // rates is a single object
+    if (key === 'rates') {
+      exchangeRates = resp.data.data;
+      DB.set('rates', exchangeRates);
       changed = true;
-    } catch(e) { errors++; console.warn('[Sync] pull failed', key, e); }
-  }
+      return;
+    }
+
+    // Other keys are arrays — merge by updatedAt (newest wins)
+    var remoteArr = resp.data.data || [];
+    var localArr = DB.get(key);
+    var merged = mergeRecords(remoteArr, localArr);
+
+    switch(key) {
+      case 'fitness': fitnessData = merged; break;
+      case 'sleep': sleepData = merged; break;
+      case 'accounts': accountData = merged; break;
+      case 'stock': stockData = merged; break;
+      case 'media': mediaData = merged; break;
+      case 'dailyNotes': dailyNotes = merged; break;
+      case 'todos': todosData = merged; break;
+    }
+    DB.set(key, merged);
+    changed = true;
+  });
+
   if (errors) {
     setSyncStatus('拉取失败('+errors+') ⚠️', 'error');
   } else if (changed) {
