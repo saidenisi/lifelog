@@ -4630,6 +4630,7 @@ migrateDailyNotes();
 let todosDate = todayStr();
 let todosCalYear = new Date().getFullYear();
 let todosCalMonth = new Date().getMonth(); // 0-based
+let todosExpanded = false; // whether the selected date's panel is expanded
 
 function getTodosForDate(dateStr) {
   return todosData.filter(function(t) { return t.date === dateStr && !t._deleted; });
@@ -4648,11 +4649,19 @@ function todosGoToday() {
   todosDate = todayStr();
   todosCalYear = new Date().getFullYear();
   todosCalMonth = new Date().getMonth();
+  todosExpanded = true;
   renderTodos();
 }
 
 function todosSelectDate(dateStr) {
+  // Toggle: clicking the same date again collapses the panel
+  if (dateStr === todosDate && todosExpanded) {
+    todosExpanded = false;
+    renderTodosCalendar();
+    return;
+  }
   todosDate = dateStr;
+  todosExpanded = true;
   var parts = dateStr.split('-');
   todosCalYear = parseInt(parts[0], 10);
   todosCalMonth = parseInt(parts[1], 10) - 1;
@@ -4670,6 +4679,7 @@ function todosCalToToday() {
   todosCalYear = new Date().getFullYear();
   todosCalMonth = new Date().getMonth();
   todosDate = todayStr();
+  todosExpanded = true;
   renderTodos();
 }
 
@@ -4743,8 +4753,8 @@ function renderTodosCalendar() {
     }
     html += '<div class="'+cls+'" onclick="todosSelectDate(\''+c.dateStr+'\')">'+inner+'</div>';
 
-    // Insert expand panel right after the selected row
-    if (idx % 7 === 6 && Math.floor(idx / 7) === selectedRow) {
+    // Insert expand panel right after the selected row (only when expanded)
+    if (todosExpanded && idx % 7 === 6 && Math.floor(idx / 7) === selectedRow) {
       html += renderTodoExpand();
     }
   }
