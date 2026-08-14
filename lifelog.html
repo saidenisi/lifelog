@@ -882,6 +882,7 @@ tbody tr:hover{background:var(--surface-hover)}
   background:var(--surface);
 }
 .todo-expand-title{font-size:13px;font-weight:600;margin-bottom:6px}
+.todo-edit-row{padding:8px;border:1px solid var(--primary);border-radius:8px;background:var(--primary-bg);margin:6px 0}
 
 /* ===== Misc ===== */
 .text-muted{color:var(--text-muted)}
@@ -4640,6 +4641,8 @@ let todosCalYear = new Date().getFullYear();
 let todosCalMonth = new Date().getMonth(); // 0-based
 let todosExpanded = false; // whether the selected date's panel is expanded
 let currentTodoTag = ''; // tag selected when adding a todo
+let todoInputActive = false; // guard: typing in progress, skip re-render on sync
+let editingTodoId = null;    // id of the todo being edited (null = none)
 
 // Preset todo tags + colors
 const TODO_TAGS = {
@@ -4663,6 +4666,8 @@ function renderTodos() {
   var label = document.getElementById('todosDateLabel');
   if (label) label.textContent =
     dt.getFullYear()+'年'+(dt.getMonth()+1)+'月'+dt.getDate()+'日 星期'+weekDays[dt.getDay()];
+  // While typing/editing, don't re-render the calendar (would drop focus + input)
+  if (todoInputActive || editingTodoId) return;
   renderTodosCalendar();
 }
 
@@ -4807,17 +4812,42 @@ function renderTodoExpand() {
     html += '<div class="todo-empty" style="padding:6px 0">这天还没有待办事项</div>';
   } else {
     items.forEach(function(t) {
-      var tag = getTodoTag(t.tag);
-      var badge = tag ? '<span class="todo-tag-badge" style="background:'+tag.bg+';color:'+tag.color+'">'+tag.label+'</span>' : '';
-      html += '<div class="todo-row">'+
-        '<div class="todo-check'+(t.done?' done':'')+'" onclick="toggleTodo(\''+t.id+'\')">'+(t.done?'✓':'')+'</div>'+
-        '<div class="todo-content'+(t.done?' done':'')+'">'+(badge ? badge+' ' : '')+escapeHtml(t.content)+'</div>'+
-        '<button class="todo-del" onclick="deleteTodo(\''+t.id+'\')" title="删除">×</button>'+
-      '</div>';
+      if (editingTodoId === t.id) {
+        html += renderTodoEditRow(t);
+      } else {
+        html += renderTodoRow(t);
+      }
     });
   }
   html += '<div id="todosAddArea" style="margin-top:10px">'+renderTodosAddBtn()+'</div>';
   html += '</div>';
+  return html;
+}
+
+function renderTodoRow(t) {
+  var tag = getTodoTag(t.tag);
+  var badge = tag ? '<span class="todo-tag-badge" style="background:'+tag.bg+';color:'+tag.color+'">'+tag.label+'</span>' : '';
+  return '<div class="todo-row">'+
+    '<div class="todo-check'+(t.done?' done':'')+'" onclick="toggleTodo(\''+t.id+'\')">'+(t.done?'✓':'')+'</div>'+
+    '<div class="todo-content'+(t.done?' done':'')+'" onclick="startEditTodo(\''+t.id+'\')" title="点击修改内容和标签">'+(badge ? badge+' ' : '')+escapeHtml(t.content)+'</div>'+
+    '<button class="todo-del" onclick="deleteTodo(\''+t.id+'\')" title="删除">×</button>'+
+  '</div>';
+}
+
+function renderTodoEditRow(t) {
+  var html = '<div class="todo-edit-row">';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+  Object.keys(TODO_TAGS).forEach(function(key) {
+    var tt = TODO_TAGS[key];
+    var active = currentTodoTag === key;
+    html += '<span class="todo-tag-chip'+(active?' active':'')+'" data-key="'+key+'" onclick="selectTodoTag(\''+key+'\')" style="'+(active ? 'background:'+tt.color+';color:#fff;border-color:'+tt.color : '')+'">'+tt.label+'</span>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;align-items:center">';
+  html += '<input type="text" id="todoEditInput" class="todo-add-input" value="'+escapeHtml(t.content)+'">';
+  html += '<button class="btn btn-primary" onclick="saveEditTodo()" style="flex-shrink:0">保存</button>';
+  html += '<button class="btn btn-ghost" onclick="cancelEditTodo()" style="flex-shrink:0">取消</button>';
+  html += '</div></div>';
   return html;
 }
 
@@ -4838,7 +4868,7 @@ function todoTagChipsHtml() {
 
 function selectTodoTag(key) {
   currentTodoTag = (currentTodoTag === key) ? '' : key;
-  var chips = document.querySelectorAll('#todosAddArea .todo-tag-chip');
+  var chips = document.querySelectorAll('.todo-tag-chip');
   chips.forEach(function(chip) {
     var k = chip.getAttribute('data-key');
     var t = TODO_TAGS[k];
@@ -4853,13 +4883,14 @@ function selectTodoTag(key) {
 }
 
 function showTodoInput() {
+  todoInputActive = true;
   var el = document.getElementById('todosAddArea');
   if (!el) return;
   el.innerHTML = todoTagChipsHtml() +
     '<div style="display:flex;gap:8px;align-items:center">'+
     '<input type="text" id="todoInput" class="todo-add-input" placeholder="输入待办内容" autocomplete="off">'+
     '<button class="btn btn-primary" id="todoSendBtn" onclick="addTodo()" style="display:none;flex-shrink:0">发送</button>'+
-    '<button class="btn btn-ghost" onclick="renderTodosCalendar()" style="flex-shrink:0">取消</button>'+
+    '<button class="btn btn-ghost" onclick="cancelTodoInput()" style="flex-shrink:0">取消</button>'+
     '</div>';
   var input = document.getElementById('todoInput');
   if (input) {
@@ -4874,6 +4905,12 @@ function showTodoInput() {
   }
 }
 
+function cancelTodoInput() {
+  todoInputActive = false;
+  currentTodoTag = '';
+  renderTodosCalendar();
+}
+
 function addTodo() {
   var input = document.getElementById('todoInput');
   if (!input) return;
@@ -4884,10 +4921,41 @@ function addTodo() {
     tag: currentTodoTag,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   });
+  todoInputActive = false;
   currentTodoTag = '';
   saveTodos();
   saveAll();
   renderTodos();
+}
+
+function startEditTodo(id) {
+  var t = todosData.find(function(x) { return x.id === id; });
+  if (!t) return;
+  editingTodoId = id;
+  currentTodoTag = t.tag || '';
+  renderTodosCalendar();
+}
+
+function saveEditTodo() {
+  var input = document.getElementById('todoEditInput');
+  var t = todosData.find(function(x) { return x.id === editingTodoId; });
+  if (!input || !t) return;
+  var content = input.value.trim();
+  if (!content) { toast('内容不能为空'); return; }
+  t.content = content;
+  t.tag = currentTodoTag;
+  t.updatedAt = new Date().toISOString();
+  editingTodoId = null;
+  currentTodoTag = '';
+  saveTodos();
+  saveAll();
+  renderTodos();
+}
+
+function cancelEditTodo() {
+  editingTodoId = null;
+  currentTodoTag = '';
+  renderTodosCalendar();
 }
 
 function toggleTodo(id) {
