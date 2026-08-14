@@ -806,6 +806,43 @@ tbody tr:hover{background:var(--surface-hover)}
   background:var(--border-light);color:var(--text-muted);
 }
 
+/* ===== Todos ===== */
+.todo-cal-item{
+  margin-top:3px;font-size:11px;line-height:1.4;
+  background:var(--primary-bg);color:var(--primary);
+  border-radius:3px;padding:1px 4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.todo-cal-item.done{
+  text-decoration:line-through;color:var(--text-muted);
+  background:var(--surface-hover);
+}
+.todo-cal-more{font-size:11px;color:var(--text-muted);margin-top:2px}
+.todo-row{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 4px;border-bottom:1px solid var(--border-light);
+}
+.todo-check{
+  width:20px;height:20px;border-radius:6px;flex-shrink:0;
+  border:1.5px solid var(--border);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface);transition:all .15s;
+  color:transparent;font-size:13px;line-height:1;
+}
+.todo-check:hover{border-color:var(--primary)}
+.todo-check.done{background:var(--success);border-color:var(--success);color:#fff}
+.todo-content{
+  flex:1;font-size:14px;line-height:1.5;word-break:break-word;color:var(--text);
+}
+.todo-content.done{text-decoration:line-through;color:var(--text-muted)}
+.todo-del{
+  border:none;background:none;cursor:pointer;color:var(--text-muted);
+  font-size:16px;padding:4px 8px;border-radius:6px;flex-shrink:0;
+  transition:all .15s;
+}
+.todo-del:hover{background:var(--danger-bg);color:var(--danger)}
+.todo-empty{text-align:center;color:var(--text-muted);padding:24px 0;font-size:13px}
+
 /* ===== Misc ===== */
 .text-muted{color:var(--text-muted)}
 .text-sm{font-size:13px}
@@ -887,6 +924,9 @@ tbody tr:hover{background:var(--surface-hover)}
       </div>
       <div class="nav-item active" data-page="daily">
         <span class="icon">📅</span><span>每日记录</span>
+      </div>
+      <div class="nav-item" data-page="todos">
+        <span class="icon">✅</span><span>待办事项</span>
       </div>
       <div class="nav-label">工具</div>
       <div class="nav-item" data-page="export">
@@ -1228,6 +1268,44 @@ tbody tr:hover{background:var(--surface-hover)}
       </div>
     </div>
 
+    <!-- ===== Todos Page ===== -->
+    <div class="page" id="page-todos">
+      <div class="page-header">
+        <div>
+          <div class="page-title">待办事项</div>
+          <div class="page-subtitle" id="todosDateLabel"></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="mobile-menu-btn" id="mobileMenuBtn9">☰</button>
+          <button class="btn btn-ghost btn-sm" onclick="todosGoToday()">📅 今天</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+        <!-- Left: Calendar -->
+        <div style="width:300px;flex-shrink:0">
+          <div class="card">
+            <div class="card-body" style="padding:12px">
+              <div class="daily-calendar" id="todosCalendar"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Todo list -->
+        <div style="flex:1;min-width:300px">
+          <div class="card">
+            <div class="card-body" style="padding:16px">
+              <div style="display:flex;gap:8px;margin-bottom:12px">
+                <input type="text" id="todoInput" placeholder="输入待办，回车添加" autocomplete="off" style="flex:1;min-width:0;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:14px;font-family:var(--font);background:var(--surface);color:var(--text);outline:none">
+                <button class="btn btn-primary" onclick="addTodo()">添加</button>
+              </div>
+              <div id="todosList"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-export">
       <div class="page-header">
         <div>
@@ -1305,6 +1383,7 @@ tbody tr:hover{background:var(--surface-hover)}
   <div class="mobile-nav-item" data-page="stock"><span class="icon">📈</span>股票</div>
   <div class="mobile-nav-item" data-page="media"><span class="icon">🎬</span>影音</div>
   <div class="mobile-nav-item active" data-page="daily"><span class="icon">📅</span>每日</div>
+  <div class="mobile-nav-item" data-page="todos"><span class="icon">✅</span>待办</div>
   <div class="mobile-nav-item" data-page="export"><span class="icon">📦</span>数据</div>
 </div>
 
@@ -1732,6 +1811,10 @@ function saveMediaData() { DB.set('media', mediaData); }
 // ===== Daily Notes =====
 let dailyNotes = DB.get('dailyNotes') || [];
 
+// ===== Todos =====
+let todosData = DB.get('todos') || [];
+function saveTodos() { DB.set('todos', todosData); }
+
 // ===== Stock Investment Data =====
 let stockData = DB.get('stock') || [];
 // Migration: fix stock codes corrupted by an earlier search-parsing bug (code="11", name="sz300382")
@@ -1756,6 +1839,7 @@ function saveAll() {
   DB.set('stock', stockData);
   DB.set('media', mediaData);
   DB.set('dailyNotes', dailyNotes);
+  DB.set('todos', todosData);
   // Trigger background cloud sync (debounced)
   scheduleCloudPush();
 }
@@ -1763,7 +1847,7 @@ function saveAll() {
 // ===== Cloud Sync (Supabase) =====
 const SUPABASE_URL = 'https://byxqubrxnwqxgxqvlgey.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_tGMDLTgbWcq0yy4yKOO_Zg_wsgnalLS';
-const SYNC_KEYS = ['fitness', 'sleep', 'accounts', 'rates', 'stock', 'media', 'dailyNotes'];
+const SYNC_KEYS = ['fitness', 'sleep', 'accounts', 'rates', 'stock', 'media', 'dailyNotes', 'todos'];
 let supabaseClient = null;
 
 function initSupabase() {
@@ -1849,6 +1933,7 @@ async function pullAllFromCloud() {
         case 'stock': stockData = merged; break;
         case 'media': mediaData = merged; break;
         case 'dailyNotes': dailyNotes = merged; break;
+        case 'todos': todosData = merged; break;
       }
       DB.set(key, merged);
       changed = true;
@@ -1909,6 +1994,7 @@ async function pushAllToCloud() {
               case 'stock': stockData = localValue; break;
               case 'media': mediaData = localValue; break;
               case 'dailyNotes': dailyNotes = localValue; break;
+              case 'todos': todosData = localValue; break;
             }
             DB.set(key, localValue);
           }
@@ -2082,6 +2168,7 @@ function renderPage(page) {
       break;
     case 'media': renderMedia(); break;
     case 'daily': renderDaily(); break;
+    case 'todos': renderTodos(); break;
     case 'export': loadDbUsage(); break;
   }
 }
@@ -2103,6 +2190,7 @@ document.getElementById('mobileMenuBtn5')?.addEventListener('click', toggleSideb
 document.getElementById('mobileMenuBtn6')?.addEventListener('click', toggleSidebar);
 document.getElementById('mobileMenuBtn7')?.addEventListener('click', toggleSidebar);
 document.getElementById('mobileMenuBtn8')?.addEventListener('click', toggleSidebar);
+document.getElementById('mobileMenuBtn9')?.addEventListener('click', toggleSidebar);
 
 // ===== Theme =====
 function initTheme() {
@@ -3736,7 +3824,7 @@ function escapeHtml(s) {
 
 
 function exportAllData() {
-  const data = { fitness: fitnessData, sleep: sleepData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, exportDate: new Date().toISOString() };
+  const data = { fitness: fitnessData, sleep: sleepData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, exportDate: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -3955,6 +4043,7 @@ function importData(event) {
       if (data.stock) stockData = data.stock;
       if (data.media) mediaData = data.media;
       if (data.dailyNotes) dailyNotes = data.dailyNotes;
+      if (data.todos) todosData = data.todos;
       saveAll();
       saveAccounts();
       DB.set('rates', exchangeRates);
@@ -3977,6 +4066,7 @@ function clearAllData() {
   stockData = [];
   mediaData = [];
   dailyNotes = [];
+  todosData = [];
   exchangeRates = { rates: {}, date: '' };
   saveAll();
   saveAccounts();
@@ -4518,6 +4608,199 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 迁移旧数据（本地已有）
 migrateDailyNotes();
+
+/* ============================================================
+   TODOS MODULE — 待办事项（日历规划 + 打勾）
+   ============================================================ */
+let todosDate = todayStr();
+let todosCalYear = new Date().getFullYear();
+let todosCalMonth = new Date().getMonth(); // 0-based
+
+function getTodosForDate(dateStr) {
+  return todosData.filter(function(t) { return t.date === dateStr && !t._deleted; });
+}
+
+function renderTodos() {
+  var dt = new Date(todosDate + 'T00:00:00');
+  var weekDays = ['日','一','二','三','四','五','六'];
+  var label = document.getElementById('todosDateLabel');
+  if (label) label.textContent =
+    dt.getFullYear()+'年'+(dt.getMonth()+1)+'月'+dt.getDate()+'日 星期'+weekDays[dt.getDay()];
+  renderTodosCalendar();
+  renderTodosList();
+}
+
+function todosGoToday() {
+  todosDate = todayStr();
+  todosCalYear = new Date().getFullYear();
+  todosCalMonth = new Date().getMonth();
+  renderTodos();
+}
+
+function todosSelectDate(dateStr) {
+  todosDate = dateStr;
+  var parts = dateStr.split('-');
+  todosCalYear = parseInt(parts[0], 10);
+  todosCalMonth = parseInt(parts[1], 10) - 1;
+  renderTodos();
+}
+
+function todosShiftMonth(delta) {
+  todosCalMonth += delta;
+  if (todosCalMonth < 0) { todosCalMonth = 11; todosCalYear--; }
+  if (todosCalMonth > 11) { todosCalMonth = 0; todosCalYear++; }
+  renderTodosCalendar();
+}
+
+function todosCalToToday() {
+  todosCalYear = new Date().getFullYear();
+  todosCalMonth = new Date().getMonth();
+  todosDate = todayStr();
+  renderTodos();
+}
+
+function renderTodosCalendar() {
+  var el = document.getElementById('todosCalendar');
+  if (!el) return;
+  var weekDays = ['日','一','二','三','四','五','六'];
+  var year = todosCalYear, month = todosCalMonth;
+
+  // Build a map: date -> todos (sorted: undone first, then done)
+  var todoByDate = {};
+  todosData.forEach(function(t) {
+    if (t._deleted) return;
+    if (!todoByDate[t.date]) todoByDate[t.date] = [];
+    todoByDate[t.date].push(t);
+  });
+  Object.keys(todoByDate).forEach(function(d) {
+    todoByDate[d].sort(function(a, b) {
+      return (a.done ? 1 : 0) - (b.done ? 1 : 0);
+    });
+  });
+
+  var firstDay = new Date(year, month, 1).getDay();
+  var daysInMonth = new Date(year, month + 1, 0).getDate();
+  var daysInPrev = new Date(year, month, 0).getDate();
+  var today = todayStr();
+
+  var html = '<div class="daily-cal-head">'+
+    '<div class="daily-cal-title">'+year+'年'+(month+1)+'月</div>'+
+    '<div class="daily-cal-nav">'+
+      '<button onclick="todosShiftMonth(-1)" title="上月">◀</button>'+
+      '<button onclick="todosCalToToday()" title="回到本月">●</button>'+
+      '<button onclick="todosShiftMonth(1)" title="下月">▶</button>'+
+    '</div></div>';
+
+  html += '<div class="daily-cal-week">';
+  weekDays.forEach(function(w) { html += '<div>'+w+'</div>'; });
+  html += '</div>';
+
+  var cells = [];
+  var i, dayNum;
+  for (i = firstDay - 1; i >= 0; i--) cells.push({day: daysInPrev - i, month: month - 1, other: true});
+  for (dayNum = 1; dayNum <= daysInMonth; dayNum++) cells.push({day: dayNum, month: month});
+  var remaining = 42 - cells.length;
+  for (i = 1; i <= remaining; i++) cells.push({day: i, month: month + 1, other: true});
+
+  html += '<div class="daily-cal-grid">';
+  cells.forEach(function(c) {
+    var y = year, m = c.month;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    var dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(c.day).padStart(2,'0');
+    var cls = 'daily-cal-cell';
+    if (c.other) cls += ' other-month';
+    if (dateStr === today) cls += ' today';
+    if (dateStr === todosDate) cls += ' selected';
+    var items = todoByDate[dateStr] || [];
+    if (items.length) cls += ' has-note';
+
+    var inner = '<div>'+c.day+'</div>';
+    if (items.length) {
+      // Scheme A: show up to 2 short summaries
+      var shown = items.slice(0, 2);
+      shown.forEach(function(t) {
+        inner += '<div class="todo-cal-item'+(t.done?' done':'')+'">'+escapeHtml(t.content)+'</div>';
+      });
+      if (items.length > 2) inner += '<div class="todo-cal-more">+'+(items.length - 2)+'</div>';
+    }
+    html += '<div class="'+cls+'" onclick="todosSelectDate(\''+dateStr+'\')" style="align-items:stretch;justify-content:flex-start;flex-direction:column;padding:4px;min-height:64px;aspect-ratio:auto">'+inner+'</div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderTodosList() {
+  var el = document.getElementById('todosList');
+  if (!el) return;
+  var items = getTodosForDate(todosDate);
+  // Sort: undone first, then done (each by createdAt)
+  items.sort(function(a, b) {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    return (a.createdAt || '').localeCompare(b.createdAt || '');
+  });
+
+  if (items.length === 0) {
+    el.innerHTML = '<div class="todo-empty">今天还没有待办，输入一条吧</div>';
+    return;
+  }
+
+  var html = '';
+  items.forEach(function(t) {
+    html += '<div class="todo-row">'+
+      '<div class="todo-check'+(t.done?' done':'')+'" onclick="toggleTodo(\''+t.id+'\')">'+(t.done?'✓':'')+'</div>'+
+      '<div class="todo-content'+(t.done?' done':'')+'">'+escapeHtml(t.content)+'</div>'+
+      '<button class="todo-del" onclick="deleteTodo(\''+t.id+'\')" title="删除">×</button>'+
+    '</div>';
+  });
+  el.innerHTML = html;
+}
+
+function addTodo() {
+  var input = document.getElementById('todoInput');
+  if (!input) return;
+  var content = input.value.trim();
+  if (!content) return;
+  todosData.push({
+    id: uid(), date: todosDate, content: content, done: false,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+  });
+  input.value = '';
+  saveTodos();
+  saveAll();
+  renderTodos();
+}
+
+function toggleTodo(id) {
+  var t = todosData.find(function(x) { return x.id === id; });
+  if (!t) return;
+  t.done = !t.done;
+  t.updatedAt = new Date().toISOString();
+  saveTodos();
+  saveAll();
+  renderTodosList();
+  renderTodosCalendar();
+}
+
+function deleteTodo(id) {
+  var t = todosData.find(function(x) { return x.id === id; });
+  if (!t) return;
+  t._deleted = true;
+  t.updatedAt = new Date().toISOString();
+  saveTodos();
+  saveAll();
+  renderTodos();
+}
+
+// Bind enter key on todo input
+document.addEventListener('DOMContentLoaded', function() {
+  var input = document.getElementById('todoInput');
+  if (input) {
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); addTodo(); }
+    });
+  }
+});
 
 /* CSV exports */
 function exportCSV(filename, headers, rows) {
