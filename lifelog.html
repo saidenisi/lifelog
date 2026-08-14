@@ -655,6 +655,7 @@ tbody tr:hover{background:var(--surface-hover)}
 
 /* ===== Daily Calendar ===== */
 .daily-calendar{
+  position:relative;
   width:100%;
 }
 .daily-cal-head{
@@ -4840,11 +4841,13 @@ function layoutTodos() {
 }
 
 function positionTodoExpandPanel() {
-  var grid = document.querySelector('#todosCalendar .todo-cal-grid');
-  if (!grid) return;
-  var old = grid.querySelector('.todo-expand-overlay');
+  var el = document.getElementById('todosCalendar');
+  if (!el) return;
+  var old = el.querySelector('.todo-expand-overlay');
   if (old) old.remove();
   if (!todosExpanded) return;
+  var grid = el.querySelector('.todo-cal-grid');
+  if (!grid) return;
   var cell = grid.querySelector('.todo-cal-cell.selected') ||
              grid.querySelector('.todo-cal-cell[data-date="' + todosDate + '"]');
   if (!cell) return;
@@ -4853,10 +4856,10 @@ function positionTodoExpandPanel() {
   panel.style.position = 'absolute';
   panel.style.left = '0';
   panel.style.right = '0';
-  panel.style.top = (cell.offsetTop + cell.offsetHeight + 4) + 'px';
+  panel.style.top = (grid.offsetTop + cell.offsetTop + cell.offsetHeight + 4) + 'px';
   panel.style.zIndex = '6';
   panel.innerHTML = renderTodoExpand();
-  grid.appendChild(panel);
+  el.appendChild(panel);
 }
 
 // Render multi-day todos as horizontal bars (measured against actual cell positions)
