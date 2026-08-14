@@ -811,7 +811,7 @@ tbody tr:hover{background:var(--surface-hover)}
 .todo-cal-cell{
   position:relative;border-radius:6px;cursor:pointer;
   display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;
-  padding:3px;height:80px;overflow:hidden;
+  padding:3px;min-height:80px;overflow:hidden;
   font-size:10px;line-height:1.3;color:var(--text);
   transition:background .15s;
 }
@@ -4736,32 +4736,11 @@ function todosCalToToday() {
   renderTodos();
 }
 
-// Count how many multi-day bars span each date (used to shift single-day items below bars)
-function computeBarCountByDate() {
-  var count = {};
-  todosData.forEach(function(t) {
-    if (t._deleted || !isMultiDay(t)) return;
-    var cur = new Date(t.date + 'T00:00:00');
-    var end = new Date(t.dateEnd + 'T00:00:00');
-    while (cur <= end) {
-      var y = cur.getFullYear();
-      var m = String(cur.getMonth() + 1).padStart(2, '0');
-      var d = String(cur.getDate()).padStart(2, '0');
-      var ds = y + '-' + m + '-' + d;
-      count[ds] = (count[ds] || 0) + 1;
-      cur.setDate(cur.getDate() + 1);
-    }
-  });
-  return count;
-}
-
 function renderTodosCalendar() {
   var el = document.getElementById('todosCalendar');
   if (!el) return;
   var weekDays = ['日','一','二','三','四','五','六'];
   var year = todosCalYear, month = todosCalMonth;
-
-  var barCountByDate = computeBarCountByDate();
 
   // Single-day todos for cell summaries (multi-day rendered as bars)
   var singleByDate = {};
@@ -4816,9 +4795,6 @@ function renderTodosCalendar() {
     if (c.dateStr === todosDate) cls += ' selected';
 
     var inner = '<div class="d">'+c.day+'</div>';
-    // Push single-day items down to clear any multi-day bars spanning this date
-    var barCount = barCountByDate[c.dateStr] || 0;
-    if (barCount > 0) inner += '<div style="height:'+(barCount * 19)+'px"></div>';
     var items = singleByDate[c.dateStr] || [];
     if (items.length) {
       var shown = items.slice(0, 3);
@@ -4912,6 +4888,39 @@ function renderTodoBars() {
     });
   });
   layer.innerHTML = html;
+  adjustSingleDayItems();
+}
+
+// After multi-day bars are positioned, shift single-day items downward so they
+// do not overlap any bar. Each cell's padding-top is set to the lowest bar
+// bottom (plus a 2px gap) among bars that horizontally overlap the cell.
+function adjustSingleDayItems() {
+  var grid = document.querySelector('#todosCalendar .todo-cal-grid');
+  if (!grid) return;
+  var cells = grid.querySelectorAll('.todo-cal-cell');
+  var bars = grid.querySelectorAll('.todo-bar');
+  if (!cells.length) return;
+
+  var padByIdx = {};
+  bars.forEach(function(bar) {
+    var barTop = parseFloat(bar.style.top) || 0;
+    var barBottom = barTop + bar.offsetHeight;
+    var barLeft = parseFloat(bar.style.left) || 0;
+    var barRight = barLeft + (parseFloat(bar.style.width) || 0);
+    cells.forEach(function(cell, idx) {
+      var cLeft = cell.offsetLeft;
+      var cRight = cLeft + cell.offsetWidth;
+      if (barLeft < cRight && barRight > cLeft) {
+        var needed = barBottom - cell.offsetTop + 2; // 2px gap below bars
+        if (!(idx in padByIdx) || needed > padByIdx[idx]) padByIdx[idx] = needed;
+      }
+    });
+  });
+
+  cells.forEach(function(cell, idx) {
+    var needed = padByIdx[idx] || 0;
+    cell.style.paddingTop = needed > 0 ? needed + 'px' : '';
+  });
 }
 
 // A single todo summary in the calendar cell (colored dot + text)
