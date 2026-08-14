@@ -4864,14 +4864,27 @@ function positionTodoExpandPanel() {
 
 // Render multi-day todos as horizontal bars (measured against actual cell positions)
 function renderTodoBars() {
-  var grid = document.querySelector('#todosCalendar .todo-cal-grid');
+  var el = document.getElementById('todosCalendar');
+  if (!el) return;
+  var grid = el.querySelector('.todo-cal-grid');
   if (!grid) return;
-  var layer = grid.querySelector('.todo-bar-layer');
-  if (!layer) {
-    layer = document.createElement('div');
-    layer.className = 'todo-bar-layer';
-    grid.appendChild(layer);
-  }
+  // IMPORTANT: the bars layer must be a SIBLING of the grid, NOT a child.
+  // On the WeChat/X5 engine an absolutely-positioned child of a CSS grid is still
+  // treated as a grid item and steals a cell slot, which breaks the 7-column
+  // layout and makes every bar land on the wrong date. Appending it to the
+  // positioned #todosCalendar and overlaying the grid keeps the grid pure.
+  var oldLayer = el.querySelector('.todo-bar-layer');
+  if (oldLayer) oldLayer.remove();
+  var layer = document.createElement('div');
+  layer.className = 'todo-bar-layer';
+  layer.style.position = 'absolute';
+  layer.style.top = grid.offsetTop + 'px';
+  layer.style.left = grid.offsetLeft + 'px';
+  layer.style.right = 'auto';
+  layer.style.bottom = 'auto';
+  layer.style.width = grid.offsetWidth + 'px';
+  layer.style.height = grid.offsetHeight + 'px';
+  el.appendChild(layer);
   layer.innerHTML = '';
 
   var cells = grid.querySelectorAll('.todo-cal-cell');
@@ -4945,10 +4958,12 @@ function renderTodoBars() {
 // do not overlap any bar. Each cell's padding-top is set to the lowest bar
 // bottom (plus a 2px gap) among bars that horizontally overlap the cell.
 function adjustSingleDayItems() {
-  var grid = document.querySelector('#todosCalendar .todo-cal-grid');
+  var el = document.getElementById('todosCalendar');
+  if (!el) return;
+  var grid = el.querySelector('.todo-cal-grid');
   if (!grid) return;
   var cells = grid.querySelectorAll('.todo-cal-cell');
-  var bars = grid.querySelectorAll('.todo-bar');
+  var bars = el.querySelectorAll('.todo-bar');
   if (!cells.length) return;
 
   var padByIdx = {};
