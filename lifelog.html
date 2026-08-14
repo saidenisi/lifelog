@@ -4644,14 +4644,14 @@ let currentTodoTag = ''; // tag selected when adding a todo
 let todoInputActive = false; // guard: typing in progress, skip re-render on sync
 let editingTodoId = null;    // id of the todo being edited (null = none)
 
-// Preset todo tags + colors
+// Preset todo tags + colors (rainbow palette, clearly distinct)
 const TODO_TAGS = {
-  work:    { label: '事务所工作', color: '#378ADD', bg: '#E6F1FB' },
-  project: { label: '相关项目',   color: '#7F77DD', bg: '#EEEDFE' },
-  home:    { label: '家事',       color: '#D85A30', bg: '#FAECE7' },
-  private: { label: '私事',       color: '#D4537E', bg: '#FBEAF0' },
-  friends: { label: '朋友同学',   color: '#1D9E75', bg: '#E1F5EE' },
-  fun:     { label: '娱乐',       color: '#BA7517', bg: '#FAEEDA' }
+  work:    { label: '事务所工作', color: '#3B82F6', bg: '#DBEAFE' },
+  project: { label: '相关项目',   color: '#8B5CF6', bg: '#EDE9FE' },
+  home:    { label: '家事',       color: '#F97316', bg: '#FFEDD5' },
+  private: { label: '私事',       color: '#EC4899', bg: '#FCE7F3' },
+  friends: { label: '朋友同学',   color: '#10B981', bg: '#D1FAE5' },
+  fun:     { label: '娱乐',       color: '#EAB308', bg: '#FEF9C3' }
 };
 
 function getTodoTag(tag) { return TODO_TAGS[tag] || null; }
