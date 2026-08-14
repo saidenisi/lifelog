@@ -4762,6 +4762,7 @@ function todosCalToToday() {
 function renderTodosCalendar() {
   var el = document.getElementById('todosCalendar');
   if (!el) return;
+  computeMultiDayLanes();
   var weekDays = ['日','一','二','三','四','五','六'];
   var year = todosCalYear, month = todosCalMonth;
 
@@ -4819,6 +4820,12 @@ function renderTodosCalendar() {
 
     var inner = '<div class="d">'+c.day+'</div>';
     var items = singleByDate[c.dateStr] || [];
+    // Reserve vertical space below the date for any multi-day bars spanning this
+    // cell, so single-day items sit below the bars instead of being overlapped.
+    var maxLane = todoMaxLaneByDate[c.dateStr];
+    if (typeof maxLane === 'number' && items.length > 0) {
+      inner += '<div style="height:'+(20 + maxLane * 19)+'px"></div>';
+    }
     if (items.length) {
       var shown = items.slice(0, 3);
       shown.forEach(function(t) { inner += todoCalItemHtml(t); });
@@ -4863,6 +4870,39 @@ function positionTodoExpandPanel() {
 }
 
 // Render multi-day todos as horizontal bars (measured against actual cell positions)
+// Deterministic lane assignment for multi-day todos + the max lane overlapping
+// each date. Pure data-driven (no DOM measurement), so the spacer rendered by
+// renderTodosCalendar and the bar layer here always agree.
+var todoBarLaneOf = {};
+var todoMaxLaneByDate = {};
+function computeMultiDayLanes() {
+  todoBarLaneOf = {};
+  todoMaxLaneByDate = {};
+  var multi = todosData.filter(function(t) { return !t._deleted && isMultiDay(t); });
+  multi.sort(function(a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+  var laneEnds = [];
+  multi.forEach(function(t) {
+    var end = t.dateEnd || t.date;
+    var lane = -1;
+    for (var i = 0; i < laneEnds.length; i++) {
+      if (laneEnds[i] < t.date) { lane = i; break; }
+    }
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(end); }
+    else { laneEnds[lane] = end; }
+    todoBarLaneOf[t.id] = lane;
+    var cur = new Date(t.date + 'T00:00:00');
+    var e = new Date(end + 'T00:00:00');
+    while (cur <= e) {
+      var y = cur.getFullYear();
+      var mo = String(cur.getMonth() + 1).padStart(2, '0');
+      var dd = String(cur.getDate()).padStart(2, '0');
+      var ds = y + '-' + mo + '-' + dd;
+      if (!(ds in todoMaxLaneByDate) || todoMaxLaneByDate[ds] < lane) todoMaxLaneByDate[ds] = lane;
+      cur.setDate(cur.getDate() + 1);
+    }
+  });
+}
+
 function renderTodoBars() {
   var el = document.getElementById('todosCalendar');
   if (!el) return;
@@ -4892,21 +4932,8 @@ function renderTodoBars() {
   var firstDate = cells[0].getAttribute('data-date');
   var lastDate = cells[cells.length - 1].getAttribute('data-date');
 
-  // Collect multi-day todos, assign a lane so overlapping ones stack on separate rows
+  // Lanes were precomputed by computeMultiDayLanes (called from renderTodosCalendar)
   var multi = todosData.filter(function(t) { return !t._deleted && isMultiDay(t); });
-  multi.sort(function(a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
-  var laneEnds = [];
-  var laneOf = {};
-  multi.forEach(function(t) {
-    var end = t.dateEnd || t.date;
-    var lane = -1;
-    for (var i = 0; i < laneEnds.length; i++) {
-      if (laneEnds[i] < t.date) { lane = i; break; }
-    }
-    if (lane === -1) { lane = laneEnds.length; laneEnds.push(end); }
-    else { laneEnds[lane] = end; }
-    laneOf[t.id] = lane;
-  });
 
   var html = '';
   multi.forEach(function(t) {
@@ -4926,7 +4953,7 @@ function renderTodoBars() {
 
     var tag = getTodoTag(t.tag);
     var color = tag ? tag.color : '#3B82F6';
-    var lane = laneOf[t.id] || 0;
+    var lane = todoBarLaneOf[t.id] || 0;
 
     var sRow = Math.floor(sIdx / 7), sCol = sIdx % 7;
     var eRow = Math.floor(eIdx / 7), eCol = eIdx % 7;
@@ -4951,41 +4978,6 @@ function renderTodoBars() {
     });
   });
   layer.innerHTML = html;
-  adjustSingleDayItems();
-}
-
-// After multi-day bars are positioned, shift single-day items downward so they
-// do not overlap any bar. Each cell's padding-top is set to the lowest bar
-// bottom (plus a 2px gap) among bars that horizontally overlap the cell.
-function adjustSingleDayItems() {
-  var el = document.getElementById('todosCalendar');
-  if (!el) return;
-  var grid = el.querySelector('.todo-cal-grid');
-  if (!grid) return;
-  var cells = grid.querySelectorAll('.todo-cal-cell');
-  var bars = el.querySelectorAll('.todo-bar');
-  if (!cells.length) return;
-
-  var padByIdx = {};
-  bars.forEach(function(bar) {
-    var barTop = parseFloat(bar.style.top) || 0;
-    var barBottom = barTop + bar.offsetHeight;
-    var barLeft = parseFloat(bar.style.left) || 0;
-    var barRight = barLeft + (parseFloat(bar.style.width) || 0);
-    cells.forEach(function(cell, idx) {
-      var cLeft = cell.offsetLeft;
-      var cRight = cLeft + cell.offsetWidth;
-      if (barLeft < cRight && barRight > cLeft) {
-        var needed = barBottom - cell.offsetTop + 2; // 2px gap below bars
-        if (!(idx in padByIdx) || needed > padByIdx[idx]) padByIdx[idx] = needed;
-      }
-    });
-  });
-
-  cells.forEach(function(cell, idx) {
-    var needed = padByIdx[idx] || 0;
-    cell.style.paddingTop = needed > 0 ? needed + 'px' : '';
-  });
 }
 
 // A single todo summary in the calendar cell (colored dot + text)
@@ -5953,7 +5945,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260814d';
+  b.textContent = 'build 20260814e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
