@@ -4875,9 +4875,10 @@ function renderTodoBars() {
       if (ds === t.date) sIdx = i;
       if (ds === t.dateEnd) eIdx = i;
     }
-    // Clip to current month view
-    if (t.date < firstDate) sIdx = 0;
-    if (t.dateEnd > lastDate) eIdx = cells.length - 1;
+    // Skip todos entirely outside the current view (avoids a bar spanning the whole grid)
+    if (t.dateEnd < firstDate) return; // ends before view starts
+    if (t.date > lastDate) return;     // starts after view ends
+    // Clip start/end indices into the visible 42-cell grid
     if (sIdx < 0) sIdx = 0;
     if (eIdx < 0) eIdx = cells.length - 1;
     if (sIdx > eIdx) return;
