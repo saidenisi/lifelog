@@ -673,16 +673,8 @@ tbody tr:hover{background:var(--surface-hover)}
 }
 .daily-cal-head{
   display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:4px;
+  margin-bottom:8px;
 }
-.daily-cal-tabs{display:flex;gap:4px;margin-top:2px;margin-bottom:6px}
-.daily-cal-tabs .dct{
-  font-size:12px;padding:4px 16px;border-radius:8px;cursor:pointer;
-  border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);
-  transition:all .15s;font-family:var(--font);
-}
-.daily-cal-tabs .dct:hover{border-color:var(--primary);color:var(--primary)}
-.daily-cal-tabs .dct.active{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:500}
 .daily-cal-title{font-size:14px;font-weight:700}
 .daily-cal-nav{
   display:flex;gap:4px;
@@ -857,12 +849,11 @@ tbody tr:hover{background:var(--surface-hover)}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;
 }
 .todo-cal-item{
-  display:flex;align-items:center;gap:3px;
+  display:flex;align-items:center;gap:2px;
   margin-top:2px;font-size:8px;line-height:1.4;
-  border-radius:6px;padding:0 4px 0 2px;height:14px;
+  border-radius:6px;padding:0 4px;height:14px;
   white-space:nowrap;overflow:hidden;
 }
-.todo-cal-item .bar{width:3px;height:10px;border-radius:2px;flex-shrink:0}
 .todo-cal-item .txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .todo-cal-item .ck{flex-shrink:0;font-size:8px;line-height:1}
 .todo-cal-item.done{text-decoration:line-through;color:var(--text-muted)!important;background:var(--surface-hover)!important}
@@ -4705,14 +4696,14 @@ let currentTodoTag = ''; // tag selected when adding a todo
 let todoInputActive = false; // guard: typing in progress, skip re-render on sync
 let editingTodoId = null;    // id of the todo being edited (null = none)
 
-// Preset todo tags + colors (muted / Morandi palette, soft & distinct)
+// Preset todo tags + colors (vivid, white-on-color for calendar chips/bars)
 const TODO_TAGS = {
-  work:    { label: '事务所工作', color: '#5B82C4', bg: '#EAEFF8' },
-  project: { label: '相关项目',   color: '#8E7BC4', bg: '#EFEBF8' },
-  home:    { label: '家事',       color: '#D08A5E', bg: '#F8EFE7' },
-  private: { label: '私事',       color: '#C77B9B', bg: '#F8ECF1' },
-  friends: { label: '朋友同学',   color: '#5BA98C', bg: '#E7F3EE' },
-  fun:     { label: '娱乐',       color: '#C2A15E', bg: '#F7F1E4' }
+  work:    { label: '事务所工作', color: '#2F6FED', bg: '#EAF1FE' },
+  project: { label: '相关项目',   color: '#7C3AED', bg: '#F0EBFE' },
+  home:    { label: '家事',       color: '#F97316', bg: '#FFEFE3' },
+  private: { label: '私事',       color: '#EC4899', bg: '#FDE7F1' },
+  friends: { label: '朋友同学',   color: '#10B981', bg: '#E4F8F0' },
+  fun:     { label: '娱乐',       color: '#F59E0B', bg: '#FEF3D8' }
 };
 
 function getTodoTag(tag) { return TODO_TAGS[tag] || null; }
@@ -4871,12 +4862,7 @@ function renderTodosCalendar() {
       '<button onclick="todosShiftMonth(-1)" title="上月">◀</button>'+
       '<button onclick="todosCalToToday()" title="回到本月">●</button>'+
       '<button onclick="todosShiftMonth(1)" title="下月">▶</button>'+
-    '</div></div>'+
-    '<div class="daily-cal-tabs">'+
-      '<button class="dct" onclick="todosSwitchView(\'day\')">日</button>'+
-      '<button class="dct" onclick="todosSwitchView(\'week\')">周</button>'+
-      '<button class="dct active" onclick="todosSwitchView(\'month\')">月</button>'+
-    '</div>';
+    '</div></div>';
 
   html += '<div class="daily-cal-week">';
   weekDays.forEach(function(w) { html += '<div>'+w+'</div>'; });
@@ -4914,7 +4900,7 @@ function renderTodosCalendar() {
     // cell, so single-day items sit below the bars instead of being overlapped.
     var maxLane = todoMaxLaneByDate[c.dateStr];
     if (typeof maxLane === 'number' && items.length > 0) {
-      inner += '<div style="height:'+(26 + maxLane * 19)+'px"></div>';
+      inner += '<div style="height:'+(20 + maxLane * 19)+'px"></div>';
     }
     if (items.length) {
       var shown = items.slice(0, 3);
@@ -4927,13 +4913,6 @@ function renderTodosCalendar() {
   el.innerHTML = html;
 
   requestAnimationFrame(layoutTodos);
-}
-
-// View switcher (day/week/month). Month view is the current implementation;
-// day & week views are planned, so non-month clicks just inform the user.
-function todosSwitchView(v) {
-  if (v === 'month') return;
-  if (typeof toast === 'function') toast('日 / 周 视图即将上线，敬请期待');
 }
 
 // Position the expand panel as an absolute overlay right below the selected
@@ -5050,7 +5029,6 @@ function renderTodoBars() {
 
     var tag = getTodoTag(t.tag);
     var color = tag ? tag.color : '#3B82F6';
-    var bg = tag ? tag.bg : '#EAF2FE';
     var lane = todoBarLaneOf[t.id] || 0;
 
     var sRow = Math.floor(sIdx / 7), sCol = sIdx % 7;
@@ -5068,9 +5046,9 @@ function renderTodoBars() {
       var ec = cells[row * 7 + ce];
       if (!sc || !ec) return;
       var left = sc.offsetLeft;
-      var top = sc.offsetTop + 28 + lane * 19;
+      var top = sc.offsetTop + 33 + lane * 19;
       var width = ec.offsetLeft + ec.offsetWidth - sc.offsetLeft;
-      var style = 'left:'+left+'px;top:'+top+'px;width:'+width+'px;background:'+bg+';color:'+color;
+      var style = 'left:'+left+'px;top:'+top+'px;width:'+width+'px;background:'+color+';color:#fff';
       if (t.done) style += ';opacity:.5;text-decoration:line-through';
       html += '<div class="todo-bar" style="'+style+'">'+escapeHtml(t.content)+'</div>';
     });
@@ -5078,17 +5056,14 @@ function renderTodoBars() {
   layer.innerHTML = html;
 }
 
-// A single todo summary in the calendar cell (left color bar + text)
+// A single todo summary in the calendar cell (vivid color chip + white text)
 function todoCalItemHtml(t) {
   var tag = getTodoTag(t.tag);
   var color = tag ? tag.color : 'var(--primary)';
-  var bg = tag ? tag.bg : 'var(--surface-hover)';
   var cls = 'todo-cal-item' + (t.done ? ' done' : '');
-  var st = 'background:'+bg+';color:'+(t.done ? 'var(--text-muted)' : color);
-  var bar = t.done
-    ? '<span class="ck">\u2713</span>'
-    : '<span class="bar" style="background:'+color+'"></span>';
-  return '<div class="'+cls+'" style="'+st+'">'+bar+'<span class="txt">'+escapeHtml(t.content)+'</span></div>';
+  var st = 'background:'+color+';color:#fff';
+  var ck = t.done ? '<span class="ck">\u2713</span>' : '';
+  return '<div class="'+cls+'" style="'+st+'">'+ck+'<span class="txt">'+escapeHtml(t.content)+'</span></div>';
 }
 
 // Expand panel content (rendered into an absolute overlay below the selected row)
@@ -6055,7 +6030,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260815b';
+  b.textContent = 'build 20260815c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
