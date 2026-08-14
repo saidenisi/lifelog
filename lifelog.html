@@ -4932,6 +4932,7 @@ function renderTodoEditRow(t) {
   html += '</div>';
   html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
   html += '<input type="text" id="todoEditInput" class="todo-add-input" style="flex:1;min-width:160px" value="'+escapeHtml(t.content)+'">';
+  html += '<input type="date" id="todoEditDate" class="todo-add-input" style="max-width:150px" value="'+t.date+'" title="待办日期">';
   html += '<input type="date" id="todoEditDateEnd" class="todo-add-input" style="max-width:150px" value="'+(t.dateEnd||'')+'" title="结束日期（留空=单日）">';
   html += '<button class="btn btn-primary" onclick="saveEditTodo()" style="flex-shrink:0">保存</button>';
   html += '<button class="btn btn-ghost" onclick="cancelEditTodo()" style="flex-shrink:0">取消</button>';
@@ -5036,6 +5037,9 @@ function saveEditTodo() {
   if (!content) { toast('内容不能为空'); return; }
   t.content = content;
   t.tag = currentTodoTag;
+  // Update date (moves the todo to the new date)
+  var newDate = document.getElementById('todoEditDate').value;
+  if (newDate) t.date = newDate;
   var dateEnd = document.getElementById('todoEditDateEnd').value || '';
   if (dateEnd && dateEnd > t.date) t.dateEnd = dateEnd; else delete t.dateEnd;
   t.updatedAt = new Date().toISOString();
