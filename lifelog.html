@@ -883,10 +883,11 @@ tbody tr:hover{background:var(--surface-hover)}
 }
 .todo-add-input:focus{border-color:var(--primary)}
 .todo-expand{
-  grid-column:1 / span 7;
   border:1px solid var(--border);border-radius:8px;
-  margin-top:6px;padding:10px 12px;
+  padding:10px 12px;
   background:var(--surface);
+  box-shadow:0 4px 14px rgba(0,0,0,.12);
+  max-height:60vh;overflow:auto;
 }
 .todo-expand-title{font-size:13px;font-weight:600;margin-bottom:6px}
 .todo-edit-row{padding:8px;border:1px solid var(--primary);border-radius:8px;background:var(--primary-bg);margin:6px 0}
@@ -4823,15 +4824,39 @@ function renderTodosCalendar() {
       if (items.length > 3) inner += '<div class="todo-cal-more">+'+(items.length - 3)+'</div>';
     }
     html += '<div class="'+cls+'" data-date="'+c.dateStr+'" onclick="todosSelectDate(\''+c.dateStr+'\')">'+inner+'</div>';
-
-    if (todosExpanded && idx % 7 === 6 && Math.floor(idx / 7) === selectedRow) {
-      html += renderTodoExpand(selectedRow + 2);
-    }
   }
   html += '</div>';
   el.innerHTML = html;
 
-  requestAnimationFrame(renderTodoBars);
+  requestAnimationFrame(layoutTodos);
+}
+
+// Position the expand panel as an absolute overlay right below the selected
+// date's row (spans all 7 columns). Keeping it OUT of the grid item flow means
+// the 42 day cells are never re-flowed, so multi-day bars stay aligned to dates.
+function layoutTodos() {
+  positionTodoExpandPanel();
+  renderTodoBars();
+}
+
+function positionTodoExpandPanel() {
+  var grid = document.querySelector('#todosCalendar .todo-cal-grid');
+  if (!grid) return;
+  var old = grid.querySelector('.todo-expand-overlay');
+  if (old) old.remove();
+  if (!todosExpanded) return;
+  var cell = grid.querySelector('.todo-cal-cell.selected') ||
+             grid.querySelector('.todo-cal-cell[data-date="' + todosDate + '"]');
+  if (!cell) return;
+  var panel = document.createElement('div');
+  panel.className = 'todo-expand todo-expand-overlay';
+  panel.style.position = 'absolute';
+  panel.style.left = '0';
+  panel.style.right = '0';
+  panel.style.top = (cell.offsetTop + cell.offsetHeight + 4) + 'px';
+  panel.style.zIndex = '6';
+  panel.innerHTML = renderTodoExpand();
+  grid.appendChild(panel);
 }
 
 // Render multi-day todos as horizontal bars (measured against actual cell positions)
@@ -4954,8 +4979,8 @@ function todoCalItemHtml(t) {
   return '<div class="'+cls+'" style="color:'+(t.done ? '' : color)+'">'+dot+escapeHtml(t.content)+'</div>';
 }
 
-// Expand panel: shown inline under the selected date's row (spans all 7 cols)
-function renderTodoExpand(panelRow) {
+// Expand panel content (rendered into an absolute overlay below the selected row)
+function renderTodoExpand() {
   var dt = new Date(todosDate + 'T00:00:00');
   var items = getTodosForDate(todosDate);
   items.sort(function(a, b) {
@@ -4963,10 +4988,7 @@ function renderTodoExpand(panelRow) {
     return (a.createdAt || '').localeCompare(b.createdAt || '');
   });
 
-  var style = 'grid-column:1 / span 7;';
-  if (panelRow) style += 'grid-row:'+panelRow+';';
-  var html = '<div class="todo-expand" style="'+style+'">';
-  html += '<div class="todo-expand-title">📋 '+(dt.getMonth()+1)+'月'+dt.getDate()+'日 待办</div>';
+  var html = '<div class="todo-expand-title">📋 '+(dt.getMonth()+1)+'月'+dt.getDate()+'日 待办</div>';
   if (items.length === 0) {
     html += '<div class="todo-empty" style="padding:6px 0">这天还没有待办事项</div>';
   } else {
