@@ -867,6 +867,13 @@ tbody tr:hover{background:var(--surface-hover)}
   background:var(--surface);color:var(--text);outline:none;
 }
 .todo-add-input:focus{border-color:var(--primary)}
+.todo-expand{
+  grid-column:1/-1;
+  border:1px solid var(--border);border-radius:8px;
+  margin-top:6px;padding:10px 12px;
+  background:var(--surface);
+}
+.todo-expand-title{font-size:13px;font-weight:600;margin-bottom:6px}
 
 /* ===== Misc ===== */
 .text-muted{color:var(--text-muted)}
@@ -1306,21 +1313,10 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
       </div>
 
-      <!-- 月历（全宽，字体极小） -->
+      <!-- 月历（全宽，点击日期在该日下方展开事项） -->
       <div class="card">
         <div class="card-body" style="padding:12px">
           <div class="daily-calendar" id="todosCalendar"></div>
-        </div>
-      </div>
-
-      <!-- 选中日期的事项（下方整行） -->
-      <div class="card mt-16" id="todosDetailCard">
-        <div class="card-header">
-          <div class="card-title" id="todosDetailTitle">📋 待办</div>
-        </div>
-        <div class="card-body">
-          <div id="todosList"></div>
-          <div id="todosAddArea" style="margin-top:12px"></div>
         </div>
       </div>
     </div>
@@ -4646,8 +4642,6 @@ function renderTodos() {
   if (label) label.textContent =
     dt.getFullYear()+'年'+(dt.getMonth()+1)+'月'+dt.getDate()+'日 星期'+weekDays[dt.getDay()];
   renderTodosCalendar();
-  renderTodosList();
-  renderTodosAddArea();
 }
 
 function todosGoToday() {
@@ -4712,73 +4706,81 @@ function renderTodosCalendar() {
   weekDays.forEach(function(w) { html += '<div>'+w+'</div>'; });
   html += '</div>';
 
+  // Build 42 cells with dateStr
   var cells = [];
   var i, dayNum;
   for (i = firstDay - 1; i >= 0; i--) cells.push({day: daysInPrev - i, month: month - 1, other: true});
   for (dayNum = 1; dayNum <= daysInMonth; dayNum++) cells.push({day: dayNum, month: month});
   var remaining = 42 - cells.length;
   for (i = 1; i <= remaining; i++) cells.push({day: i, month: month + 1, other: true});
-
-  html += '<div class="daily-cal-grid">';
   cells.forEach(function(c) {
     var y = year, m = c.month;
     if (m < 0) { m = 11; y--; }
     if (m > 11) { m = 0; y++; }
-    var dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(c.day).padStart(2,'0');
+    c.dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(c.day).padStart(2,'0');
+  });
+
+  // Find the row of the selected date
+  var selectedRow = -1;
+  cells.forEach(function(c, idx) { if (c.dateStr === todosDate) selectedRow = Math.floor(idx / 7); });
+
+  html += '<div class="daily-cal-grid">';
+  for (var idx = 0; idx < cells.length; idx++) {
+    var c = cells[idx];
     var cls = 'todo-cal-cell';
     if (c.other) cls += ' other';
-    if (dateStr === today) cls += ' today';
-    if (dateStr === todosDate) cls += ' selected';
+    if (c.dateStr === today) cls += ' today';
+    if (c.dateStr === todosDate) cls += ' selected';
 
     var inner = '<div class="d">'+c.day+'</div>';
-    var items = todoByDate[dateStr] || [];
+    var items = todoByDate[c.dateStr] || [];
     if (items.length) {
-      var shown = items.slice(0, 2);
+      var shown = items.slice(0, 4);
       shown.forEach(function(t) {
         inner += '<div class="todo-cal-item'+(t.done?' done':'')+'">'+escapeHtml(t.content)+'</div>';
       });
-      if (items.length > 2) inner += '<div class="todo-cal-more">+'+(items.length - 2)+'</div>';
+      if (items.length > 4) inner += '<div class="todo-cal-more">+'+(items.length - 4)+'</div>';
     }
-    html += '<div class="'+cls+'" onclick="todosSelectDate(\''+dateStr+'\')">'+inner+'</div>';
-  });
+    html += '<div class="'+cls+'" onclick="todosSelectDate(\''+c.dateStr+'\')">'+inner+'</div>';
+
+    // Insert expand panel right after the selected row
+    if (idx % 7 === 6 && Math.floor(idx / 7) === selectedRow) {
+      html += renderTodoExpand();
+    }
+  }
   html += '</div>';
   el.innerHTML = html;
 }
 
-function renderTodosList() {
-  var el = document.getElementById('todosList');
-  if (!el) return;
-  var title = document.getElementById('todosDetailTitle');
+// Expand panel: shown inline under the selected date's row (spans all 7 cols)
+function renderTodoExpand() {
   var dt = new Date(todosDate + 'T00:00:00');
-  if (title) title.textContent = '📋 '+(dt.getMonth()+1)+'月'+dt.getDate()+'日 待办';
-
   var items = getTodosForDate(todosDate);
   items.sort(function(a, b) {
     if (a.done !== b.done) return a.done ? 1 : -1;
     return (a.createdAt || '').localeCompare(b.createdAt || '');
   });
 
+  var html = '<div class="todo-expand">';
+  html += '<div class="todo-expand-title">📋 '+(dt.getMonth()+1)+'月'+dt.getDate()+'日 待办</div>';
   if (items.length === 0) {
-    el.innerHTML = '<div class="todo-empty">这天还没有待办事项</div>';
-    return;
+    html += '<div class="todo-empty" style="padding:6px 0">这天还没有待办事项</div>';
+  } else {
+    items.forEach(function(t) {
+      html += '<div class="todo-row">'+
+        '<div class="todo-check'+(t.done?' done':'')+'" onclick="toggleTodo(\''+t.id+'\')">'+(t.done?'✓':'')+'</div>'+
+        '<div class="todo-content'+(t.done?' done':'')+'">'+escapeHtml(t.content)+'</div>'+
+        '<button class="todo-del" onclick="deleteTodo(\''+t.id+'\')" title="删除">×</button>'+
+      '</div>';
+    });
   }
-
-  var html = '';
-  items.forEach(function(t) {
-    html += '<div class="todo-row">'+
-      '<div class="todo-check'+(t.done?' done':'')+'" onclick="toggleTodo(\''+t.id+'\')">'+(t.done?'✓':'')+'</div>'+
-      '<div class="todo-content'+(t.done?' done':'')+'">'+escapeHtml(t.content)+'</div>'+
-      '<button class="todo-del" onclick="deleteTodo(\''+t.id+'\')" title="删除">×</button>'+
-    '</div>';
-  });
-  el.innerHTML = html;
+  html += '<div id="todosAddArea" style="margin-top:10px">'+renderTodosAddBtn()+'</div>';
+  html += '</div>';
+  return html;
 }
 
-// Add area: toggle between "add button" and "input + send"
-function renderTodosAddArea() {
-  var el = document.getElementById('todosAddArea');
-  if (!el) return;
-  el.innerHTML = '<button class="todo-add-btn" onclick="showTodoInput()">＋ 添加事项</button>';
+function renderTodosAddBtn() {
+  return '<button class="todo-add-btn" onclick="showTodoInput()">＋ 添加事项</button>';
 }
 
 function showTodoInput() {
@@ -4787,7 +4789,7 @@ function showTodoInput() {
   el.innerHTML = '<div style="display:flex;gap:8px;align-items:center">'+
     '<input type="text" id="todoInput" class="todo-add-input" placeholder="输入待办内容" autocomplete="off">'+
     '<button class="btn btn-primary" id="todoSendBtn" onclick="addTodo()" style="display:none;flex-shrink:0">发送</button>'+
-    '<button class="btn btn-ghost" onclick="renderTodosAddArea()" style="flex-shrink:0">取消</button>'+
+    '<button class="btn btn-ghost" onclick="renderTodosCalendar()" style="flex-shrink:0">取消</button>'+
   '</div>';
   var input = document.getElementById('todoInput');
   if (input) {
@@ -4823,7 +4825,6 @@ function toggleTodo(id) {
   t.updatedAt = new Date().toISOString();
   saveTodos();
   saveAll();
-  renderTodosList();
   renderTodosCalendar();
 }
 
