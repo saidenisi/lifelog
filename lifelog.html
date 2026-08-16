@@ -1110,7 +1110,7 @@ tbody tr:hover{background:var(--surface-hover)}
 
       <div class="card mb-16">
         <div class="card-header">
-          <div class="card-title">🌙 睡眠综合趋势（近14天）</div>
+          <div class="card-title">🌙 睡眠综合趋势</div>
           <div style="display:flex;gap:12px;align-items:center;font-size:12px;color:var(--text-muted)">
             <span><span style="display:inline-block;width:12px;height:3px;background:#8b5cf6;border-radius:2px;vertical-align:middle;margin-right:4px"></span>入睡</span>
             <span><span style="display:inline-block;width:12px;height:3px;background:#f59e0b;border-radius:2px;vertical-align:middle;margin-right:4px"></span>起床</span>
@@ -1901,7 +1901,7 @@ let financeData = DB.get('finance');
 // ===== Media Data =====
 let mediaData = DB.get('media') || [];
 let mediaFilter = 'all'; // all/movie/tv/book/show
-function saveMediaData() { DB.set('media', mediaData); }
+function saveMediaData() { DB.set('media', mediaData); scheduleCloudPush(); }
 
 // ===== Daily Notes =====
 let dailyNotes = DB.get('dailyNotes') || [];
@@ -2629,20 +2629,68 @@ function renderSleep() {
     document.getElementById('sleepAvgWake').textContent = '—';
   }
 
-  // Combined chart - duration bars + bedtime/wake time lines (14 days)
+  // Combined chart - all recorded data; history older than 21 days collapses into one average point
   const colors = getChartColors();
-  const dates = getRecentDates(14);
-  const durationData = dates.map(d => {
+  const recentDates = getRecentDates(21);
+  const allSleepDates = [...new Set(sleepData.map(s => s.date))].sort();
+  const olderDates = allSleepDates.filter(d => d < recentDates[0]);
+  const hasOlder = olderDates.length > 0;
+  // Axis: when there is no history older than 21 days, only show from the earliest recorded date onward
+  let axisDates = recentDates;
+  if (!hasOlder && allSleepDates.length > 0) {
+    const earliest = allSleepDates[0];
+    axisDates = recentDates.filter(d => d >= earliest);
+  }
+
+  function avgMetric(dates, metric) {
+    const recs = dates.map(d => sleepData.find(s => s.date === d)).filter(Boolean);
+    if (!recs.length) return null;
+    return recs.reduce((s, r) => s + metric(r), 0) / recs.length;
+  }
+
+  const labels = [];
+  if (hasOlder) labels.push('21天前平均');
+  axisDates.forEach(d => labels.push(fmtDate(d)));
+
+  const durationData = [];
+  const bedtimeData = [];
+  const wakeData = [];
+  const barColors = [];
+  const barBorders = [];
+  function pushPoint(rec) {
+    durationData.push(rec ? rec.duration : null);
+    bedtimeData.push(rec ? timeToDecimal(rec.bedtime, true) : null);
+    wakeData.push(rec ? timeToDecimal(rec.wakeTime, false) : null);
+    if (!rec) {
+      barColors.push('transparent');
+      barBorders.push('transparent');
+    } else if (rec.duration >= 7) {
+      barColors.push('rgba(16,185,129,.35)');
+      barBorders.push(colors.success);
+    } else if (rec.duration >= 6) {
+      barColors.push('rgba(245,158,11,.35)');
+      barBorders.push(colors.warning);
+    } else {
+      barColors.push('rgba(239,68,68,.35)');
+      barBorders.push(colors.danger);
+    }
+  }
+  // Older-than-21-days history → a single average point (duration + average times)
+  if (hasOlder) {
+    const olderDur = avgMetric(olderDates, r => r.duration);
+    const olderBed = avgMetric(olderDates, r => timeToDecimal(r.bedtime, true));
+    const olderWake = avgMetric(olderDates, r => timeToDecimal(r.wakeTime, false));
+    durationData.push(olderDur);
+    bedtimeData.push(olderBed);
+    wakeData.push(olderWake);
+    if (olderDur == null) { barColors.push('transparent'); barBorders.push('transparent'); }
+    else if (olderDur >= 7) { barColors.push('rgba(16,185,129,.35)'); barBorders.push(colors.success); }
+    else if (olderDur >= 6) { barColors.push('rgba(245,158,11,.35)'); barBorders.push(colors.warning); }
+    else { barColors.push('rgba(239,68,68,.35)'); barBorders.push(colors.danger); }
+  }
+  axisDates.forEach(d => {
     const rec = sleepData.find(s => s.date === d);
-    return rec ? rec.duration : null;
-  });
-  const bedtimeData = dates.map(d => {
-    const rec = sleepData.find(s => s.date === d);
-    return rec ? timeToDecimal(rec.bedtime, true) : null;
-  });
-  const wakeData = dates.map(d => {
-    const rec = sleepData.find(s => s.date === d);
-    return rec ? timeToDecimal(rec.wakeTime, false) : null;
+    pushPoint(rec);
   });
 
   // Compute Y axis range for time axis based on actual data
@@ -2657,26 +2705,14 @@ function renderSleep() {
   chartInstances.sleepChart = new Chart(document.getElementById('sleepChart'), {
     type: 'bar',
     data: {
-      labels: dates.map(fmtDate),
+      labels: labels,
       datasets: [
         {
           type: 'bar',
           label: '睡眠时长',
           data: durationData,
-          backgroundColor: dates.map(d => {
-            const rec = sleepData.find(s => s.date === d);
-            if (!rec) return 'transparent';
-            if (rec.duration >= 7) return 'rgba(16,185,129,.35)';
-            if (rec.duration >= 6) return 'rgba(245,158,11,.35)';
-            return 'rgba(239,68,68,.35)';
-          }),
-          borderColor: dates.map(d => {
-            const rec = sleepData.find(s => s.date === d);
-            if (!rec) return 'transparent';
-            if (rec.duration >= 7) return colors.success;
-            if (rec.duration >= 6) return colors.warning;
-            return colors.danger;
-          }),
+          backgroundColor: barColors,
+          borderColor: barBorders,
           borderWidth: 1.5,
           borderRadius: 4,
           maxBarThickness: 20,
@@ -6209,7 +6245,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816a';
+  b.textContent = 'build 20260816b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
