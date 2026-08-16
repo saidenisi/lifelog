@@ -431,7 +431,7 @@ body{
 }
 
 /* ===== Table ===== */
-.table-wrap{overflow-x:auto;border-radius:var(--radius-sm)}
+.table-wrap{overflow-x:auto;border-radius:var(--radius-sm);max-width:100%}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{
   text-align:left;
@@ -1147,6 +1147,30 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
       </div>
 
+      <!-- ===== Stock holdings (part of financial investment) ===== -->
+      <div class="card mb-16">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div class="card-title">📈 股票持仓</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="text-muted" style="font-size:12px">股票账户：</span>
+            <select class="form-select" id="stockAccountFilter" onchange="onStockAccountFilter()" style="min-width:140px;font-size:13px;padding:6px 10px">
+              <option value="all">全部账户</option>
+            </select>
+            <span id="stockAccountCashHint" class="text-muted" style="font-size:12px"></span>
+            <button class="btn btn-ghost btn-sm" onclick="refreshAllStocks()">🔄 刷新行情</button>
+            <button class="btn btn-primary btn-sm" onclick="openStockModal()">📈 添加股票</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:12px 16px;background:var(--info-bg)">
+          <p class="text-sm" style="color:var(--info);line-height:1.6;margin:0">
+            <b>均线卖出策略：</b>跌破 30分MA25 → 减仓 1/4；跌破 60分MA25 → 减仓至 1/2；跌破 120分MA25 → 减仓至 1/4；跌破 日线MA25 → 清仓。<span style="color:var(--text-muted)">（A股四档；港美股仅日线MA25）</span>
+          </p>
+        </div>
+        <div class="table-wrap" id="stockTableWrap">
+          <!-- table injected by JS -->
+        </div>
+      </div>
+
       <!-- ===== Account Assets Section ===== -->
       <div class="stat-grid">
         <div class="stat-card finance">
@@ -1208,30 +1232,6 @@ tbody tr:hover{background:var(--surface-hover)}
           <button class="btn btn-ghost btn-sm" onclick="exportAccountCSV()">📥 导出CSV</button>
         </div>
         <div class="table-wrap" id="accountTableWrap">
-          <!-- table injected by JS -->
-        </div>
-      </div>
-
-      <!-- ===== Stock holdings (part of financial investment) ===== -->
-      <div class="card mb-16">
-        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div class="card-title">📈 股票持仓</div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span class="text-muted" style="font-size:12px">股票账户：</span>
-            <select class="form-select" id="stockAccountFilter" onchange="onStockAccountFilter()" style="min-width:140px;font-size:13px;padding:6px 10px">
-              <option value="all">全部账户</option>
-            </select>
-            <span id="stockAccountCashHint" class="text-muted" style="font-size:12px"></span>
-            <button class="btn btn-ghost btn-sm" onclick="refreshAllStocks()">🔄 刷新行情</button>
-            <button class="btn btn-primary btn-sm" onclick="openStockModal()">📈 添加股票</button>
-          </div>
-        </div>
-        <div class="card-body" style="padding:12px 16px;background:var(--info-bg)">
-          <p class="text-sm" style="color:var(--info);line-height:1.6;margin:0">
-            <b>均线卖出策略：</b>跌破 30分MA25 → 减仓 1/4；跌破 60分MA25 → 减仓至 1/2；跌破 120分MA25 → 减仓至 1/4；跌破 日线MA25 → 清仓。<span style="color:var(--text-muted)">（A股四档；港美股仅日线MA25）</span>
-          </p>
-        </div>
-        <div class="table-wrap" id="stockTableWrap">
           <!-- table injected by JS -->
         </div>
       </div>
@@ -6309,9 +6309,9 @@ function renderStocks() {
     }
     return;
   }
-  let html = `<table><thead><tr>
-    <th style="width:40px"></th><th>股票</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th>
-    <th>30分MA25</th><th>60分MA25</th><th>120分MA25</th><th>日线MA25</th><th>信号</th><th style="text-align:right">操作</th>
+  let html = `<table style="min-width:880px"><thead><tr>
+    <th style="width:36px"></th><th>股票</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th>
+    <th>MA30</th><th>MA60</th><th>MA120</th><th>日线</th><th>信号</th><th style="text-align:right">操作</th>
   </tr></thead><tbody>`;
   filteredStocks().forEach((s, idx) => {
     const q = stockQuotes[s.id];
@@ -6600,7 +6600,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816h';
+  b.textContent = 'build 20260816i';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
