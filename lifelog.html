@@ -2959,6 +2959,25 @@ function migrateInvestNav() {
 }
 migrateInvestNav();
 
+// One-time migration: remove auto-written "today" snapshots from invest accounts.
+// Builds 20260816c–j auto-wrote a freshly-recomputed market value on every render,
+// which produced a false day-over-day jump/drop (e.g. a stale/partial value
+// overwriting the inherited previous-day value). Guarded by a flag so it runs once.
+function migrateRemoveAutoSnapshots() {
+  if (DB.get('migrated_no_autosnap', false) === true) return;
+  const today = todayStr();
+  let changed = false;
+  accountData.forEach(a => {
+    if (a && a.category === 'invest' && a.snapshots && a.snapshots.length) {
+      const kept = a.snapshots.filter(s => s.date < today);
+      if (kept.length !== a.snapshots.length) { a.snapshots = kept; changed = true; }
+    }
+  });
+  if (changed) DB.set('accounts', accountData);
+  DB.set('migrated_no_autosnap', true);
+}
+migrateRemoveAutoSnapshots();
+
 // Merge src account into target (cash/holdings/transactions/principal/balances/snapshots)
 function mergeAccountInto(target, src) {
   if ((target.cash || 0) === 0 && (src.cash || 0) > 0) target.cash = src.cash;
@@ -3398,6 +3417,12 @@ function saveAccount() {
     }
     accountData.push(newAcc);
   }
+  // Record today's snapshot for invest accounts (explicit user input advances the
+  // daily trend; days without input carry forward the previous value)
+  if (isInvest) {
+    const acc = id ? accountData.find(a => a.id === id) : accountData[accountData.length - 1];
+    if (acc) upsertInvestSnapshot(acc);
+  }
   saveAccounts();
   closeModal('accountModal');
   toast('账户已保存 🏦');
@@ -3701,17 +3726,10 @@ function getBalanceOnDate(acc, date) {
 
 // ===== Render Account Section =====
 function renderAccounts() {
-  // Upsert today's snapshot for invest accounts (local persist only — no cloud
-  // push here, otherwise every render triggers a push→realtime→pull loop)
-  let snapChanged = false;
-  accountData.filter(a => a.category === 'invest').forEach(acc => {
-    const snap = acc.snapshots || [];
-    const prev = snap.length ? snap[snap.length - 1].valueCNY : null;
-    upsertInvestSnapshot(acc);
-    const cur = snap.length ? snap[snap.length - 1].valueCNY : null;
-    if (prev !== cur) snapChanged = true;
-  });
-  if (snapChanged) DB.set('accounts', accountData);
+  // NOTE: daily snapshots are written ONLY on explicit user edits (saveAccount /
+  // saveStock), never on render. This implements the "沿用上一天" rule — a day
+  // without new input simply carries forward the previous day's value instead of
+  // being overwritten by a freshly-recomputed (possibly stale/partial) value.
   const colors = getChartColors();
   const chartColors = [colors.primary, colors.success, colors.warning, colors.info, colors.purple, colors.danger, '#fb923c','#22d3ee','#a78bfa','#f472b6','#34d399','#fbbf24'];
 
@@ -6517,6 +6535,8 @@ function saveStock() {
   const manualPriceInput = document.getElementById('stockManualPrice').value;
   const manualPrice = manualPriceInput ? parseFloat(manualPriceInput) : null;
   const accountId = document.getElementById('stockAccountId').value || ensureDefaultStockAccount();
+  let prevAccountId = null;
+  if (id) { const old = stockData.find(s => s.id === id); if (old) prevAccountId = old.accountId; }
 
   const normCode = normalizeStockCode(sel.code, sel.name);
   if (id) {
@@ -6546,6 +6566,13 @@ function saveStock() {
   closeModal('stockModal');
   toast('股票已保存 📈');
   renderStocks();
+  // Record today's snapshot for the affected invest account(s) — explicit user
+  // input advances the daily trend; days without input carry forward yesterday.
+  const affectedIds = (prevAccountId && prevAccountId !== accountId) ? [accountId, prevAccountId] : [accountId];
+  accountData.forEach(a => {
+    if (a.category === 'invest' && affectedIds.indexOf(a.id) >= 0) upsertInvestSnapshot(a);
+  });
+  saveAccounts();
   // Auto-fetch data for the new/edited stock
   const targetId = id || stockData[stockData.length - 1].id;
   refreshSingleStock(targetId);
@@ -6615,7 +6642,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816j';
+  b.textContent = 'build 20260816k';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
