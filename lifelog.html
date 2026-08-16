@@ -2330,7 +2330,17 @@ function renderPage(page) {
   switch(page) {
     case 'fitness': renderFitness(); break;
     case 'sleep': renderSleep(); break;
-    case 'finance': renderFinance(); break;
+    case 'finance':
+      renderFinance();
+      // ensure stock quotes loaded so invest accounts show market value
+      {
+        const fst = stockData.some(s => {
+          const q = stockQuotes[s.id];
+          return !q || !q.price || (Date.now() - (q.ts || 0) > 60000);
+        });
+        if (stockData.length > 0 && fst) refreshAllStocks();
+      }
+      break;
     case 'stock':
       renderStocks();
       // Auto-refresh quotes if data is missing or stale (>60s)
@@ -6295,6 +6305,7 @@ async function refreshAllStocks() {
     const q = stockQuotes[stock.id];
     if (!q || !q.price) failed++;
   }
+  renderAccounts(); // refresh invest account market value + snapshots
   if (failed > 0) {
     toast(`${stockData.length - failed}/${stockData.length} 只刷新成功，${failed} 只失败 ❌`);
   } else {
@@ -6624,7 +6635,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816e';
+  b.textContent = 'build 20260816f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
