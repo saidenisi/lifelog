@@ -1146,10 +1146,6 @@ tbody tr:hover{background:var(--surface-hover)}
           <button class="btn btn-primary" onclick="openBalanceModal()">💰 记录余额</button>
         </div>
       </div>
-      <div class="invest-tabs">
-        <button class="invest-tab active" data-tab="accounts" onclick="switchInvestTab('accounts')">账户总览</button>
-        <button class="invest-tab" data-tab="stocks" onclick="switchInvestTab('stocks')">股票交易</button>
-      </div>
 
       <!-- ===== Account Assets Section ===== -->
       <div class="stat-grid">
@@ -1216,52 +1212,30 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
       </div>
 
-    </div>
-
-    <!-- ===== Stock Page ===== -->
-    <div class="page" id="page-stock">
-      <div class="page-header">
-        <div>
-          <div class="page-title">股票交易</div>
-          <div class="page-subtitle">均线策略 · 自动监控买卖信号</div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;margin-left:auto;margin-right:auto">
-          <button class="mobile-menu-btn" id="mobileMenuBtn6">☰</button>
-          <button class="btn btn-ghost" onclick="refreshAllStocks()">🔄 刷新行情</button>
-          <button class="btn btn-primary" onclick="openStockModal()">📈 添加股票</button>
-        </div>
-      </div>
-      <div class="invest-tabs">
-        <button class="invest-tab" data-tab="accounts" onclick="switchInvestTab('accounts')">账户总览</button>
-        <button class="invest-tab active" data-tab="stocks" onclick="switchInvestTab('stocks')">股票交易</button>
-      </div>
-
+      <!-- ===== Stock holdings (part of financial investment) ===== -->
       <div class="card mb-16">
-        <div class="card-body" style="padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span class="text-muted" style="font-size:13px">股票账户：</span>
-          <select class="form-select" id="stockAccountFilter" onchange="onStockAccountFilter()" style="min-width:160px;font-size:13px;padding:6px 10px">
-            <option value="all">全部账户</option>
-          </select>
-          <span id="stockAccountCashHint" class="text-muted" style="font-size:12px"></span>
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div class="card-title">📈 股票持仓</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="text-muted" style="font-size:12px">股票账户：</span>
+            <select class="form-select" id="stockAccountFilter" onchange="onStockAccountFilter()" style="min-width:140px;font-size:13px;padding:6px 10px">
+              <option value="all">全部账户</option>
+            </select>
+            <span id="stockAccountCashHint" class="text-muted" style="font-size:12px"></span>
+            <button class="btn btn-ghost btn-sm" onclick="refreshAllStocks()">🔄 刷新行情</button>
+            <button class="btn btn-primary btn-sm" onclick="openStockModal()">📈 添加股票</button>
+          </div>
         </div>
-      </div>
-
-      <div class="card mb-16" style="background:var(--info-bg);border:1px solid var(--info)">
-        <div class="card-body" style="padding:12px 16px">
-          <p class="text-sm" style="color:var(--info);line-height:1.6">
-            <b>均线卖出策略（按初始持仓量）：</b>市场价跌破 30分MA25 → 减仓初始持仓的1/4；跌破 60分MA25 → 减仓至初始持仓的1/2；跌破 120分MA25 → 减仓至初始持仓的1/4；跌破 日线MA25 → 清仓。以最严重的跌破信号决定目标仓位。<span style="color:var(--text-muted)">（A股支持全部四档信号；港股/美股仅支持日线MA25信号，分钟K线暂不可用）</span>
+        <div class="card-body" style="padding:12px 16px;background:var(--info-bg)">
+          <p class="text-sm" style="color:var(--info);line-height:1.6;margin:0">
+            <b>均线卖出策略：</b>跌破 30分MA25 → 减仓 1/4；跌破 60分MA25 → 减仓至 1/2；跌破 120分MA25 → 减仓至 1/4；跌破 日线MA25 → 清仓。<span style="color:var(--text-muted)">（A股四档；港美股仅日线MA25）</span>
           </p>
-        </div>
-      </div>
-
-      <div class="card mb-16">
-        <div class="card-header">
-          <div class="card-title">📈 持仓监控</div>
         </div>
         <div class="table-wrap" id="stockTableWrap">
           <!-- table injected by JS -->
         </div>
       </div>
+
     </div>
 
     <!-- ===== Media Page ===== -->
@@ -2308,7 +2282,7 @@ function navigate(page) {
   document.getElementById('page-' + page).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.mobile-nav-item').forEach(n => n.classList.remove('active'));
-  // stock lives under the invest (finance) nav entry
+  // stock page is merged into finance; keep nav highlight on finance
   const navPage = (page === 'stock') ? 'finance' : page;
   document.querySelectorAll(`[data-page="${navPage}"]`).forEach(n => n.classList.add('active'));
   // Close mobile sidebar
@@ -2317,15 +2291,6 @@ function navigate(page) {
   // Render page data
   renderPage(page);
   window.scrollTo({top:0,behavior:'smooth'});
-}
-
-// Switch between the two invest sub-views (accounts overview / stock trading)
-function switchInvestTab(tab) {
-  const page = tab === 'accounts' ? 'finance' : 'stock';
-  navigate(page);
-  document.querySelectorAll('.invest-tab').forEach(b => {
-    b.classList.toggle('active', b.dataset.tab === tab);
-  });
 }
 
 function renderPage(page) {
@@ -2342,15 +2307,6 @@ function renderPage(page) {
         });
         if (stockData.length > 0 && fst) refreshAllStocks();
       }
-      break;
-    case 'stock':
-      renderStocks();
-      // Auto-refresh quotes if data is missing or stale (>60s)
-      const stale = stockData.some(s => {
-        const q = stockQuotes[s.id];
-        return !q || !q.price || (Date.now() - (q.ts || 0) > 60000);
-      });
-      if (stockData.length > 0 && stale) refreshAllStocks();
       break;
     case 'media': renderMedia(); break;
     case 'daily': renderDaily(); break;
@@ -3733,9 +3689,17 @@ function getBalanceOnDate(acc, date) {
 
 // ===== Render Account Section =====
 function renderAccounts() {
-  // Upsert today's snapshot for invest accounts (drives the daily trend charts)
-  accountData.filter(a => a.category === 'invest').forEach(acc => upsertInvestSnapshot(acc));
-  saveAccounts();
+  // Upsert today's snapshot for invest accounts (local persist only — no cloud
+  // push here, otherwise every render triggers a push→realtime→pull loop)
+  let snapChanged = false;
+  accountData.filter(a => a.category === 'invest').forEach(acc => {
+    const snap = acc.snapshots || [];
+    const prev = snap.length ? snap[snap.length - 1].valueCNY : null;
+    upsertInvestSnapshot(acc);
+    const cur = snap.length ? snap[snap.length - 1].valueCNY : null;
+    if (prev !== cur) snapChanged = true;
+  });
+  if (snapChanged) DB.set('accounts', accountData);
   const colors = getChartColors();
   const chartColors = [colors.primary, colors.success, colors.warning, colors.info, colors.purple, colors.danger, '#fb923c','#22d3ee','#a78bfa','#f472b6','#34d399','#fbbf24'];
 
@@ -3924,7 +3888,7 @@ function renderAccounts() {
       <td style="text-align:right;white-space:nowrap">
         ${!isInvest ? `<button class="btn-icon" onclick="openBalanceModalForAccount('${acc.id}')" title="记录余额">💰</button>` : ''}
         ${!isInvest ? `<button class="btn-icon" onclick="openBalanceHistory('${acc.id}')" title="余额记录">📋</button>` : ''}
-        <button class="btn-icon" onclick="openAccountModal('${acc.id}')" title="编辑">✏️</button>
+        ${isInvest ? `<button class="btn btn-primary btn-sm" onclick="openAccountModal('${acc.id}')">编辑持仓</button>` : `<button class="btn btn-ghost btn-sm" onclick="openAccountModal('${acc.id}')">编辑</button>`}
         <button class="btn-icon" onclick="deleteAccount('${acc.id}')" title="删除">🗑️</button>
       </td>
     </tr>`;
@@ -4111,6 +4075,7 @@ function renderSingleAccountChart() {
 
 function renderFinance() {
   renderAccounts();
+  renderStocks();
 }
 
 /* ============================================================
@@ -6635,7 +6600,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816g';
+  b.textContent = 'build 20260816h';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
