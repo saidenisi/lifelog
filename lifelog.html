@@ -3102,29 +3102,38 @@ function investInitialCapitalCNY(acc) {
 // Unit-net-value (share-based) return: deposits/withdrawals change shares only,
 // market moves change NAV. Rate = current NAV - 1 (initial NAV = 1).
 function investNavResult(acc) {
-  const principal = (acc.principal > 0) ? acc.principal : investInitialCapitalCNY(acc);
-  if (!principal) return { nav: 0, shares: 0, rate: null };
-  let shares = principal;
-  let nav = 1;
+  // Fund-style unit-net-value: earliest market-value record is the baseline
+  // (NAV=1, return 0%). Deposits/withdrawals only change shares; market moves
+  // change NAV. Uses balance history + snapshots as market-value records.
   const events = [];
-  (acc.snapshots || []).forEach(s => events.push({ date: s.date, kind: 'snap', valueCNY: s.valueCNY }));
+  (acc.balances || []).forEach(b => events.push({ date: b.date, kind: 'mv', valueCNY: convertToCNY(b.amount, acc.currency) }));
+  (acc.snapshots || []).forEach(s => events.push({ date: s.date, kind: 'mv', valueCNY: s.valueCNY }));
   (acc.transactions || []).forEach(t => events.push({
     date: t.date, kind: t.type === 'withdraw' ? 'withdraw' : 'deposit',
     amount: convertToCNY(t.amount || 0, t.currency || acc.currency || 'CNY')
   }));
-  const kindOrder = { deposit: 0, withdraw: 0, snap: 1 };
+  if (events.length === 0) return { nav: 0, shares: 0, rate: null };
+  const kindOrder = { deposit: 0, withdraw: 0, mv: 1 };
   events.sort((a, b) => a.date === b.date ? kindOrder[a.kind] - kindOrder[b.kind] : a.date.localeCompare(b.date));
+
+  let shares = null;
+  let nav = 1;
   for (const ev of events) {
-    if (ev.kind === 'snap') {
-      if (shares > 0) nav = ev.valueCNY / shares;
+    if (ev.kind === 'mv') {
+      if (shares == null) { shares = ev.valueCNY; nav = 1; }
+      else if (shares > 0) nav = ev.valueCNY / shares;
     } else if (ev.kind === 'deposit') {
+      if (shares == null) shares = 0;
       if (nav > 0) shares += ev.amount / nav;
     } else if (ev.kind === 'withdraw') {
+      if (shares == null) shares = 0;
       if (nav > 0) shares -= ev.amount / nav;
     }
   }
-  const finalNav = shares > 0 ? investAccountMarketValueCNY(acc) / shares : 0;
-  return { nav: finalNav, shares, rate: finalNav - 1 };
+  // Current market value (cash + holdings + live stock quotes)
+  const curMv = investAccountMarketValueCNY(acc);
+  if (shares != null && shares > 0 && curMv > 0) nav = curMv / shares;
+  return { nav, shares, rate: shares != null ? nav - 1 : null };
 }
 function investAccountReturn(acc) {
   return investNavResult(acc).rate;
@@ -3167,6 +3176,57 @@ function investValueOnDate(acc, date) {
   if (snap != null) return snap;
   const bal = getBalanceOnDate(acc, date);
   return bal != null ? convertToCNY(bal, acc.currency) : null;
+}
+
+// Build whole-portfolio fund-style (unit NAV) cumulative return series, aligned
+// to the given targetDates. The earliest market-value date is the baseline
+// (NAV=1 → return 0%). Deposits/withdrawals only change "shares" (do NOT move
+// NAV); only market-value moves change NAV. Returns an array of percentages.
+function buildInvestReturnCurve(investAccs, targetDates) {
+  const sortedDates = [...targetDates].sort();
+
+  // merge all deposits/withdrawals across invest accounts
+  const txs = [];
+  investAccs.forEach(a => {
+    (a.transactions || []).forEach(t => {
+      txs.push({
+        date: t.date,
+        kind: t.type === 'withdraw' ? 'withdraw' : 'deposit',
+        amount: convertToCNY(t.amount || 0, t.currency || a.currency || 'CNY')
+      });
+    });
+  });
+  txs.sort((x, y) => x.date.localeCompare(y.date));
+
+  let shares = null;
+  let nav = 1;
+  const data = [];
+
+  for (const d of sortedDates) {
+    // 1. apply same-day transactions first (share adjustment at previous NAV)
+    txs.filter(t => t.date === d).forEach(t => {
+      const delta = t.kind === 'withdraw' ? -t.amount : t.amount;
+      if (shares == null) shares = delta;
+      else if (nav > 0) shares += delta / nav;
+    });
+
+    // 2. update NAV from market value if any account has a value on this date
+    const hasMv = investAccs.some(a => investValueOnDate(a, d) != null);
+    if (hasMv) {
+      let mv = 0;
+      investAccs.forEach(a => { const v = investValueOnDate(a, d); if (v != null) mv += v; });
+      if (shares == null) {
+        shares = mv;   // baseline date → NAV = 1, return = 0%
+        nav = 1;
+      } else if (shares > 0) {
+        nav = mv / shares;
+      }
+      data.push((nav - 1) * 100);
+    } else {
+      data.push(null);
+    }
+  }
+  return data;
 }
 
 // Currency display config
@@ -3854,6 +3914,7 @@ function renderAccounts() {
   investAccs.forEach(a => {
     (a.snapshots || []).forEach(s => investDates.add(s.date));
     (a.balances || []).forEach(b => investDates.add(b.date));
+    (a.transactions || []).forEach(t => investDates.add(t.date));
   });
   investDates.add(todayStr());
   const investSorted = [...investDates].sort();
@@ -3862,10 +3923,7 @@ function renderAccounts() {
     investAccs.forEach(a => { const v = investValueOnDate(a, d); if (v != null) sum = (sum || 0) + v; });
     return sum;
   });
-  const activePrincipalCNY = investAccs.reduce((s, a) => s + investInitialCapitalCNY(a), 0);
-  const returnData = activePrincipalCNY > 0
-    ? investData.map(v => (v == null ? null : (v / activePrincipalCNY - 1) * 100))
-    : [];
+  const returnData = buildInvestReturnCurve(investAccs, investSorted);
   destroyChart('investChart');
   if (document.getElementById('investChart')) {
     chartInstances.investChart = new Chart(document.getElementById('investChart'), {
@@ -6753,7 +6811,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816m';
+  b.textContent = 'build 20260816n';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
