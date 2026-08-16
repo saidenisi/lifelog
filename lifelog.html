@@ -224,7 +224,8 @@ body{
   flex:1;
   margin-left:var(--sidebar-w);
   padding:24px 32px 80px;
-  max-width:1400px;
+  max-width:min(1400px, calc(100vw - var(--sidebar-w)));
+  min-width:0;
   transition:margin .3s;
 }
 
@@ -1171,16 +1172,6 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
       </div>
 
-      <!-- ===== Active investment cumulative return (whole portfolio) ===== -->
-      <div class="card mb-16">
-        <div class="card-header">
-          <div class="card-title">📈 主动投资累计收益率（整体）</div>
-        </div>
-        <div class="card-body">
-          <div class="chart-container"><canvas id="investReturnChart"></canvas></div>
-        </div>
-      </div>
-
       <!-- ===== Account Assets Section ===== -->
       <div class="stat-grid">
         <div class="stat-card finance">
@@ -1205,7 +1196,7 @@ tbody tr:hover{background:var(--surface-hover)}
 
       <div class="card mb-16">
         <div class="card-header">
-          <div class="card-title">📈 主动投资市值趋势（每日市值）</div>
+          <div class="card-title">📈 主动投资趋势（左轴市值 · 右轴累计收益率）</div>
         </div>
         <div class="card-body">
           <div class="chart-container"><canvas id="investChart"></canvas></div>
@@ -3792,7 +3783,7 @@ function renderAccounts() {
   const allDates = new Set();
   chartAccounts.forEach(acc => {
     (acc.snapshots || []).forEach(s => allDates.add(s.date));
-    acc.balances.forEach(b => allDates.add(b.date));
+    (acc.balances || []).forEach(b => allDates.add(b.date));
   });
   allDates.add(todayStr());
   const sortedDates = [...allDates].sort();
@@ -3857,7 +3848,7 @@ function renderAccounts() {
     }
   });
 
-  // ===== Financial investment total (daily market value) =====
+  // ===== Active investment trend (dual axis: market value + cumulative return) =====
   const investAccs = activeAccounts.filter(a => a.category === 'invest');
   const investDates = new Set();
   investAccs.forEach(a => {
@@ -3871,75 +3862,74 @@ function renderAccounts() {
     investAccs.forEach(a => { const v = investValueOnDate(a, d); if (v != null) sum = (sum || 0) + v; });
     return sum;
   });
+  const activePrincipalCNY = investAccs.reduce((s, a) => s + investInitialCapitalCNY(a), 0);
+  const returnData = activePrincipalCNY > 0
+    ? investData.map(v => (v == null ? null : (v / activePrincipalCNY - 1) * 100))
+    : [];
   destroyChart('investChart');
   if (document.getElementById('investChart')) {
     chartInstances.investChart = new Chart(document.getElementById('investChart'), {
       type: 'line',
       data: {
         labels: investSorted.map(fmtDate),
-        datasets: [{
-          label: '金融投资总额',
-          data: investData,
-          borderColor: colors.primary,
-          backgroundColor: colors.primary + '20',
-          fill: true,
-          tension: 0.3,
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 5,
-          spanGaps: true
-        }]
+        datasets: [
+          {
+            label: '市值',
+            data: investData,
+            yAxisID: 'y',
+            borderColor: colors.primary,
+            backgroundColor: colors.primary + '20',
+            fill: true,
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 2,
+            pointHoverRadius: 5,
+            spanGaps: true
+          },
+          {
+            label: '累计收益率',
+            data: returnData,
+            yAxisID: 'y1',
+            borderColor: colors.danger,
+            backgroundColor: 'transparent',
+            fill: false,
+            tension: 0.3,
+            borderWidth: 1.5,
+            borderDash: [5, 4],
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            spanGaps: true
+          }
+        ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: ctx => '金融投资总额: ' + fmtMoney(ctx.parsed.y) } }
+          legend: { display: true, position: 'top', labels: { color: colors.text, font: { size: 11 }, boxWidth: 12, padding: 8 } },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                if (ctx.dataset.yAxisID === 'y1') {
+                  return '累计收益率: ' + (ctx.parsed.y != null ? ctx.parsed.y.toFixed(2) + '%' : '—');
+                }
+                return '市值: ' + fmtMoney(ctx.parsed.y);
+              }
+            }
+          }
         },
         scales: {
-          y: { grid: { color: colors.grid }, ticks: { color: colors.text, callback: v => '¥' + (v / 10000).toFixed(1) + 'w' } },
-          x: { grid: { display: false }, ticks: { color: colors.text, maxRotation: 45 } }
-        }
-      }
-    });
-  }
-
-  // ===== Active investment cumulative return (whole portfolio) =====
-  const activePrincipalCNY = investAccs.reduce((s, a) => s + investInitialCapitalCNY(a), 0);
-  const returnData = activePrincipalCNY > 0
-    ? investData.map(v => (v == null ? null : (v / activePrincipalCNY - 1) * 100))
-    : [];
-  destroyChart('investReturnChart');
-  if (document.getElementById('investReturnChart')) {
-    chartInstances.investReturnChart = new Chart(document.getElementById('investReturnChart'), {
-      type: 'line',
-      data: {
-        labels: investSorted.map(fmtDate),
-        datasets: [{
-          label: '累计收益率',
-          data: returnData,
-          borderColor: colors.danger,
-          backgroundColor: colors.danger + '20',
-          fill: true,
-          tension: 0.3,
-          borderWidth: 2,
-          pointRadius: 2,
-          pointHoverRadius: 5,
-          spanGaps: true
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: ctx => '累计收益率: ' + (ctx.parsed.y != null ? ctx.parsed.y.toFixed(2) + '%' : '—') } }
-        },
-        scales: {
-          y: { grid: { color: colors.grid }, ticks: { color: colors.text, callback: v => v.toFixed(1) + '%' } },
+          y: {
+            position: 'left',
+            grid: { color: colors.grid },
+            ticks: { color: colors.text, callback: v => '¥' + (v / 10000).toFixed(1) + 'w' }
+          },
+          y1: {
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            ticks: { color: colors.danger, callback: v => v.toFixed(1) + '%' }
+          },
           x: { grid: { display: false }, ticks: { color: colors.text, maxRotation: 45 } }
         }
       }
@@ -4083,13 +4073,13 @@ function renderPassiveInvestment(passiveAccounts, passiveTotalCNY) {
     wrap.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-icon">🏦</div><p>暂无被动投资账户</p></div>';
     return;
   }
-  let html = '<table><thead><tr><th>账户</th><th>明细</th><th style="text-align:right">折合人民币</th></tr></thead><tbody>';
+  let html = '<table style="min-width:0"><thead><tr><th>账户</th><th>明细</th><th style="text-align:right">折合人民币</th></tr></thead><tbody>';
   passiveAccounts.forEach(a => {
     const cny = getAccountBalanceCNY(a);
     let detail = '';
     const hs = a.holdings || [];
     if (hs.length) {
-      detail = hs.map(h => `${h.name} ${fmtCurrency(h.quantity || 0, h.currency)}`).join('　·　');
+      detail = hs.map(h => `<div style="white-space:nowrap">${h.name} ${fmtCurrency(h.quantity || 0, h.currency)}</div>`).join('');
     } else {
       const latest = getLatestBalance(a);
       detail = latest ? `余额记录于 ${fmtDate(latest.date)}` : '—';
@@ -4175,7 +4165,7 @@ function renderSingleAccountChart() {
   const allDates = new Set();
   accountData.forEach(a => {
     (a.snapshots || []).forEach(s => allDates.add(s.date));
-    a.balances.forEach(b => allDates.add(b.date));
+    (a.balances || []).forEach(b => allDates.add(b.date));
   });
   allDates.add(todayStr());
   const sortedDates = [...allDates].sort();
@@ -5984,7 +5974,7 @@ function exportAccountCSV() {
   if (!accountData.length) return toast('没有账户可导出');
   const rows = [];
   accountData.forEach(acc => {
-    acc.balances.forEach(b => {
+    (acc.balances || []).forEach(b => {
       rows.push([b.date, acc.name, acc.currency, b.amount, getRate(acc.currency).toFixed(4), convertToCNY(b.amount, acc.currency).toFixed(2)]);
     });
   });
@@ -6461,9 +6451,9 @@ function renderStocks() {
     }
     return;
   }
-  let html = `<table style="min-width:880px"><thead><tr>
-    <th style="width:36px"></th><th>股票</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th>
-    <th>MA30</th><th>MA60</th><th>MA120</th><th>日线</th><th>信号</th><th style="text-align:right">操作</th>
+  let html = `<table style="min-width:700px"><thead><tr>
+    <th style="width:30px"></th><th>股票</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th>
+    <th>均线</th><th>信号</th><th style="text-align:right">操作</th>
   </tr></thead><tbody>`;
   filteredStocks().forEach((s, idx) => {
     const q = stockQuotes[s.id];
@@ -6473,11 +6463,15 @@ function renderStocks() {
     const pnlVal = (price != null && s.costPrice) ? ((price - s.costPrice) * s.quantity) : null;
     const isManual = q && q.error && q.error.includes('手动现价');
 
-    // MA cells
-    function maCell(maVal) {
-      if (!hasPrice || maVal == null) return '<td class="text-muted">—</td>';
-      const isUp = price >= maVal;
-      return `<td class="${isUp ? 'ma-up' : 'ma-down'}">${maVal.toFixed(2)}<span style="font-size:10px">${isUp ? ' ↑' : ' ↓'}</span></td>`;
+    // MA cells (merged into a single "均线" column, two per line)
+    function maCell() {
+      if (!hasPrice) return '<td class="text-muted">—</td>';
+      const mk = (label, val) => {
+        if (val == null) return `<span class="text-muted">${label}—</span>`;
+        const up = price >= val;
+        return `<span>${label} <span class="${up ? 'ma-up' : 'ma-down'}">${val.toFixed(2)}${up ? '↑' : '↓'}</span></span>`;
+      };
+      return `<td style="font-size:10px;line-height:1.7;white-space:nowrap">${mk('30分', q.ma30)} ${mk('60分', q.ma60)}<br>${mk('120分', q.ma120)} ${mk('日线', q.maDaily)}</td>`;
     }
 
     // Signal cell
@@ -6530,10 +6524,7 @@ function renderStocks() {
       <td>${s.costPrice ? s.costPrice.toFixed(2) : '—'}</td>
       <td style="font-weight:600">${price != null ? price.toFixed(2) + (isManual ? ' <span class="badge badge-warning" style="font-size:9px;padding:1px 4px">手动</span>' : '') : '<span class="text-muted">—</span>'}</td>
       ${pnlHtml}
-      ${maCell(hasPrice ? q.ma30 : null)}
-      ${maCell(hasPrice ? q.ma60 : null)}
-      ${maCell(hasPrice ? q.ma120 : null)}
-      ${maCell(hasPrice ? q.maDaily : null)}
+      ${maCell()}
       ${signalHtml}
       <td style="text-align:right;white-space:nowrap">
         <button class="btn-icon" onclick="refreshSingleStock('${s.id}')" title="刷新">🔄</button>
@@ -6567,7 +6558,8 @@ function renderStocks() {
     <td colspan="2"></td>
     <td style="font-weight:700">¥${totalValue.toFixed(0)}</td>
     <td style="font-weight:700;color:${pnlColor}">${pnlSign}¥${totalPnl.toFixed(0)}<br><span style="font-size:11px;font-weight:400">${pnlSign}${totalPnlPct.toFixed(1)}%</span></td>
-    <td colspan="5" style="font-size:11px;color:var(--text-muted)">可用资金 ¥${totalCash.toFixed(0)} ｜ 总资金 ¥${totalCapital.toFixed(0)}<span style="opacity:.65">（已按汇率折人民币）</span></td>
+    <td colspan="2" style="font-size:11px;color:var(--text-muted)">可用资金 ¥${totalCash.toFixed(0)} ｜ 总资金 ¥${totalCapital.toFixed(0)}</td>
+    <td></td>
   </tr>`;
   html += '</tbody></table>';
   wrap.innerHTML = html;
@@ -6761,7 +6753,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816l';
+  b.textContent = 'build 20260816m';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
