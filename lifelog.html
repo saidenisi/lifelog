@@ -1138,7 +1138,7 @@ tbody tr:hover{background:var(--surface-hover)}
       <div class="page-header">
         <div>
           <div class="page-title">资产情况</div>
-          <div class="page-subtitle">金融投资 · 银行账户 · 股权投资 · 保险 · 信托 · 房产投资</div>
+          <div class="page-subtitle">主动投资 · 被动投资 · 股权投资 · 保险 · 信托 · 房产投资</div>
         </div>
         <div style="display:flex;gap:10px;align-items:center">
           <button class="mobile-menu-btn" id="mobileMenuBtn4">☰</button>
@@ -1147,12 +1147,12 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
       </div>
 
-      <!-- ===== Stock holdings (part of financial investment) ===== -->
+      <!-- ===== Active investment (stocks + crypto + securities) ===== -->
       <div class="card mb-16">
         <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div class="card-title">📈 股票持仓</div>
+          <div class="card-title">📈 主动投资</div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span class="text-muted" style="font-size:12px">股票账户：</span>
+            <span class="text-muted" style="font-size:12px">主动投资账户：</span>
             <select class="form-select" id="stockAccountFilter" onchange="onStockAccountFilter()" style="min-width:140px;font-size:13px;padding:6px 10px">
               <option value="all">全部账户</option>
             </select>
@@ -1168,6 +1168,16 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
         <div class="table-wrap" id="stockTableWrap">
           <!-- table injected by JS -->
+        </div>
+      </div>
+
+      <!-- ===== Active investment cumulative return (whole portfolio) ===== -->
+      <div class="card mb-16">
+        <div class="card-header">
+          <div class="card-title">📈 主动投资累计收益率（整体）</div>
+        </div>
+        <div class="card-body">
+          <div class="chart-container"><canvas id="investReturnChart"></canvas></div>
         </div>
       </div>
 
@@ -1195,10 +1205,21 @@ tbody tr:hover{background:var(--surface-hover)}
 
       <div class="card mb-16">
         <div class="card-header">
-          <div class="card-title">📈 金融投资总额（每日市值）</div>
+          <div class="card-title">📈 主动投资市值趋势（每日市值）</div>
         </div>
         <div class="card-body">
           <div class="chart-container"><canvas id="investChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ===== Passive investment (banks + alipay, balance only) ===== -->
+      <div class="card mb-16">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div class="card-title">🏦 被动投资</div>
+          <div style="font-size:13px;color:var(--text-muted)">明细与总余额</div>
+        </div>
+        <div class="table-wrap" id="passiveTableWrap">
+          <!-- table injected by JS -->
         </div>
       </div>
 
@@ -2864,8 +2885,8 @@ migrateStocksToAccounts();
 
 // ===== Asset categories (6 types) =====
 const ASSET_CATEGORIES = {
-  invest:     { label: '金融投资', order: 1 },
-  bank:       { label: '银行账户', order: 2 },
+  invest:     { label: '主动投资', order: 1 },
+  bank:       { label: '被动投资', order: 2 },
   equity:     { label: '股权投资', order: 3 },
   insurance:  { label: '保险',     order: 4 },
   trust:      { label: '信托',     order: 5 },
@@ -2879,7 +2900,8 @@ function guessAssetCategory(name, type) {
   if (/信托/.test(name)) return 'trust';
   if (/房产|地产|住房/.test(name)) return 'realestate';
   if (/股权/.test(name)) return 'equity';
-  if (/东方财富|凯基|招银|欧易|证券|股票|基金|理财|虚拟币/.test(name)) return 'invest';
+  if (/东方财富|凯基|招银|欧易|证券|股票|虚拟币/.test(name)) return 'invest';
+  if (/基金|理财/.test(name)) return 'bank';
   return 'bank';
 }
 
@@ -2977,6 +2999,21 @@ function migrateRemoveAutoSnapshots() {
   DB.set('migrated_no_autosnap', true);
 }
 migrateRemoveAutoSnapshots();
+
+// One-time migration: split financial/bank accounts into 主动投资 (invest) and
+// 被动投资 (bank). 支付宝理财 was auto-tagged "invest" earlier (name matched
+// 理财), but it is a passive product — move it to bank (its data is already
+// balance-based, so nothing is lost).
+function migrateActivePassiveSplit() {
+  if (DB.get('activePassiveSplit', false) === true) return;
+  let changed = false;
+  accountData.forEach(a => {
+    if (a && a.name === '支付宝理财' && a.category === 'invest') { a.category = 'bank'; changed = true; }
+  });
+  if (changed) DB.set('accounts', accountData);
+  DB.set('activePassiveSplit', true);
+}
+migrateActivePassiveSplit();
 
 // Merge src account into target (cash/holdings/transactions/principal/balances/snapshots)
 function mergeAccountInto(target, src) {
@@ -3740,6 +3777,8 @@ function renderAccounts() {
   // Calculate totals (active accounts only for main total)
   const totalCNY = activeAccounts.reduce((s, acc) => s + getAccountBalanceCNY(acc), 0);
   const totalExcludedCNY = excludedAccounts.reduce((s, acc) => s + getAccountBalanceCNY(acc), 0);
+  const passiveAccounts = activeAccounts.filter(a => a.category === 'bank');
+  const passiveTotalCNY = passiveAccounts.reduce((s, acc) => s + getAccountBalanceCNY(acc), 0);
   const allCurrencies = [...new Set(accountData.map(a => a.currency))];
 
   document.getElementById('accTotalCNY').textContent = fmtMoney(totalCNY);
@@ -3867,6 +3906,46 @@ function renderAccounts() {
     });
   }
 
+  // ===== Active investment cumulative return (whole portfolio) =====
+  const activePrincipalCNY = investAccs.reduce((s, a) => s + investInitialCapitalCNY(a), 0);
+  const returnData = activePrincipalCNY > 0
+    ? investData.map(v => (v == null ? null : (v / activePrincipalCNY - 1) * 100))
+    : [];
+  destroyChart('investReturnChart');
+  if (document.getElementById('investReturnChart')) {
+    chartInstances.investReturnChart = new Chart(document.getElementById('investReturnChart'), {
+      type: 'line',
+      data: {
+        labels: investSorted.map(fmtDate),
+        datasets: [{
+          label: '累计收益率',
+          data: returnData,
+          borderColor: colors.danger,
+          backgroundColor: colors.danger + '20',
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          spanGaps: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => '累计收益率: ' + (ctx.parsed.y != null ? ctx.parsed.y.toFixed(2) + '%' : '—') } }
+        },
+        scales: {
+          y: { grid: { color: colors.grid }, ticks: { color: colors.text, callback: v => v.toFixed(1) + '%' } },
+          x: { grid: { display: false }, ticks: { color: colors.text, maxRotation: 45 } }
+        }
+      }
+    });
+  }
+
   // ===== Single Account Trend Chart =====
   const singleSelect = document.getElementById('singleAccountSelect');
   const preferredAcc = activeAccounts.find(a => /东方财富|股票/.test(a.name)) || activeAccounts[0];
@@ -3943,16 +4022,19 @@ function renderAccounts() {
     <th style="width:30px"></th><th>账户</th><th>余额</th><th>折合人民币</th><th style="text-align:right">操作</th>
   </tr></thead><tbody>`;
 
-  activeAccounts.forEach((acc, idx) => {
-    html += buildAccountRow(acc, idx, activeAccounts, false);
+  // Main table shows active-investment + long-term assets only; passive (bank)
+  // accounts live in the separate "被动投资" card below.
+  const tableAccounts = activeAccounts.filter(a => a.category !== 'bank');
+  tableAccounts.forEach((acc, idx) => {
+    html += buildAccountRow(acc, idx, tableAccounts, false);
   });
 
-  // Total row for active accounts
+  // Total row for the accounts shown in this table (excludes passive investment)
   html += `<tr style="border-top:2px solid var(--border)">
     <td></td>
-    <td style="font-weight:700">流动资产合计</td>
+    <td style="font-weight:700">主动投资及长期资产合计</td>
     <td></td>
-    <td style="font-weight:700;color:var(--success)">${fmtMoney(totalCNY)}</td>
+    <td style="font-weight:700;color:var(--success)">${fmtMoney(totalCNY - passiveTotalCNY)}</td>
     <td></td>
   </tr>`;
 
@@ -3988,6 +4070,43 @@ function renderAccounts() {
   }
 
   document.getElementById('accountTableWrap').innerHTML = html;
+
+  // Render passive investment (bank + alipay) table — details + total only, no chart
+  renderPassiveInvestment(passiveAccounts, passiveTotalCNY);
+}
+
+// Passive investment table: banks + alipay, show breakdown + total balance (no chart)
+function renderPassiveInvestment(passiveAccounts, passiveTotalCNY) {
+  const wrap = document.getElementById('passiveTableWrap');
+  if (!wrap) return;
+  if (!passiveAccounts || passiveAccounts.length === 0) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-icon">🏦</div><p>暂无被动投资账户</p></div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>账户</th><th>明细</th><th style="text-align:right">折合人民币</th></tr></thead><tbody>';
+  passiveAccounts.forEach(a => {
+    const cny = getAccountBalanceCNY(a);
+    let detail = '';
+    const hs = a.holdings || [];
+    if (hs.length) {
+      detail = hs.map(h => `${h.name} ${fmtCurrency(h.quantity || 0, h.currency)}`).join('　·　');
+    } else {
+      const latest = getLatestBalance(a);
+      detail = latest ? `余额记录于 ${fmtDate(latest.date)}` : '—';
+    }
+    const curBadge = a.currency === 'CNY' ? 'badge-success' : 'badge-info';
+    html += `<tr>
+      <td style="white-space:nowrap"><span style="font-weight:600">${a.name}</span><span class="badge ${curBadge}" style="margin-left:4px">${a.currency}</span></td>
+      <td style="font-size:12px;color:var(--text-muted)">${detail}</td>
+      <td style="text-align:right;font-weight:700;white-space:nowrap">${fmtMoney(cny)}</td>
+    </tr>`;
+  });
+  html += `<tr style="border-top:2px solid var(--border)">
+    <td style="font-weight:700">被动投资总余额</td>
+    <td></td>
+    <td style="text-align:right;font-weight:700;color:var(--success);white-space:nowrap">${fmtMoney(passiveTotalCNY)}</td>
+  </tr></tbody></table>`;
+  wrap.innerHTML = html;
 }
 
 function autoExcludeLongTermAccounts() {
@@ -6642,7 +6761,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816k';
+  b.textContent = 'build 20260816l';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
