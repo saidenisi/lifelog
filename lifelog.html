@@ -1159,7 +1159,7 @@ tbody tr:hover{background:var(--surface-hover)}
             </select>
             <span id="stockAccountCashHint" class="text-muted" style="font-size:12px"></span>
             <button class="btn btn-ghost btn-sm" onclick="refreshAllStocks()">🔄 刷新行情</button>
-            <button class="btn btn-primary btn-sm" onclick="openStockModal()">📈 添加股票</button>
+            <button class="btn btn-primary btn-sm" onclick="openStockModal()">📈 调整主动投资产品</button>
           </div>
         </div>
         <div class="card-body" style="padding:12px 16px;background:var(--info-bg)">
@@ -1169,6 +1169,16 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
         <div class="table-wrap" id="stockTableWrap">
           <!-- table injected by JS -->
+        </div>
+      </div>
+
+      <!-- ===== Active investment trend (dual axis, right below active investment) ===== -->
+      <div class="card mb-16">
+        <div class="card-header">
+          <div class="card-title">📈 主动投资趋势（左轴市值 · 右轴累计收益率）</div>
+        </div>
+        <div class="card-body">
+          <div class="chart-container"><canvas id="investChart"></canvas></div>
         </div>
       </div>
 
@@ -1191,15 +1201,6 @@ tbody tr:hover{background:var(--surface-hover)}
           <div class="stat-label">汇率更新</div>
           <div class="stat-value" style="font-size:16px" id="accRateDate">未更新</div>
           <button class="btn btn-ghost btn-sm mt-8" onclick="refreshRates()" style="width:100%">🔄 刷新汇率</button>
-        </div>
-      </div>
-
-      <div class="card mb-16">
-        <div class="card-header">
-          <div class="card-title">📈 主动投资趋势（左轴市值 · 右轴累计收益率）</div>
-        </div>
-        <div class="card-body">
-          <div class="chart-container"><canvas id="investChart"></canvas></div>
         </div>
       </div>
 
@@ -1752,7 +1753,7 @@ tbody tr:hover{background:var(--surface-hover)}
 <div class="modal-overlay" id="stockModal">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title" id="stockModalTitle">添加股票</div>
+      <div class="modal-title" id="stockModalTitle">调整主动投资产品</div>
       <button class="btn-icon" onclick="closeModal('stockModal')">✕</button>
     </div>
     <div class="modal-body">
@@ -1947,7 +1948,7 @@ function fillStockAccountSelect(selectEl, selectedId) {
   if (!selectEl) return;
   const accs = stockAccounts();
   selectEl.innerHTML = accs.map(a => `<option value="${a.id}" ${a.id === selectedId ? 'selected' : ''}>${a.name}</option>`).join('');
-  if (!accs.length) selectEl.innerHTML = '<option value="">无股票账户（请先到「账户总览」添加股票账户）</option>';
+  if (!accs.length) selectEl.innerHTML = '<option value="">无主动投资账户（请先到「账户列表」添加）</option>';
 }
 function ensureDefaultStockAccount() {
   let acc = stockAccounts()[0];
@@ -3177,6 +3178,19 @@ function investValueOnDate(acc, date) {
   const bal = getBalanceOnDate(acc, date);
   return bal != null ? convertToCNY(bal, acc.currency) : null;
 }
+// Whole-portfolio market value (CNY) on a date. Today uses live market value
+// (cash + holdings + live quotes) so the chart's latest point matches the
+// account table's active-investment total; historical dates use fill-forward.
+function investTotalValueOnDate(investAccs, date) {
+  if (date === todayStr()) {
+    let sum = 0;
+    investAccs.forEach(a => { sum += investAccountMarketValueCNY(a); });
+    return sum;
+  }
+  let sum = null;
+  investAccs.forEach(a => { const v = investValueOnDate(a, date); if (v != null) sum = (sum || 0) + v; });
+  return sum;
+}
 
 // Build whole-portfolio fund-style (unit NAV) cumulative return series, aligned
 // to the given targetDates. The earliest market-value date is the baseline
@@ -3211,10 +3225,10 @@ function buildInvestReturnCurve(investAccs, targetDates) {
     });
 
     // 2. update NAV from market value if any account has a value on this date
-    const hasMv = investAccs.some(a => investValueOnDate(a, d) != null);
+    const isToday = d === todayStr();
+    const mv = investTotalValueOnDate(investAccs, d);
+    const hasMv = mv != null;
     if (hasMv) {
-      let mv = 0;
-      investAccs.forEach(a => { const v = investValueOnDate(a, d); if (v != null) mv += v; });
       if (shares == null) {
         shares = mv;   // baseline date → NAV = 1, return = 0%
         nav = 1;
@@ -3918,11 +3932,7 @@ function renderAccounts() {
   });
   investDates.add(todayStr());
   const investSorted = [...investDates].sort();
-  const investData = investSorted.map(d => {
-    let sum = null;
-    investAccs.forEach(a => { const v = investValueOnDate(a, d); if (v != null) sum = (sum || 0) + v; });
-    return sum;
-  });
+  const investData = investSorted.map(d => investTotalValueOnDate(investAccs, d));
   const returnData = buildInvestReturnCurve(investAccs, investSorted);
   destroyChart('investChart');
   if (document.getElementById('investChart')) {
@@ -6503,7 +6513,7 @@ function renderStocks() {
   const wrap = document.getElementById('stockTableWrap');
   if (filteredStocks().length === 0) {
     if (stockData.length === 0) {
-      wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><p>还没有持仓，添加你的第一只股票吧</p><button class="btn btn-primary" onclick="openStockModal()">📈 添加股票</button></div>`;
+      wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><p>还没有持仓，添加你的第一个主动投资产品吧</p><button class="btn btn-primary" onclick="openStockModal()">📈 调整主动投资产品</button></div>`;
     } else {
       wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><p>该账户暂无股票，可切换到「全部账户」或更换账户</p></div>`;
     }
@@ -6658,7 +6668,7 @@ function getStockSelection() {
 function openStockModal(id) {
   try {
   document.getElementById('stockId').value = id || '';
-  document.getElementById('stockModalTitle').textContent = id ? '编辑股票' : '添加股票';
+  document.getElementById('stockModalTitle').textContent = id ? '编辑主动投资产品' : '调整主动投资产品';
   document.getElementById('stockSearchInput').value = '';
   document.getElementById('stockSearchDropdown').style.display = 'none';
   document.getElementById('stockSelectedInfo').style.display = 'none';
@@ -6811,7 +6821,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816n';
+  b.textContent = 'build 20260816o';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
