@@ -1244,7 +1244,7 @@ tbody tr:hover{background:var(--surface-hover)}
 
       <div class="card mb-16">
         <div class="card-header">
-          <div class="card-title">🏦 账户列表</div>
+          <div class="card-title">📦 长期不动资产</div>
           <button class="btn btn-ghost btn-sm" onclick="exportAccountCSV()">📥 导出CSV</button>
         </div>
         <div class="table-wrap" id="accountTableWrap">
@@ -4067,42 +4067,12 @@ function renderAccounts() {
     </tr>`;
   }
 
-  // One-click helper: detect primary/company equity accounts not yet excluded
-  const suggestPattern = /^(一级股权|公司股权)/;
-  const suggestExcluded = accountData.filter(a => !a.excluded && suggestPattern.test(a.name));
-
+  // Account list now shows only the "长期不动资产" (excluded) section — the
+  // active-investment accounts live in the 主动投资 card, passive accounts in
+  // the 被动投资 card. No main table here anymore.
   let html = '';
-  if (suggestExcluded.length > 0) {
-    html += `<div style="margin-bottom:12px;padding:10px 12px;background:var(--info-bg);border:1px solid var(--info);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px">
-      <span style="font-size:13px;color:var(--info)">检测到 ${suggestExcluded.length} 个疑似长期不动的股权账户，是否折叠？</span>
-      <button class="btn btn-ghost btn-sm" onclick="autoExcludeLongTermAccounts()" style="white-space:nowrap">📦 一键折叠</button>
-    </div>`;
-  }
-
-  html += `<table><thead><tr>
-    <th style="width:30px"></th><th>账户</th><th>余额</th><th>折合人民币</th><th style="text-align:right">操作</th>
-  </tr></thead><tbody>`;
-
-  // Main table shows active-investment + long-term assets only; passive (bank)
-  // accounts live in the separate "被动投资" card below.
-  const tableAccounts = activeAccounts.filter(a => a.category !== 'bank');
-  tableAccounts.forEach((acc, idx) => {
-    html += buildAccountRow(acc, idx, tableAccounts, false);
-  });
-
-  // Total row for the accounts shown in this table (excludes passive investment)
-  html += `<tr style="border-top:2px solid var(--border)">
-    <td></td>
-    <td style="font-weight:700">主动投资及长期资产合计</td>
-    <td></td>
-    <td style="font-weight:700;color:var(--success)">${fmtMoney(totalCNY - passiveTotalCNY)}</td>
-    <td></td>
-  </tr>`;
-
-  // Collapsible excluded section
   if (excludedAccounts.length > 0) {
-    html += `</tbody></table>`;
-    html += `<div class="card mt-16" style="background:var(--surface-hover);border:1px solid var(--border)">
+    html += `<div class="card" style="background:var(--surface-hover);border:1px solid var(--border)">
       <div class="card-header" style="cursor:pointer;padding:12px 16px" onclick="toggleExcludedAccounts()">
         <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
           <div>
@@ -4111,11 +4081,11 @@ function renderAccounts() {
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <span style="font-weight:700;color:var(--warning)">${fmtMoney(totalExcludedCNY)}</span>
-            <span id="excludedToggleIcon" style="font-size:12px;transition:transform .2s">▼</span>
+            <span id="excludedToggleIcon" style="font-size:12px;transition:transform .2s">▲</span>
           </div>
         </div>
       </div>
-      <div id="excludedAccountsBody" class="card-body" style="display:none;padding:0">
+      <div id="excludedAccountsBody" class="card-body" style="padding:0">
         <table><tbody>`;
     excludedAccounts.forEach((acc, idx) => {
       html += buildAccountRow(acc, idx, excludedAccounts, true);
@@ -4128,6 +4098,8 @@ function renderAccounts() {
       <td></td>
     </tr>`;
     html += `</tbody></table></div></div>`;
+  } else {
+    html = '<div class="empty-state" style="padding:24px"><div class="empty-icon">📦</div><p>暂无长期不动资产</p></div>';
   }
 
   document.getElementById('accountTableWrap').innerHTML = html;
@@ -4223,10 +4195,10 @@ function toggleExcludedAccounts() {
   const icon = document.getElementById('excludedToggleIcon');
   if (body.style.display === 'none') {
     body.style.display = 'block';
-    icon.style.transform = 'rotate(180deg)';
+    icon.textContent = '▲';
   } else {
     body.style.display = 'none';
-    icon.style.transform = 'rotate(0deg)';
+    icon.textContent = '▼';
   }
 }
 
@@ -6857,7 +6829,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816p';
+  b.textContent = 'build 20260816q';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
