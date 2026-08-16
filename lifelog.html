@@ -3093,6 +3093,10 @@ function getAccountBalanceCNY(acc) {
 function upsertInvestSnapshot(acc) {
   const today = todayStr();
   const value = investAccountMarketValueCNY(acc);
+  // Skip a 0 snapshot when the account has holdings/stocks but quotes not yet
+  // loaded — otherwise it would erase the inherited historical value.
+  const hasAssets = (acc.holdings || []).length > 0 || stocksOfAccount(acc.id).length > 0;
+  if (value === 0 && hasAssets) return;
   const snap = acc.snapshots || (acc.snapshots = []);
   const idx = snap.findIndex(s => s.date === today);
   if (idx >= 0) snap[idx].valueCNY = value;
@@ -3108,6 +3112,14 @@ function snapshotValueOnDate(acc, date) {
     else break;
   }
   return result;
+}
+// Historical value (CNY) of an invest account on a date: snapshot first,
+// then fall back to legacy balance history so old records still show.
+function investValueOnDate(acc, date) {
+  const snap = snapshotValueOnDate(acc, date);
+  if (snap != null) return snap;
+  const bal = getBalanceOnDate(acc, date);
+  return bal != null ? convertToCNY(bal, acc.currency) : null;
 }
 
 // Currency display config
@@ -3718,12 +3730,12 @@ function renderAccounts() {
   document.getElementById('accCurrencyList').textContent = allCurrencies.join(' / ') || '—';
   document.getElementById('accRateDate').textContent = exchangeRates.date ? exchangeRates.date : '未更新';
 
-  // ===== Total asset trend (stacked area, incl. invest via snapshots) =====
+  // ===== Total asset trend (stacked area, incl. invest via snapshots + balances) =====
   const chartAccounts = activeAccounts;
   const allDates = new Set();
   chartAccounts.forEach(acc => {
-    if (acc.category === 'invest') (acc.snapshots || []).forEach(s => allDates.add(s.date));
-    else acc.balances.forEach(b => allDates.add(b.date));
+    (acc.snapshots || []).forEach(s => allDates.add(s.date));
+    acc.balances.forEach(b => allDates.add(b.date));
   });
   allDates.add(todayStr());
   const sortedDates = [...allDates].sort();
@@ -3736,7 +3748,7 @@ function renderAccounts() {
     return {
       label: acc.name,
       data: sortedDates.map(d => {
-        if (isInv) return snapshotValueOnDate(acc, d);
+        if (isInv) return investValueOnDate(acc, d);
         const bal = getBalanceOnDate(acc, d);
         return bal != null ? convertToCNY(bal, acc.currency) : null;
       }),
@@ -3791,12 +3803,15 @@ function renderAccounts() {
   // ===== Financial investment total (daily market value) =====
   const investAccs = activeAccounts.filter(a => a.category === 'invest');
   const investDates = new Set();
-  investAccs.forEach(a => (a.snapshots || []).forEach(s => investDates.add(s.date)));
+  investAccs.forEach(a => {
+    (a.snapshots || []).forEach(s => investDates.add(s.date));
+    (a.balances || []).forEach(b => investDates.add(b.date));
+  });
   investDates.add(todayStr());
   const investSorted = [...investDates].sort();
   const investData = investSorted.map(d => {
     let sum = null;
-    investAccs.forEach(a => { const v = snapshotValueOnDate(a, d); if (v != null) sum = (sum || 0) + v; });
+    investAccs.forEach(a => { const v = investValueOnDate(a, d); if (v != null) sum = (sum || 0) + v; });
     return sum;
   });
   destroyChart('investChart');
@@ -4022,15 +4037,15 @@ function renderSingleAccountChart() {
   const colors = getChartColors();
   const allDates = new Set();
   accountData.forEach(a => {
-    if (a.category === 'invest') (a.snapshots || []).forEach(s => allDates.add(s.date));
-    else a.balances.forEach(b => allDates.add(b.date));
+    (a.snapshots || []).forEach(s => allDates.add(s.date));
+    a.balances.forEach(b => allDates.add(b.date));
   });
   allDates.add(todayStr());
   const sortedDates = [...allDates].sort();
 
   const isStock = acc.category === 'invest';
   const data = sortedDates.map(d => {
-    if (isStock) return snapshotValueOnDate(acc, d);
+    if (isStock) return investValueOnDate(acc, d);
     const bal = getBalanceOnDate(acc, d);
     return bal != null ? bal : null;
   });
@@ -6600,7 +6615,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816i';
+  b.textContent = 'build 20260816j';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
