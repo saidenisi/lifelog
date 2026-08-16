@@ -236,6 +236,16 @@ body{
 .page-title{font-size:26px;font-weight:800;letter-spacing:-.02em}
 .page-subtitle{font-size:14px;color:var(--text-muted);margin-top:2px}
 
+/* ===== Invest sub-tabs (accounts / stocks) ===== */
+.invest-tabs{display:flex;gap:6px;margin-bottom:16px}
+.invest-tab{
+  font-size:13px;padding:7px 18px;border-radius:9px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);
+  transition:all .15s;font-family:var(--font);
+}
+.invest-tab:hover{border-color:var(--primary);color:var(--primary)}
+.invest-tab.active{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:500}
+
 /* ===== Cards ===== */
 .card{
   background:var(--surface);
@@ -986,10 +996,7 @@ tbody tr:hover{background:var(--surface-hover)}
         <span class="icon">😴</span><span>睡眠追踪</span>
       </div>
       <div class="nav-item" data-page="finance">
-        <span class="icon">💰</span><span>财务投资</span>
-      </div>
-      <div class="nav-item" data-page="stock">
-        <span class="icon">📈</span><span>股票投资</span>
+        <span class="icon">💰</span><span>投资</span>
       </div>
       <div class="nav-item" data-page="media">
         <span class="icon">🎬</span><span>影音书演</span>
@@ -1130,14 +1137,18 @@ tbody tr:hover{background:var(--surface-hover)}
     <div class="page" id="page-finance">
       <div class="page-header">
         <div>
-          <div class="page-title">财务投资</div>
-          <div class="page-subtitle">理性投资，稳健收益</div>
+          <div class="page-title">投资</div>
+          <div class="page-subtitle">账户资产 · 股票交易</div>
         </div>
         <div style="display:flex;gap:10px;align-items:center">
           <button class="mobile-menu-btn" id="mobileMenuBtn4">☰</button>
           <button class="btn btn-ghost" onclick="openAccountModal()">🏦 添加账户</button>
           <button class="btn btn-primary" onclick="openBalanceModal()">💰 记录余额</button>
         </div>
+      </div>
+      <div class="invest-tabs">
+        <button class="invest-tab active" data-tab="accounts" onclick="switchInvestTab('accounts')">账户总览</button>
+        <button class="invest-tab" data-tab="stocks" onclick="switchInvestTab('stocks')">股票交易</button>
       </div>
 
       <!-- ===== Account Assets Section ===== -->
@@ -1202,13 +1213,27 @@ tbody tr:hover{background:var(--surface-hover)}
     <div class="page" id="page-stock">
       <div class="page-header">
         <div>
-          <div class="page-title">股票投资</div>
+          <div class="page-title">股票交易</div>
           <div class="page-subtitle">均线策略 · 自动监控买卖信号</div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;margin-left:auto;margin-right:auto">
           <button class="mobile-menu-btn" id="mobileMenuBtn6">☰</button>
           <button class="btn btn-ghost" onclick="refreshAllStocks()">🔄 刷新行情</button>
           <button class="btn btn-primary" onclick="openStockModal()">📈 添加股票</button>
+        </div>
+      </div>
+      <div class="invest-tabs">
+        <button class="invest-tab" data-tab="accounts" onclick="switchInvestTab('accounts')">账户总览</button>
+        <button class="invest-tab active" data-tab="stocks" onclick="switchInvestTab('stocks')">股票交易</button>
+      </div>
+
+      <div class="card mb-16">
+        <div class="card-body" style="padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span class="text-muted" style="font-size:13px">股票账户：</span>
+          <select class="form-select" id="stockAccountFilter" onchange="onStockAccountFilter()" style="min-width:160px;font-size:13px;padding:6px 10px">
+            <option value="all">全部账户</option>
+          </select>
+          <span id="stockAccountCashHint" class="text-muted" style="font-size:12px"></span>
         </div>
       </div>
 
@@ -1434,8 +1459,7 @@ tbody tr:hover{background:var(--surface-hover)}
 <div class="mobile-nav">
   <div class="mobile-nav-item" data-page="fitness"><span class="icon">💪</span>健身</div>
   <div class="mobile-nav-item" data-page="sleep"><span class="icon">😴</span>睡眠</div>
-  <div class="mobile-nav-item" data-page="finance"><span class="icon">💰</span>财务</div>
-  <div class="mobile-nav-item" data-page="stock"><span class="icon">📈</span>股票</div>
+  <div class="mobile-nav-item" data-page="finance"><span class="icon">💰</span>投资</div>
   <div class="mobile-nav-item" data-page="media"><span class="icon">🎬</span>影音</div>
   <div class="mobile-nav-item active" data-page="daily"><span class="icon">📅</span>每日</div>
   <div class="mobile-nav-item" data-page="todos"><span class="icon">✅</span>待办</div>
@@ -1590,6 +1614,20 @@ tbody tr:hover{background:var(--surface-hover)}
       </div>
       <div class="form-row">
         <div class="form-group">
+          <label class="form-label">账户类型</label>
+          <select class="form-select" id="accType" onchange="toggleAccType()">
+            <option value="cash">现金 / 储蓄</option>
+            <option value="fund">基金 / 其他</option>
+            <option value="stock">股票账户</option>
+          </select>
+        </div>
+        <div class="form-group" id="accAvailableCashGroup" style="display:none">
+          <label class="form-label">可用资金 <span class="text-muted" style="font-size:11px;font-weight:400">（账户现金，该账户所有股票共享）</span></label>
+          <input type="number" class="form-input" id="accAvailableCash" placeholder="如 50000" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
           <label class="form-label">币种</label>
           <select class="form-select" id="accCurrency">
             <option value="CNY">¥ 人民币 (CNY)</option>
@@ -1604,7 +1642,7 @@ tbody tr:hover{background:var(--surface-hover)}
             <option value="KRW">₩ 韩元 (KRW)</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" id="accCalcModeGroup">
           <label class="form-label">余额计算方式</label>
           <select class="form-select" id="accCalcMode" onchange="toggleAccCalcMode()">
             <option value="direct">直接填写余额</option>
@@ -1736,8 +1774,10 @@ tbody tr:hover{background:var(--surface-hover)}
         <input type="number" class="form-input" id="stockManualPrice" placeholder="留空则自动获取" step="0.001">
       </div>
       <div class="form-group">
-        <label class="form-label">可用资金 <span class="text-muted" style="font-size:11px;font-weight:400">（本只股票的可用现金）</span></label>
-        <input type="number" class="form-input" id="stockAvailableCash" placeholder="如 50000" step="0.01" min="0">
+        <label class="form-label">归属账户</label>
+        <select class="form-select" id="stockAccountId">
+          <!-- stock accounts injected by JS -->
+        </select>
       </div>
       <div class="form-group">
         <label class="form-label">备注（可选）</label>
@@ -1884,6 +1924,29 @@ stockData = stockData.map(s => {
 let stockQuotes = {}; // runtime cache: {stockId: {price, ma30, ma60, ma120, maDaily, signal, error, ts}}
 
 function saveStocks() { DB.set('stock', stockData); }
+
+// ===== Stock account linkage =====
+let activeStockAccountId = 'all'; // 'all' = show every account's stocks
+function stockAccounts() { return accountData.filter(a => a.type === 'stock'); }
+function filteredStocks() {
+  if (activeStockAccountId === 'all') return stockData;
+  return stockData.filter(s => s.accountId === activeStockAccountId);
+}
+function fillStockAccountSelect(selectEl, selectedId) {
+  if (!selectEl) return;
+  const accs = stockAccounts();
+  selectEl.innerHTML = accs.map(a => `<option value="${a.id}" ${a.id === selectedId ? 'selected' : ''}>${a.name}</option>`).join('');
+  if (!accs.length) selectEl.innerHTML = '<option value="">无股票账户（请先到「账户总览」添加股票账户）</option>';
+}
+function ensureDefaultStockAccount() {
+  let acc = stockAccounts()[0];
+  if (!acc) {
+    acc = { id: uid(), name: '股票账户', type: 'stock', currency: 'CNY', note: '', excluded: false, calcMode: 'direct', balances: [], holdings: [], availableCash: 0 };
+    accountData.push(acc);
+    saveAccounts();
+  }
+  return acc.id;
+}
 
 function saveAll() {
   DB.set('fitness', fitnessData);
@@ -2219,13 +2282,24 @@ function navigate(page) {
   document.getElementById('page-' + page).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.mobile-nav-item').forEach(n => n.classList.remove('active'));
-  document.querySelectorAll(`[data-page="${page}"]`).forEach(n => n.classList.add('active'));
+  // stock lives under the invest (finance) nav entry
+  const navPage = (page === 'stock') ? 'finance' : page;
+  document.querySelectorAll(`[data-page="${navPage}"]`).forEach(n => n.classList.add('active'));
   // Close mobile sidebar
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('active');
   // Render page data
   renderPage(page);
   window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// Switch between the two invest sub-views (accounts overview / stock trading)
+function switchInvestTab(tab) {
+  const page = tab === 'accounts' ? 'finance' : 'stock';
+  navigate(page);
+  document.querySelectorAll('.invest-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
 }
 
 function renderPage(page) {
@@ -2731,6 +2805,61 @@ function renderSleep() {
 let accountData = DB.get('accounts');
 let exchangeRates = DB.get('rates', { rates: {}, date: '' });
 
+// ===== Merge stocks into accounts (one-time migration) =====
+// Stocks stay in the flat stockData list but gain an accountId linking them
+// to a stock-type account, so the finance overview can aggregate market value.
+function migrateStocksToAccounts() {
+  if (DB.get('stockLinked', false)) return;
+  // Backup legacy flat stocks before linking (recoverable)
+  if (Array.isArray(stockData) && stockData.length > 0) {
+    DB.set('stock_backup', JSON.parse(JSON.stringify(stockData)));
+  }
+  // Ensure every account has a type (default cash)
+  accountData.forEach(a => { if (!a.type) a.type = 'cash'; });
+  // Find or create a default stock account
+  let targetAcc = accountData.find(a => a.type === 'stock');
+  if (!targetAcc) {
+    targetAcc = {
+      id: uid(), name: '股票账户', type: 'stock', currency: 'CNY',
+      note: '', excluded: false, calcMode: 'direct',
+      balances: [], holdings: [], availableCash: 0
+    };
+    accountData.push(targetAcc);
+  }
+  // Link each stock to the default account
+  stockData.forEach(s => { if (!s.accountId) s.accountId = targetAcc.id; });
+  DB.set('accounts', accountData);
+  DB.set('stock', stockData);
+  DB.set('stockLinked', true);
+}
+migrateStocksToAccounts();
+
+// Stocks belonging to a given account
+function stocksOfAccount(accId) {
+  return stockData.filter(s => s.accountId === accId);
+}
+// Market value (CNY) of all stocks in a stock account
+function stockAccountMarketValueCNY(acc) {
+  let total = 0;
+  stocksOfAccount(acc.id).forEach(s => {
+    const q = stockQuotes[s.id];
+    const cur = getStockCurrency(s);
+    const price = (q && q.price != null) ? q.price : (s.manualPrice && s.manualPrice > 0 ? s.manualPrice : null);
+    if (price != null) total += convertToCNY(price * s.quantity, cur);
+  });
+  return total;
+}
+// Current balance (CNY) of any account, incl. stock accounts (auto-computed)
+function getAccountBalanceCNY(acc) {
+  if (acc.type === 'stock') {
+    const mv = stockAccountMarketValueCNY(acc);
+    const cash = convertToCNY(acc.availableCash || 0, acc.currency || 'CNY');
+    return mv + cash;
+  }
+  const latest = getLatestBalance(acc);
+  return latest ? convertToCNY(latest.amount, acc.currency) : 0;
+}
+
 // Currency display config
 const CURRENCY_INFO = {
   CNY: { symbol: '¥', name: '人民币' },
@@ -2807,6 +2936,8 @@ function openAccountModal(id) {
       document.getElementById('accCurrency').value = acc.currency;
       document.getElementById('accNote').value = acc.note || '';
       document.getElementById('accExcluded').checked = !!acc.excluded;
+      document.getElementById('accType').value = acc.type || 'cash';
+      document.getElementById('accAvailableCash').value = (acc.availableCash != null) ? acc.availableCash : '';
       document.getElementById('accCalcMode').value = acc.calcMode || 'direct';
       document.getElementById('accInitBalance').value = '';
       document.getElementById('accBaseAmount').value = acc.baseAmount || '';
@@ -2820,11 +2951,14 @@ function openAccountModal(id) {
     document.getElementById('accCurrency').value = 'CNY';
     document.getElementById('accNote').value = '';
     document.getElementById('accExcluded').checked = false;
+    document.getElementById('accType').value = 'cash';
+    document.getElementById('accAvailableCash').value = '';
     document.getElementById('accCalcMode').value = 'direct';
     document.getElementById('accInitBalance').value = '';
     document.getElementById('accBaseAmount').value = '';
   }
   toggleAccCalcMode();
+  toggleAccType();
   document.getElementById('accountModal').classList.add('active');
 }
 
@@ -2832,6 +2966,15 @@ function toggleAccCalcMode() {
   const mode = document.getElementById('accCalcMode').value;
   document.getElementById('accInitBalanceGroup').style.display = mode === 'direct' ? '' : 'none';
   document.getElementById('accFormulaGroup').style.display = mode === 'formula' ? '' : 'none';
+}
+
+function toggleAccType() {
+  const type = document.getElementById('accType').value;
+  const isStock = type === 'stock';
+  document.getElementById('accCalcModeGroup').style.display = isStock ? 'none' : '';
+  document.getElementById('accInitBalanceGroup').style.display = isStock ? 'none' : (document.getElementById('accCalcMode').value === 'direct' ? '' : 'none');
+  document.getElementById('accFormulaGroup').style.display = isStock ? 'none' : (document.getElementById('accCalcMode').value === 'formula' ? '' : 'none');
+  document.getElementById('accAvailableCashGroup').style.display = isStock ? '' : 'none';
 }
 
 function addHoldingRow(existing) {
@@ -2859,6 +3002,8 @@ function saveAccount() {
   const currency = document.getElementById('accCurrency').value;
   const note = document.getElementById('accNote').value;
   const calcMode = document.getElementById('accCalcMode').value;
+  const type = document.getElementById('accType').value;
+  const availableCash = parseFloat(document.getElementById('accAvailableCash').value) || 0;
 
   // Collect holdings for formula mode
   let holdings = [];
@@ -2884,6 +3029,8 @@ function saveAccount() {
       accountData[idx].note = note;
       accountData[idx].excluded = document.getElementById('accExcluded').checked;
       accountData[idx].calcMode = calcMode;
+      accountData[idx].type = type;
+      if (type === 'stock') accountData[idx].availableCash = availableCash; else delete accountData[idx].availableCash;
       if (calcMode === 'formula') {
         accountData[idx].baseAmount = baseAmount;
         // Merge holdings: keep existing holding IDs if name matches, add new ones
@@ -2897,11 +3044,12 @@ function saveAccount() {
   } else {
     const newAcc = {
       id: uid(),
-      name, currency, note, calcMode,
+      name, currency, note, calcMode, type,
       excluded: document.getElementById('accExcluded').checked,
       createdAt: todayStr(),
       balances: []
     };
+    if (type === 'stock') newAcc.availableCash = availableCash;
     if (calcMode === 'formula') {
       newAcc.baseAmount = baseAmount;
       newAcc.holdings = holdings;
@@ -3223,14 +3371,8 @@ function renderAccounts() {
   const excludedAccounts = accountData.filter(a => a.excluded);
 
   // Calculate totals (active accounts only for main total)
-  const totalCNY = activeAccounts.reduce((s, acc) => {
-    const latest = getLatestBalance(acc);
-    return s + (latest ? convertToCNY(latest.amount, acc.currency) : 0);
-  }, 0);
-  const totalExcludedCNY = excludedAccounts.reduce((s, acc) => {
-    const latest = getLatestBalance(acc);
-    return s + (latest ? convertToCNY(latest.amount, acc.currency) : 0);
-  }, 0);
+  const totalCNY = activeAccounts.reduce((s, acc) => s + getAccountBalanceCNY(acc), 0);
+  const totalExcludedCNY = excludedAccounts.reduce((s, acc) => s + getAccountBalanceCNY(acc), 0);
   const allCurrencies = [...new Set(accountData.map(a => a.currency))];
 
   document.getElementById('accTotalCNY').textContent = fmtMoney(totalCNY);
@@ -3239,8 +3381,8 @@ function renderAccounts() {
   document.getElementById('accCurrencyList').textContent = allCurrencies.join(' / ') || '—';
   document.getElementById('accRateDate').textContent = exchangeRates.date ? exchangeRates.date : '未更新';
 
-  // ===== Stacked Area Chart (active accounts only) =====
-  const chartAccounts = activeAccounts;
+  // ===== Stacked Area Chart (active accounts only; stock accounts have no history yet) =====
+  const chartAccounts = activeAccounts.filter(a => a.type !== 'stock');
   const allDates = new Set();
   chartAccounts.forEach(acc => acc.balances.forEach(b => allDates.add(b.date)));
   allDates.add(todayStr());
@@ -3331,8 +3473,11 @@ function renderAccounts() {
   function buildAccountRow(acc, idx, list, isExcluded) {
     const latest = getLatestBalance(acc);
     const rate = getRate(acc.currency);
-    const cny = latest ? convertToCNY(latest.amount, acc.currency) : 0;
+    const isStock = acc.type === 'stock';
+    const cny = getAccountBalanceCNY(acc);
     const curBadge = acc.currency === 'CNY' ? 'badge-success' : 'badge-info';
+    const typeLabel = isStock ? '股票' : (acc.type === 'fund' ? '基金' : '现金');
+    const typeBadge = isStock ? 'badge-warning' : (acc.type === 'fund' ? 'badge-info' : 'badge-success');
     const modeBadge = acc.calcMode === 'formula' ? 'badge-warning' : 'badge-success';
     const modeShort = acc.calcMode === 'formula' ? '📊' : '✏️';
     const holdingInfo = acc.calcMode === 'formula' && acc.holdings ? `${acc.holdings.length}持仓${acc.holdings.some(h => h.currency && h.currency !== acc.currency) ? '🌍' : ''}` : '';
@@ -3345,17 +3490,20 @@ function renderAccounts() {
       </td>
       <td>
         <span style="font-weight:600">${acc.name}</span>
+        <span class="badge ${typeBadge}" style="margin-left:4px">${typeLabel}</span>
         <span class="badge ${curBadge}" style="margin-left:4px">${acc.currency}</span>
         ${excludeTag}
         ${acc.calcMode === 'formula' ? `<span class="badge ${modeBadge}" style="margin-left:2px" title="${holdingInfo}">${modeShort}${holdingInfo?' '+holdingInfo:''}</span>` : ''}
         ${acc.note ? `<span class="text-muted" style="font-size:11px;margin-left:4px">${acc.note}</span>` : ''}
         ${rateStr ? `<span class="text-muted" style="font-size:11px;margin-left:4px">${rateStr}</span>` : ''}
       </td>
-      <td>${latest ? fmtCurrency(latest.amount, acc.currency) : '—'}<span class="text-muted" style="font-size:11px;margin-left:4px">${latest ? fmtDate(latest.date) : ''}</span></td>
+      <td>${isStock
+        ? `<span>市值 ${fmtMoney(stockAccountMarketValueCNY(acc))}</span><span class="text-muted" style="font-size:11px;margin-left:4px">+ 现金 ${fmtMoney(convertToCNY(acc.availableCash || 0, acc.currency || 'CNY'))}</span>`
+        : `${latest ? fmtCurrency(latest.amount, acc.currency) : '—'}<span class="text-muted" style="font-size:11px;margin-left:4px">${latest ? fmtDate(latest.date) : ''}</span>`}</td>
       <td style="font-weight:700">${fmtMoney(cny)}</td>
       <td style="text-align:right;white-space:nowrap">
-        <button class="btn-icon" onclick="openBalanceModalForAccount('${acc.id}')" title="记录余额">💰</button>
-        <button class="btn-icon" onclick="openBalanceHistory('${acc.id}')" title="余额记录">📋</button>
+        ${!isStock ? `<button class="btn-icon" onclick="openBalanceModalForAccount('${acc.id}')" title="记录余额">💰</button>` : ''}
+        ${!isStock ? `<button class="btn-icon" onclick="openBalanceHistory('${acc.id}')" title="余额记录">📋</button>` : ''}
         <button class="btn-icon" onclick="openAccountModal('${acc.id}')" title="编辑">✏️</button>
         <button class="btn-icon" onclick="deleteAccount('${acc.id}')" title="删除">🗑️</button>
       </td>
@@ -3493,7 +3641,9 @@ function renderSingleAccountChart() {
   allDates.add(todayStr());
   const sortedDates = [...allDates].sort();
 
+  const isStock = acc.type === 'stock';
   const data = sortedDates.map(d => {
+    if (isStock) return (d === todayStr()) ? getAccountBalanceCNY(acc) : null;
     const bal = getBalanceOnDate(acc, d);
     return bal != null ? bal : null;
   });
@@ -3504,7 +3654,7 @@ function renderSingleAccountChart() {
     data: {
       labels: sortedDates.map(fmtDate),
       datasets: [{
-        label: acc.name + ' 余额（' + acc.currency + '）',
+        label: acc.name + (isStock ? ' 资产（折人民币）' : ' 余额（' + acc.currency + '）'),
         data,
         borderColor: colors.primary,
         backgroundColor: colors.primary + '20',
@@ -3524,7 +3674,7 @@ function renderSingleAccountChart() {
         legend: { display: true, position: 'top', labels: { color: colors.text, font: { size: 11 }, boxWidth: 12 } },
         tooltip: {
           callbacks: {
-            label: ctx => acc.name + ': ' + fmtCurrency(ctx.parsed.y, acc.currency)
+            label: ctx => acc.name + ': ' + (isStock ? fmtMoney(ctx.parsed.y) : fmtCurrency(ctx.parsed.y, acc.currency))
           }
         }
       },
@@ -5705,7 +5855,8 @@ async function fetchStockData(stock) {
     // No quote at all: mark as failed
     stockQuotes[stock.id] = { error: errors.join(' / ') || '无行情数据', ts: Date.now() };
   } else {
-    const signal = getStockSignal(price, ma30, ma60, ma120, maDaily, stock.quantity, stock.availableCash || 0);
+    const acc = accountData.find(a => a.id === stock.accountId);
+    const signal = getStockSignal(price, ma30, ma60, ma120, maDaily, stock.quantity, (acc && acc.availableCash) || 0);
     stockQuotes[stock.id] = {
       price, ma30, ma60, ma120, maDaily,
       signal, name, ts: Date.now(),
@@ -5738,17 +5889,42 @@ async function refreshAllStocks() {
 }
 
 // --- Render stock table ---
+function renderStockAccountFilter() {
+  const sel = document.getElementById('stockAccountFilter');
+  if (!sel) return;
+  const accs = stockAccounts();
+  sel.innerHTML = '<option value="all">全部账户</option>' + accs.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+  sel.value = activeStockAccountId;
+  updateStockAccountCashHint();
+}
+function updateStockAccountCashHint() {
+  const hint = document.getElementById('stockAccountCashHint');
+  if (!hint) return;
+  const accs = (activeStockAccountId === 'all') ? stockAccounts() : stockAccounts().filter(a => a.id === activeStockAccountId);
+  const cash = accs.reduce((s, a) => s + convertToCNY(a.availableCash || 0, a.currency || 'CNY'), 0);
+  hint.textContent = '可用资金 ¥' + cash.toFixed(0);
+}
+function onStockAccountFilter() {
+  activeStockAccountId = document.getElementById('stockAccountFilter').value;
+  renderStocks();
+}
+
 function renderStocks() {
+  renderStockAccountFilter();
   const wrap = document.getElementById('stockTableWrap');
-  if (stockData.length === 0) {
-    wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><p>还没有持仓，添加你的第一只股票吧</p><button class="btn btn-primary" onclick="openStockModal()">📈 添加股票</button></div>`;
+  if (filteredStocks().length === 0) {
+    if (stockData.length === 0) {
+      wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><p>还没有持仓，添加你的第一只股票吧</p><button class="btn btn-primary" onclick="openStockModal()">📈 添加股票</button></div>`;
+    } else {
+      wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><p>该账户暂无股票，可切换到「全部账户」或更换账户</p></div>`;
+    }
     return;
   }
   let html = `<table><thead><tr>
     <th style="width:40px"></th><th>股票</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th>
     <th>30分MA25</th><th>60分MA25</th><th>120分MA25</th><th>日线MA25</th><th>信号</th><th style="text-align:right">操作</th>
   </tr></thead><tbody>`;
-  stockData.forEach((s, idx) => {
+  filteredStocks().forEach((s, idx) => {
     const q = stockQuotes[s.id];
     const hasPrice = q && q.price != null;  // price available (API, manual, or K-line fallback)
     const price = hasPrice ? q.price : null;
@@ -5828,14 +6004,17 @@ function renderStocks() {
   // Total row — all amounts converted to CNY (stocks can be priced in CNY/HKD/USD)
   let totalValue = 0;
   let totalCost = 0;
-  let totalCash = 0;
-  stockData.forEach(s => {
+  filteredStocks().forEach(s => {
     const q = stockQuotes[s.id];
     const cur = getStockCurrency(s);
     if (q && q.price) totalValue += convertToCNY(q.price * s.quantity, cur);
     if (s.costPrice) totalCost += convertToCNY(s.costPrice * s.quantity, cur);
-    totalCash += convertToCNY(s.availableCash || 0, cur);
   });
+  // Available cash is account-level (each stock account has one shared cash pool)
+  const cashAccs = (activeStockAccountId === 'all')
+    ? stockAccounts()
+    : stockAccounts().filter(a => a.id === activeStockAccountId);
+  const totalCash = cashAccs.reduce((sum, a) => sum + convertToCNY(a.availableCash || 0, a.currency || 'CNY'), 0);
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost * 100) : 0;
   const totalCapital = totalValue + totalCash;
@@ -5895,8 +6074,9 @@ function openStockModal(id) {
   document.getElementById('stockQty').value = '';
   document.getElementById('stockCost').value = '';
   document.getElementById('stockManualPrice').value = '';
-  document.getElementById('stockAvailableCash').value = '';
   document.getElementById('stockNote').value = '';
+  const defaultAcc = (activeStockAccountId !== 'all') ? activeStockAccountId : (stockAccounts()[0] ? stockAccounts()[0].id : '');
+  fillStockAccountSelect(document.getElementById('stockAccountId'), defaultAcc);
   setStockSelection('', '');
   if (id) {
     const s = stockData.find(x => x.id === id);
@@ -5909,8 +6089,8 @@ function openStockModal(id) {
       document.getElementById('stockQty').value = s.quantity;
       document.getElementById('stockCost').value = s.costPrice;
       document.getElementById('stockManualPrice').value = s.manualPrice || '';
-      document.getElementById('stockAvailableCash').value = s.availableCash ?? '';
       document.getElementById('stockNote').value = s.note || '';
+      fillStockAccountSelect(document.getElementById('stockAccountId'), s.accountId || '');
     }
   }
   document.getElementById('stockModal').classList.add('active');
@@ -5932,8 +6112,7 @@ function saveStock() {
   const note = document.getElementById('stockNote').value;
   const manualPriceInput = document.getElementById('stockManualPrice').value;
   const manualPrice = manualPriceInput ? parseFloat(manualPriceInput) : null;
-  const availableCashInput = document.getElementById('stockAvailableCash').value;
-  const availableCash = availableCashInput ? parseFloat(availableCashInput) : 0;
+  const accountId = document.getElementById('stockAccountId').value || ensureDefaultStockAccount();
 
   const normCode = normalizeStockCode(sel.code, sel.name);
   if (id) {
@@ -5944,7 +6123,7 @@ function saveStock() {
       stockData[idx].quantity = quantity;
       stockData[idx].costPrice = costPrice;
       stockData[idx].manualPrice = (manualPrice && manualPrice > 0) ? manualPrice : null;
-      stockData[idx].availableCash = availableCash;
+      stockData[idx].accountId = accountId;
       stockData[idx].note = note;
     }
   } else {
@@ -5954,7 +6133,7 @@ function saveStock() {
       name: sel.name,
       quantity, costPrice, note,
       manualPrice: (manualPrice && manualPrice > 0) ? manualPrice : null,
-      availableCash,
+      accountId,
       createdAt: todayStr()
     };
     stockData.push(newStock);
@@ -6030,7 +6209,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260815d';
+  b.textContent = 'build 20260816a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
