@@ -1170,6 +1170,9 @@ tbody tr:hover{background:var(--surface-hover)}
         <div class="table-wrap" id="stockTableWrap">
           <!-- table injected by JS -->
         </div>
+        <div class="table-wrap" id="investAccountTableWrap" style="border-top:1px solid var(--border-light)">
+          <!-- active-investment account table (cash / market value / return / edit) -->
+        </div>
       </div>
 
       <!-- ===== Active investment trend (dual axis, right below active investment) ===== -->
@@ -1612,8 +1615,8 @@ tbody tr:hover{background:var(--surface-hover)}
         <div class="form-group">
           <label class="form-label">资产分类</label>
           <select class="form-select" id="accType" onchange="toggleAccType()">
-            <option value="invest">金融投资</option>
-            <option value="bank">银行账户</option>
+            <option value="invest">主动投资</option>
+            <option value="bank">被动投资</option>
             <option value="equity">股权投资</option>
             <option value="insurance">保险</option>
             <option value="trust">信托</option>
@@ -4131,6 +4134,39 @@ function renderAccounts() {
 
   // Render passive investment (bank + alipay) table — details + total only, no chart
   renderPassiveInvestment(passiveAccounts, passiveTotalCNY);
+
+  // Render active-investment account table (cash / market value / return / edit)
+  renderInvestAccountsTable(activeAccounts.filter(a => a.category === 'invest'));
+}
+
+// Active-investment account table: each account's cash, market value, return and
+// an explicit "edit" entry (cash + holdings + deposits/withdrawals live here).
+function renderInvestAccountsTable(investAccounts) {
+  const wrap = document.getElementById('investAccountTableWrap');
+  if (!wrap) return;
+  if (!investAccounts || investAccounts.length === 0) {
+    wrap.innerHTML = '';
+    return;
+  }
+  let html = '<table style="min-width:0"><thead><tr><th>主动投资账户</th><th style="text-align:right">现金</th><th style="text-align:right">市值</th><th style="text-align:right">累计收益率</th><th style="text-align:right">操作</th></tr></thead><tbody>';
+  investAccounts.forEach(a => {
+    const cash = convertToCNY(a.cash || 0, a.currency || 'CNY');
+    const mv = investAccountMarketValueCNY(a);
+    const ret = investAccountReturn(a);
+    const curBadge = a.currency === 'CNY' ? 'badge-success' : 'badge-info';
+    const retStr = (ret != null)
+      ? `<span style="font-weight:600;color:${ret >= 0 ? 'var(--danger)' : 'var(--success)'}">${ret >= 0 ? '+' : ''}${(ret * 100).toFixed(2)}%</span>`
+      : '<span class="text-muted">—</span>';
+    html += `<tr>
+      <td style="white-space:nowrap"><span style="font-weight:600">${a.name}</span><span class="badge ${curBadge}" style="margin-left:4px">${a.currency}</span></td>
+      <td style="text-align:right;white-space:nowrap">${fmtMoney(cash)}</td>
+      <td style="text-align:right;font-weight:700;white-space:nowrap">${fmtMoney(mv)}</td>
+      <td style="text-align:right;white-space:nowrap">${retStr}</td>
+      <td style="text-align:right;white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openAccountModal('${a.id}')">✏️ 编辑资金/持仓</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
 }
 
 // Passive investment table: banks + alipay, show breakdown + total balance (no chart)
@@ -6821,7 +6857,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816o';
+  b.textContent = 'build 20260816p';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
