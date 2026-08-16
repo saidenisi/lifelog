@@ -1951,10 +1951,11 @@ function saveStocks() { DB.set('stock', stockData); }
 
 // ===== Stock account linkage =====
 let activeStockAccountId = 'all'; // 'all' = show every account's stocks
-function stockAccounts() { return accountData.filter(a => a.category === 'invest'); }
+function stockAccounts() { return accountData.filter(a => a.category === 'invest' && !a._deleted); }
 function filteredStocks() {
-  if (activeStockAccountId === 'all') return stockData;
-  return stockData.filter(s => s.accountId === activeStockAccountId);
+  const live = stockData.filter(s => !s._deleted);
+  if (activeStockAccountId === 'all') return live;
+  return live.filter(s => s.accountId === activeStockAccountId);
 }
 function fillStockAccountSelect(selectEl, selectedId) {
   if (!selectEl) return;
@@ -2117,7 +2118,8 @@ async function pullAllFromCloud() {
   }
 }
 
-// Merge two record arrays by updatedAt: newest wins
+// Merge two record arrays by updatedAt: newest wins. A locally-deleted
+// (_deleted) record is authoritative and always propagates the deletion.
 function mergeRecords(cloudArr, localArr) {
   if (!cloudArr || cloudArr.length === 0) return localArr;
   if (!localArr  || localArr.length === 0)  return cloudArr;
@@ -2126,7 +2128,7 @@ function mergeRecords(cloudArr, localArr) {
   localArr.forEach(function(l) {
     if (!l || !l.id) return;
     var c = map[l.id];
-    if (!c || new Date(l.updatedAt || 0) >= new Date(c.updatedAt || 0)) {
+    if (l._deleted || !c || new Date(l.updatedAt || 0) >= new Date(c.updatedAt || 0)) {
       map[l.id] = l;
     }
   });
@@ -3018,36 +3020,33 @@ function mergeAccountInto(target, src) {
   (src.snapshots || []).forEach(s => { if (!ts.some(x => x.date === s.date)) ts.push(s); });
   target.snapshots = ts;
 }
-// Idempotent dedupe: merge renamed duplicate accounts + drop empty residual ones
+// Idempotent dedupe: merge renamed duplicate accounts + mark empty residual ones deleted
 function dedupeAccounts() {
   let changed = false;
   // 1. "东方财富股票账户" → "东方财富证券"
-  const target = accountData.find(a => a.name === '东方财富证券');
-  const dup1 = accountData.find(a => a.name === '东方财富股票账户');
+  const target = accountData.find(a => a.name === '东方财富证券' && !a._deleted);
+  const dup1 = accountData.find(a => a.name === '东方财富股票账户' && !a._deleted);
   if (target && dup1 && target.id !== dup1.id) {
     mergeAccountInto(target, dup1);
-    accountData = accountData.filter(a => a.id !== dup1.id);
+    dup1._deleted = true;
     changed = true;
   }
   // 2. duplicate "香港招商银行" (bank) → keep the invest one
-  const investHK = accountData.find(a => a.name === '香港招商银行' && a.category === 'invest');
-  const bankHK = accountData.find(a => a.name === '香港招商银行' && a.category === 'bank');
+  const investHK = accountData.find(a => a.name === '香港招商银行' && a.category === 'invest' && !a._deleted);
+  const bankHK = accountData.find(a => a.name === '香港招商银行' && a.category === 'bank' && !a._deleted);
   if (investHK && bankHK && investHK.id !== bankHK.id) {
     mergeAccountInto(investHK, bankHK);
-    accountData = accountData.filter(a => a.id !== bankHK.id);
+    bankHK._deleted = true;
     changed = true;
   }
-  // 3. drop empty residual "股票账户"
-  const before = accountData.length;
-  accountData = accountData.filter(a => {
-    if (a.name === '股票账户') {
+  // 3. mark empty residual "股票账户" deleted
+  accountData.forEach(a => {
+    if (a.name === '股票账户' && !a._deleted) {
       const hasData = (a.cash || 0) > 0 || (a.holdings || []).length > 0 || (a.balances || []).length > 0
         || stockData.some(s => s.accountId === a.id);
-      return hasData;
+      if (!hasData) { a._deleted = true; changed = true; }
     }
-    return true;
   });
-  if (accountData.length !== before) changed = true;
   if (changed) saveAccounts();
 }
 dedupeAccounts();
@@ -3440,7 +3439,7 @@ function saveAccount() {
 function deleteAccount(id) {
   const acc = accountData.find(a => a.id === id);
   if (!confirm(`确定删除账户「${acc?.name}」及其所有余额记录？`)) return;
-  accountData = accountData.filter(a => a.id !== id);
+  acc._deleted = true;
   saveAccounts();
   toast('账户已删除');
   renderAccounts();
@@ -3459,7 +3458,7 @@ function openBalanceModal(id) {
   document.getElementById('balanceModalTitle').textContent = id ? '编辑余额' : '记录余额';
   // Populate account dropdown
   const sel = document.getElementById('balAccount');
-  sel.innerHTML = accountData.map(a =>
+  sel.innerHTML = accountData.filter(a => !a._deleted).map(a =>
     `<option value="${a.id}">${a.name} (${a.currency})</option>`
   ).join('');
   document.getElementById('balDate').value = todayStr();
@@ -3741,8 +3740,8 @@ function renderAccounts() {
   const chartColors = [colors.primary, colors.success, colors.warning, colors.info, colors.purple, colors.danger, '#fb923c','#22d3ee','#a78bfa','#f472b6','#34d399','#fbbf24'];
 
   const catOrder = a => (ASSET_CATEGORIES[a.category] || ASSET_CATEGORIES.bank).order;
-  const activeAccounts = accountData.filter(a => !a.excluded).sort((a, b) => catOrder(a) - catOrder(b));
-  const excludedAccounts = accountData.filter(a => a.excluded).sort((a, b) => catOrder(a) - catOrder(b));
+  const activeAccounts = accountData.filter(a => !a.excluded && !a._deleted).sort((a, b) => catOrder(a) - catOrder(b));
+  const excludedAccounts = accountData.filter(a => a.excluded && !a._deleted).sort((a, b) => catOrder(a) - catOrder(b));
 
   // Calculate totals (active accounts only for main total)
   const totalCNY = activeAccounts.reduce((s, acc) => s + getAccountBalanceCNY(acc), 0);
@@ -3873,8 +3872,8 @@ function renderAccounts() {
 
   // ===== Single Account Trend Chart =====
   const singleSelect = document.getElementById('singleAccountSelect');
-  const preferredAcc = accountData.find(a => /东方财富|股票/.test(a.name)) || activeAccounts[0] || accountData[0];
-  singleSelect.innerHTML = accountData.map(a => `<option value="${a.id}" ${preferredAcc && a.id === preferredAcc.id ? 'selected' : ''}>${a.name} (${a.currency})</option>`).join('');
+  const preferredAcc = activeAccounts.find(a => /东方财富|股票/.test(a.name)) || activeAccounts[0];
+  singleSelect.innerHTML = activeAccounts.map(a => `<option value="${a.id}" ${preferredAcc && a.id === preferredAcc.id ? 'selected' : ''}>${a.name} (${a.currency})</option>`).join('');
   renderSingleAccountChart();
 
   // ===== Account Table =====
@@ -6574,7 +6573,8 @@ function saveStock() {
 
 function deleteStock(id) {
   if (!confirm('确定删除这只股票？')) return;
-  stockData = stockData.filter(s => s.id !== id);
+  const s = stockData.find(x => x.id === id);
+  if (s) s._deleted = true;
   delete stockQuotes[id];
   saveStocks();
   renderStocks();
@@ -6635,7 +6635,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816f';
+  b.textContent = 'build 20260816g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
