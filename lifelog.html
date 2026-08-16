@@ -2991,6 +2991,57 @@ function migrateInvestNav() {
 }
 migrateInvestNav();
 
+// Merge src account into target (cash/holdings/transactions/principal/balances/snapshots)
+function mergeAccountInto(target, src) {
+  if ((target.cash || 0) === 0 && (src.cash || 0) > 0) target.cash = src.cash;
+  if ((target.principal || 0) === 0 && (src.principal || 0) > 0) target.principal = src.principal;
+  const th = target.holdings || [];
+  (src.holdings || []).forEach(h => { if (!th.some(x => x.name === h.name)) th.push(h); });
+  target.holdings = th;
+  const tt = target.transactions || [];
+  (src.transactions || []).forEach(t => { if (!tt.some(x => x.id === t.id)) tt.push(t); });
+  target.transactions = tt;
+  const tb = target.balances || [];
+  (src.balances || []).forEach(b => { if (!tb.some(x => x.id === b.id)) tb.push(b); });
+  target.balances = tb;
+  const ts = target.snapshots || [];
+  (src.snapshots || []).forEach(s => { if (!ts.some(x => x.date === s.date)) ts.push(s); });
+  target.snapshots = ts;
+}
+// Idempotent dedupe: merge renamed duplicate accounts + drop empty residual ones
+function dedupeAccounts() {
+  let changed = false;
+  // 1. "东方财富股票账户" → "东方财富证券"
+  const target = accountData.find(a => a.name === '东方财富证券');
+  const dup1 = accountData.find(a => a.name === '东方财富股票账户');
+  if (target && dup1 && target.id !== dup1.id) {
+    mergeAccountInto(target, dup1);
+    accountData = accountData.filter(a => a.id !== dup1.id);
+    changed = true;
+  }
+  // 2. duplicate "香港招商银行" (bank) → keep the invest one
+  const investHK = accountData.find(a => a.name === '香港招商银行' && a.category === 'invest');
+  const bankHK = accountData.find(a => a.name === '香港招商银行' && a.category === 'bank');
+  if (investHK && bankHK && investHK.id !== bankHK.id) {
+    mergeAccountInto(investHK, bankHK);
+    accountData = accountData.filter(a => a.id !== bankHK.id);
+    changed = true;
+  }
+  // 3. drop empty residual "股票账户"
+  const before = accountData.length;
+  accountData = accountData.filter(a => {
+    if (a.name === '股票账户') {
+      const hasData = (a.cash || 0) > 0 || (a.holdings || []).length > 0 || (a.balances || []).length > 0
+        || stockData.some(s => s.accountId === a.id);
+      return hasData;
+    }
+    return true;
+  });
+  if (accountData.length !== before) changed = true;
+  if (changed) saveAccounts();
+}
+dedupeAccounts();
+
 // Stocks belonging to a given account
 function stocksOfAccount(accId) {
   return stockData.filter(s => s.accountId === accId);
@@ -6553,8 +6604,9 @@ renderDaily();
       // Pull from cloud on load (delay to let the page render first)
       setTimeout(function() {
         pullAllFromCloud().then(function() {
-          // Migrate any legacy daily notes from cloud, then re-render
+          // Migrate any legacy daily notes + dedupe accounts from cloud, then re-render
           migrateDailyNotes();
+          dedupeAccounts();
           renderPage('daily');
           // After first pull, start realtime subscription
           subscribeRealtime();
@@ -6572,7 +6624,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260816d';
+  b.textContent = 'build 20260816e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
