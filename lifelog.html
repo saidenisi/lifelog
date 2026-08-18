@@ -1165,7 +1165,7 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
         <div class="card-body" style="padding:12px 16px;background:var(--info-bg)">
           <p class="text-sm" style="color:var(--info);line-height:1.6;margin:0">
-            <b>上涨止盈策略：</b>当前K线最高点低于前一根最高点时，往前找「第三个最低点」（前一根 low 为第一个，再往前找两个波谷）作为止盈点；收盘价跌破止盈点则提示止盈。<span style="color:var(--text-muted)">（东方财富证券：日线 + 120/60/30分；其他持仓仅日线）</span>
+            <b>上涨止盈策略：</b>当前K线最高点低于前一根最高点时，往前找「第三个最低点」（前一根 low 为第一个，再往前依次找两个更低的 low）作为止盈点；收盘价跌破止盈点则提示止盈。<span style="color:var(--text-muted)">（东方财富证券：日线 + 120/60/30分；其他持仓仅日线）</span>
           </p>
         </div>
         <div class="table-wrap" id="stockTableWrap">
@@ -6338,23 +6338,26 @@ function calcMA25(candles) {
 
 // --- 上涨止盈点（新策略，替换均线减档）---
 // 触发：当前K线 high < 前一根 high（高点回落）。
-// 第一个最低点 = 前一根 low；再往前找两个波谷（局部最低：low 严格低于左右邻），
-// 止盈点 = 第二个波谷的 low（即"第三个最低点"）。
-// 返回 { point, triggered }；未触发或无足够波谷返回 null。
+// 第一个最低点 = 前一根 low；再往前「依次」找两个更低的 low（依次新低），
+// 止盈点 = 第三个最低点的 low（依次递减，不是找波谷/局部最低）。
+// 返回 { point, triggered }；未触发或低点不足返回 null。
 function calcTakeProfitPoint(candles) {
   if (!candles || candles.length < 4) return null;
   const n = candles.length;
   const cur = candles[n - 1], prev = candles[n - 2];
   if (parseFloat(cur.high) >= parseFloat(prev.high)) return null;
-  const troughs = [];
-  for (let j = n - 3; j >= 1 && troughs.length < 2; j--) {
+  let currentLow = parseFloat(prev.low);  // 第一个最低点
+  let found = 1;
+  for (let j = n - 3; j >= 0; j--) {
     const low = parseFloat(candles[j].low);
-    const left = parseFloat(candles[j - 1].low);
-    const right = parseFloat(candles[j + 1].low);
-    if (low < left && low < right) troughs.push(low);
+    if (low < currentLow) {
+      currentLow = low;  // 依次更低的 low
+      found++;
+      if (found >= 3) break;
+    }
   }
-  if (troughs.length < 2) return null;
-  return { point: troughs[1], triggered: true };
+  if (found < 3) return null;
+  return { point: currentLow, triggered: true };
 }
 
 // --- 综合止盈信号：判断当前价是否跌破各周期止盈点 ---
@@ -6877,7 +6880,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818e';
+  b.textContent = 'build 20260818f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
