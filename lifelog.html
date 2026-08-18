@@ -5600,7 +5600,7 @@ function renderTodosCalendar() {
   var el = document.getElementById('todosCalendar');
   if (!el) return;
   computeMultiDayLanes();
-  var weekDays = ['日','一','二','三','四','五','六'];
+  var weekDays = ['一','二','三','四','五','六','日'];
   var year = todosCalYear, month = todosCalMonth;
 
   // Single-day todos for cell summaries (multi-day rendered as bars)
@@ -5614,7 +5614,8 @@ function renderTodosCalendar() {
     singleByDate[d].sort(function(a, b) { return (a.done ? 1 : 0) - (b.done ? 1 : 0); });
   });
 
-  var firstDay = new Date(year, month, 1).getDay();
+  // 周一作为一周起点：(getDay()+6)%7 —— 周日→6，周一→0，…周六→5
+  var firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
   var daysInMonth = new Date(year, month + 1, 0).getDate();
   var daysInPrev = new Date(year, month, 0).getDate();
   var today = todayStr();
@@ -6913,7 +6914,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818i';
+  b.textContent = 'build 20260818j';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
