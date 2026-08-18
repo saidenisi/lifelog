@@ -6243,8 +6243,16 @@ async function decodeGbk(buf) {
   catch(_) { return new TextDecoder().decode(buf); }
 }
 
-// Stock currency by market: sh/sz -> CNY, hk -> HKD, us -> USD
+// Stock currency: determined by the owning account first (per user's fixed rule),
+// except 凯基证券 which follows the security's market. See MEMORY.md.
 function getStockCurrency(stock) {
+  const acc = accountData.find(a => a.id === stock.accountId && !a._deleted);
+  if (acc) {
+    if (acc.name === '东方财富证券') return 'CNY';  // 港股通标的也按 CNY（券商自动换汇）
+    if (acc.name === '香港招银证券' || acc.name === '香港招商银行') return 'HKD';
+    if (acc.name === '欧易虚拟币交易所') return 'USD';
+  }
+  // 凯基证券及其他：按代码前缀（us→USD, hk→HKD, sh/sz→CNY）
   const norm = normalizeStockCode(stock.code, stock.name);
   if (norm.startsWith('us')) return 'USD';
   if (norm.startsWith('hk')) return 'HKD';
@@ -6832,7 +6840,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818b';
+  b.textContent = 'build 20260818c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
