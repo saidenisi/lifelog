@@ -6337,18 +6337,28 @@ function calcMA25(candles) {
 }
 
 // --- 上涨止盈点（新策略，替换均线减档）---
-// 触发：当前K线 high < 前一根 high（高点回落）。
-// 第一个最低点 = 前一根 low；再往前「依次」找两个更低的 low（依次新低），
+// 触发：出现「高点回落」——某根K线最高点低于前一根最高点。
+// 止盈点粘性：取「最近一次」高点回落锁定止盈点，之后即使创新高也不消失，
+// 直到出现新的回落（止盈点上移）或现价跌破止盈点（提示止盈）。
+// 第一个最低点 = 回落前那根K线的 low；往前「依次」找两个更低的 low（依次新低），
 // 止盈点 = 第三个最低点的 low（依次递减，不是找波谷/局部最低）。
-// 返回 { point, triggered }；未触发或低点不足返回 null。
+// 返回 { point, triggered }；从未回落或低点不足返回 null。
 function calcTakeProfitPoint(candles) {
   if (!candles || candles.length < 4) return null;
   const n = candles.length;
-  const cur = candles[n - 1], prev = candles[n - 2];
-  if (parseFloat(cur.high) >= parseFloat(prev.high)) return null;
-  let currentLow = parseFloat(prev.low);  // 第一个最低点
+  // 找最近一次高点回落：candles[i].high < candles[i-1].high（从最新往前扫）
+  let triggerIdx = -1;
+  for (let i = n - 1; i >= 1; i--) {
+    if (parseFloat(candles[i].high) < parseFloat(candles[i - 1].high)) {
+      triggerIdx = i;
+      break;
+    }
+  }
+  if (triggerIdx < 0) return null;
+  // 第一个最低点 = 回落前那根（triggerIdx-1）的 low
+  let currentLow = parseFloat(candles[triggerIdx - 1].low);
   let found = 1;
-  for (let j = n - 3; j >= 0; j--) {
+  for (let j = triggerIdx - 2; j >= 0; j--) {
     const low = parseFloat(candles[j].low);
     if (low < currentLow) {
       currentLow = low;  // 依次更低的 low
@@ -6880,7 +6890,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818g';
+  b.textContent = 'build 20260818h';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
