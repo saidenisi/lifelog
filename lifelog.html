@@ -4828,12 +4828,14 @@ async function migrateOldImages() {
   renderMedia();
 }
 
-// Backup reminder: warn if no backup in 27 days
+// Backup reminder: warn if no backup in 14 days (web/desktop only, not mobile)
 function checkBackupReminder() {
   try {
+    // Only show the backup reminder on web/desktop; skip on mobile
+    if (window.innerWidth <= 768) return;
     var last = localStorage.getItem('lifelog_lastBackup');
     var now = Date.now();
-    var threshold = 27 * 24 * 3600 * 1000; // 27 days
+    var threshold = 14 * 24 * 3600 * 1000; // 14 days
     var days = 0;
     if (last) {
       days = Math.floor((now - new Date(last).getTime()) / (24 * 3600 * 1000));
@@ -6830,7 +6832,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818a';
+  b.textContent = 'build 20260818b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
