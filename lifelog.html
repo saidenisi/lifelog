@@ -6316,13 +6316,13 @@ async function fetchKLine(code, period, count) {
   if (!Array.isArray(candles) || candles.length === 0) {
     throw new Error('K线数据为空');
   }
-  // Tencent candle: [date, open, close, low, high, volume, ...]
+  // Tencent candle: [date, open, close, high, low, volume, ...]
   return candles.map(c => ({
     day: c[0],
     open: c[1],
     close: c[2],
-    low: c[3],
-    high: c[4],
+    high: c[3],
+    low: c[4],
     volume: c[5]
   }));
 }
@@ -6880,7 +6880,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818f';
+  b.textContent = 'build 20260818g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
