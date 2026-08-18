@@ -1165,7 +1165,7 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
         <div class="card-body" style="padding:12px 16px;background:var(--info-bg)">
           <p class="text-sm" style="color:var(--info);line-height:1.6;margin:0">
-            <b>均线卖出策略：</b>跌破 30分MA25 → 减仓 1/4；跌破 60分MA25 → 减仓至 1/2；跌破 120分MA25 → 减仓至 1/4；跌破 日线MA25 → 清仓。<span style="color:var(--text-muted)">（A股四档；港美股仅日线MA25）</span>
+            <b>上涨止盈策略：</b>当前K线最高点低于前一根最高点时，往前找「第三个最低点」（前一根 low 为第一个，再往前找两个波谷）作为止盈点；收盘价跌破止盈点则提示止盈。<span style="color:var(--text-muted)">（东方财富证券：日线 + 120/60/30分；其他持仓仅日线）</span>
           </p>
         </div>
         <div class="table-wrap" id="stockTableWrap">
@@ -1936,7 +1936,7 @@ stockData = stockData.map(s => {
   }
   return s;
 });
-let stockQuotes = {}; // runtime cache: {stockId: {price, ma30, ma60, ma120, maDaily, signal, error, ts}}
+let stockQuotes = {}; // runtime cache: {stockId: {price, tp:{daily,m120,m60,m30}, signal, name, error, ts}}
 
 function saveStocks() { DB.set('stock', stockData); }
 
@@ -6336,6 +6336,52 @@ function calcMA25(candles) {
   return sum / n;
 }
 
+// --- 上涨止盈点（新策略，替换均线减档）---
+// 触发：当前K线 high < 前一根 high（高点回落）。
+// 第一个最低点 = 前一根 low；再往前找两个波谷（局部最低：low <= 左右邻），
+// 止盈点 = 第二个波谷的 low（即"第三个最低点"）。
+// 返回 { point, triggered }；未触发或无足够波谷返回 null。
+function calcTakeProfitPoint(candles) {
+  if (!candles || candles.length < 4) return null;
+  const n = candles.length;
+  const cur = candles[n - 1], prev = candles[n - 2];
+  if (parseFloat(cur.high) >= parseFloat(prev.high)) return null;
+  const troughs = [];
+  for (let j = n - 3; j >= 1 && troughs.length < 2; j--) {
+    const low = parseFloat(candles[j].low);
+    const left = parseFloat(candles[j - 1].low);
+    const right = parseFloat(candles[j + 1].low);
+    if (low <= left && low <= right) troughs.push(low);
+  }
+  if (troughs.length < 2) return null;
+  return { point: troughs[1], triggered: true };
+}
+
+// --- 综合止盈信号：判断当前价是否跌破各周期止盈点 ---
+// tpMap = { daily: 数值, m120: 数值, m60: 数值, m30: 数值 }，值为 null 表示该周期无信号
+function calcTakeProfitSignal(price, tpMap) {
+  const order = [['m30', '30分'], ['m60', '60分'], ['m120', '120分'], ['daily', '日线']];
+  const breached = [], holding = [];
+  for (const [key, label] of order) {
+    const point = tpMap[key];
+    if (point == null) continue;
+    if (price < point) breached.push(`${label}已跌破止盈点${point.toFixed(2)}`);
+    else holding.push(`${label}止盈点${point.toFixed(2)}`);
+  }
+  let label, cls;
+  if (breached.length) {
+    label = '🔻 止盈提示';
+    cls = 'signal-sellall';
+  } else if (holding.length) {
+    label = '🟢 持有';
+    cls = 'signal-hold';
+  } else {
+    label = '—';
+    cls = 'signal-hold';
+  }
+  return { label, cls, breached, holding, tpMap };
+}
+
 // --- Get signal for a stock ---
 // Tiered strategy based on INITIAL position (qty):
 //   price < 30min MA25  -> reduce 1/4 of initial (target 75%)
@@ -6392,7 +6438,7 @@ async function fetchStockData(stock) {
   const isUS = normCode.startsWith('us');
   const isAShare = /^(sh|sz)/.test(normCode);
   let price = null, name = stock.name;
-  let maDaily = null, ma30 = null, ma60 = null, ma120 = null;
+  const tp = { daily: null, m120: null, m60: null, m30: null };
   let errors = [];
 
   // Validate normalized code
@@ -6421,10 +6467,11 @@ async function fetchStockData(stock) {
     errors.push('行情:' + e.message);
   }
 
-  // 2) Daily K-line
+  // 2) Daily K-line → daily take-profit point
   try {
-    const klDaily = await fetchKLine(klineCode, 'day', 25);
-    maDaily = calcMA25(klDaily);
+    const klDaily = await fetchKLine(klineCode, 'day', 40);
+    const tpd = calcTakeProfitPoint(klDaily);
+    if (tpd) tp.daily = tpd.point;
     // Fallback: if real-time quote failed, try manual price first, then K-line close
     if (price == null) {
       if (stock.manualPrice && stock.manualPrice > 0) {
@@ -6442,7 +6489,7 @@ async function fetchStockData(stock) {
         console.log('[stock kline fallback]', stock.name, 'using close from', last.day, '=', price);
       }
     }
-    console.log('[stock daily]', stock.name, klineCode, 'MA25=', maDaily);
+    console.log('[stock daily]', stock.name, klineCode, '止盈点=', tp.daily);
   } catch(e) {
     console.warn('[stock daily failed]', stock.name, klineCode, e.message);
     errors.push('日线:' + e.message);
@@ -6454,14 +6501,14 @@ async function fetchStockData(stock) {
   } else {
     try {
       const [kl30, kl60, kl120] = await Promise.all([
-        fetchKLine(klineCode, 30, 25),
-        fetchKLine(klineCode, 60, 25),
-        fetchKLine(klineCode, 120, 25)
+        fetchKLine(klineCode, 30, 40),
+        fetchKLine(klineCode, 60, 40),
+        fetchKLine(klineCode, 120, 40)
       ]);
-      ma30 = calcMA25(kl30);
-      ma60 = calcMA25(kl60);
-      ma120 = calcMA25(kl120);
-      console.log('[stock intraday]', stock.name, klineCode, 'MA30=', ma30, 'MA60=', ma60, 'MA120=', ma120);
+      const tp30 = calcTakeProfitPoint(kl30); if (tp30) tp.m30 = tp30.point;
+      const tp60 = calcTakeProfitPoint(kl60); if (tp60) tp.m60 = tp60.point;
+      const tp120 = calcTakeProfitPoint(kl120); if (tp120) tp.m120 = tp120.point;
+      console.log('[stock intraday]', stock.name, klineCode, '止盈点 30/60/120=', tp.m30, tp.m60, tp.m120);
     } catch(e) {
       console.warn('[stock intraday failed]', stock.name, klineCode, e.message);
       errors.push('分钟K线:' + e.message);
@@ -6472,11 +6519,9 @@ async function fetchStockData(stock) {
     // No quote at all: mark as failed
     stockQuotes[stock.id] = { error: errors.join(' / ') || '无行情数据', ts: Date.now() };
   } else {
-    const acc = accountData.find(a => a.id === stock.accountId);
-    const signal = getStockSignal(price, ma30, ma60, ma120, maDaily, stock.quantity, (acc && acc.availableCash) || 0);
+    const signal = calcTakeProfitSignal(price, tp);
     stockQuotes[stock.id] = {
-      price, ma30, ma60, ma120, maDaily,
-      signal, name, ts: Date.now(),
+      price, tp, signal, name, ts: Date.now(),
       error: errors.length ? errors.join(' / ') : null
     };
     // Persist corrected name back to stockData (fixes old dirty name from search bug)
@@ -6540,7 +6585,7 @@ function renderStocks() {
   }
   let html = `<table style="min-width:700px"><thead><tr>
     <th style="width:30px"></th><th>股票</th><th>持仓</th><th>成本</th><th>现价</th><th>盈亏</th>
-    <th>均线</th><th>信号</th><th style="text-align:right">操作</th>
+    <th>止盈点</th><th>信号</th><th style="text-align:right">操作</th>
   </tr></thead><tbody>`;
   filteredStocks().forEach((s, idx) => {
     const q = stockQuotes[s.id];
@@ -6550,35 +6595,27 @@ function renderStocks() {
     const pnlVal = (price != null && s.costPrice) ? ((price - s.costPrice) * s.quantity) : null;
     const isManual = q && q.error && q.error.includes('手动现价');
 
-    // MA cells (merged into a single "均线" column, two per line)
-    function maCell() {
+    // Take-profit cells (merged into a single "止盈点" column, two per line)
+    function tpCell() {
       if (!hasPrice) return '<td class="text-muted">—</td>';
-      const mk = (label, val) => {
-        if (val == null) return `<span class="text-muted">${label}—</span>`;
-        const up = price >= val;
-        return `<span>${label} <span class="${up ? 'ma-up' : 'ma-down'}">${val.toFixed(2)}${up ? '↑' : '↓'}</span></span>`;
+      const tpm = q.tp || {};
+      const mk = (label, point) => {
+        if (point == null) return `<span class="text-muted">${label}—</span>`;
+        const breached = price < point;
+        return `<span>${label} <span class="${breached ? 'ma-down' : 'ma-up'}">${point.toFixed(2)}${breached ? '↓破' : '↑'}</span></span>`;
       };
-      return `<td style="font-size:10px;line-height:1.7;white-space:nowrap">${mk('30分', q.ma30)} ${mk('60分', q.ma60)}<br>${mk('120分', q.ma120)} ${mk('日线', q.maDaily)}</td>`;
+      return `<td style="font-size:10px;line-height:1.7;white-space:nowrap">${mk('30分', tpm.m30)} ${mk('60分', tpm.m60)}<br>${mk('120分', tpm.m120)} ${mk('日线', tpm.daily)}</td>`;
     }
 
     // Signal cell
     let signalHtml = '<td class="text-muted">—</td>';
     if (hasPrice && q.signal) {
       const sig = q.signal;
-      // Show action qty + target position; if diff < 0.1% of current qty, show "on strategy"
-      let actionHint = '';
-      const onStrategy = sig.currentQty > 0 && Math.abs(sig.actionQty) / sig.currentQty < 0.001;
-      if (onStrategy) {
-        actionHint = `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">符合策略</div>`;
-      } else if (sig.actionQty > 0) {
-        actionHint = `<div style="font-size:10px;color:var(--danger);margin-top:2px">建议增仓 ${sig.actionQty} 股<br>持仓调整为 ${sig.targetQty} 股</div>`;
-      } else if (sig.actionQty < 0) {
-        actionHint = `<div style="font-size:10px;color:var(--success);margin-top:2px">建议减仓 ${Math.abs(sig.actionQty)} 股<br>持仓调整为 ${sig.targetQty} 股</div>`;
-      } else {
-        actionHint = `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">持有 ${sig.targetQty} 股</div>`;
-      }
+      const detail = sig.breached.length
+        ? sig.breached.join('<br>')
+        : sig.holding.join('<br>');
       const errNote = q.error ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${q.error}</div>` : '';
-      signalHtml = `<td><span class="${sig.cls}">${sig.label}</span>${actionHint}${errNote}</td>`;
+      signalHtml = `<td><span class="${sig.cls}">${sig.label}</span>${detail ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${detail}</div>` : ''}${errNote}</td>`;
     } else if (q && q.error) {
       signalHtml = `<td class="text-muted text-sm" style="font-size:11px">${q.error}</td>`;
     }
@@ -6611,7 +6648,7 @@ function renderStocks() {
       <td>${s.costPrice ? s.costPrice.toFixed(2) : '—'}</td>
       <td style="font-weight:600">${price != null ? price.toFixed(2) + (isManual ? ' <span class="badge badge-warning" style="font-size:9px;padding:1px 4px">手动</span>' : '') : '<span class="text-muted">—</span>'}</td>
       ${pnlHtml}
-      ${maCell()}
+      ${tpCell()}
       ${signalHtml}
       <td style="text-align:right;white-space:nowrap">
         <button class="btn-icon" onclick="refreshSingleStock('${s.id}')" title="刷新">🔄</button>
@@ -6840,7 +6877,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818c';
+  b.textContent = 'build 20260818d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
