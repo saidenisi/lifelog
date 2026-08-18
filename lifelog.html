@@ -1785,6 +1785,10 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
       </div>
       <div class="form-group">
+        <label class="form-label">买入日期 <span class="text-muted" style="font-size:11px;font-weight:400">（止盈点只在此日期之后计算）</span></label>
+        <input type="date" class="form-input" id="stockBuyDate">
+      </div>
+      <div class="form-group">
         <label class="form-label">手动现价 <span class="text-muted" style="font-size:11px;font-weight:400">（可选，API无数据时使用）</span></label>
         <input type="number" class="form-input" id="stockManualPrice" placeholder="留空则自动获取" step="0.001">
       </div>
@@ -6342,24 +6346,37 @@ function calcMA25(candles) {
 // 直到出现新的回落（止盈点上移）或现价跌破止盈点（提示止盈）。
 // 第一个最低点 = 回落前那根K线的 low；往前「依次」找两个更低的 low（依次新低），
 // 止盈点 = 第三个最低点的 low（依次递减，不是找波谷/局部最低）。
+// 参数：
+//   buyDate（YYYY-MM-DD，可空）：只在买入日之后的K线里找（不回到买入前）。
+//   maxLookback（可空）：只取最近 N 根K线，避免回退太久。
 // 返回 { point, triggered }；从未回落或低点不足返回 null。
-function calcTakeProfitPoint(candles) {
+function calcTakeProfitPoint(candles, buyDate, maxLookback) {
   if (!candles || candles.length < 4) return null;
-  const n = candles.length;
-  // 找最近一次高点回落：candles[i].high < candles[i-1].high（从最新往前扫）
+  let arr = candles;
+  if (buyDate) {
+    const b = buyDate.replace(/-/g, '');
+    arr = candles.filter(c => {
+      const d = String(c.day || '').replace(/-/g, '').slice(0, 8);
+      return d >= b;
+    });
+  }
+  if (maxLookback && arr.length > maxLookback) arr = arr.slice(-maxLookback);
+  if (arr.length < 4) return null;
+  const n = arr.length;
+  // 找最近一次高点回落：arr[i].high < arr[i-1].high（从最新往前扫）
   let triggerIdx = -1;
   for (let i = n - 1; i >= 1; i--) {
-    if (parseFloat(candles[i].high) < parseFloat(candles[i - 1].high)) {
+    if (parseFloat(arr[i].high) < parseFloat(arr[i - 1].high)) {
       triggerIdx = i;
       break;
     }
   }
   if (triggerIdx < 0) return null;
   // 第一个最低点 = 回落前那根（triggerIdx-1）的 low
-  let currentLow = parseFloat(candles[triggerIdx - 1].low);
+  let currentLow = parseFloat(arr[triggerIdx - 1].low);
   let found = 1;
   for (let j = triggerIdx - 2; j >= 0; j--) {
-    const low = parseFloat(candles[j].low);
+    const low = parseFloat(arr[j].low);
     if (low < currentLow) {
       currentLow = low;  // 依次更低的 low
       found++;
@@ -6452,6 +6469,7 @@ async function fetchStockData(stock) {
   const isAShare = /^(sh|sz)/.test(normCode);
   let price = null, name = stock.name;
   const tp = { daily: null, m120: null, m60: null, m30: null };
+  const buyDate = stock.buyDate || stock.createdAt || null;
   let errors = [];
 
   // Validate normalized code
@@ -6483,7 +6501,7 @@ async function fetchStockData(stock) {
   // 2) Daily K-line → daily take-profit point
   try {
     const klDaily = await fetchKLine(klineCode, 'day', 40);
-    const tpd = calcTakeProfitPoint(klDaily);
+    const tpd = calcTakeProfitPoint(klDaily, buyDate, 20);
     if (tpd) tp.daily = tpd.point;
     // Fallback: if real-time quote failed, try manual price first, then K-line close
     if (price == null) {
@@ -6518,9 +6536,9 @@ async function fetchStockData(stock) {
         fetchKLine(klineCode, 60, 40),
         fetchKLine(klineCode, 120, 40)
       ]);
-      const tp30 = calcTakeProfitPoint(kl30); if (tp30) tp.m30 = tp30.point;
-      const tp60 = calcTakeProfitPoint(kl60); if (tp60) tp.m60 = tp60.point;
-      const tp120 = calcTakeProfitPoint(kl120); if (tp120) tp.m120 = tp120.point;
+      const tp30 = calcTakeProfitPoint(kl30, buyDate); if (tp30) tp.m30 = tp30.point;
+      const tp60 = calcTakeProfitPoint(kl60, buyDate); if (tp60) tp.m60 = tp60.point;
+      const tp120 = calcTakeProfitPoint(kl120, buyDate); if (tp120) tp.m120 = tp120.point;
       console.log('[stock intraday]', stock.name, klineCode, '止盈点 30/60/120=', tp.m30, tp.m60, tp.m120);
     } catch(e) {
       console.warn('[stock intraday failed]', stock.name, klineCode, e.message);
@@ -6743,6 +6761,7 @@ function openStockModal(id) {
   document.getElementById('stockSelectedInfo').style.display = 'none';
   document.getElementById('stockQty').value = '';
   document.getElementById('stockCost').value = '';
+  document.getElementById('stockBuyDate').value = '';
   document.getElementById('stockManualPrice').value = '';
   document.getElementById('stockNote').value = '';
   const defaultAcc = (activeStockAccountId !== 'all') ? activeStockAccountId : (stockAccounts()[0] ? stockAccounts()[0].id : '');
@@ -6758,6 +6777,7 @@ function openStockModal(id) {
       document.getElementById('stockSelectedInfo').style.display = 'block';
       document.getElementById('stockQty').value = s.quantity;
       document.getElementById('stockCost').value = s.costPrice;
+      document.getElementById('stockBuyDate').value = s.buyDate || s.createdAt || '';
       document.getElementById('stockManualPrice').value = s.manualPrice || '';
       document.getElementById('stockNote').value = s.note || '';
       fillStockAccountSelect(document.getElementById('stockAccountId'), s.accountId || '');
@@ -6782,6 +6802,7 @@ function saveStock() {
   const note = document.getElementById('stockNote').value;
   const manualPriceInput = document.getElementById('stockManualPrice').value;
   const manualPrice = manualPriceInput ? parseFloat(manualPriceInput) : null;
+  const buyDate = document.getElementById('stockBuyDate').value || null;
   const accountId = document.getElementById('stockAccountId').value || ensureDefaultStockAccount();
   let prevAccountId = null;
   if (id) { const old = stockData.find(s => s.id === id); if (old) prevAccountId = old.accountId; }
@@ -6794,6 +6815,7 @@ function saveStock() {
       stockData[idx].name = sel.name;
       stockData[idx].quantity = quantity;
       stockData[idx].costPrice = costPrice;
+      stockData[idx].buyDate = buyDate;
       stockData[idx].manualPrice = (manualPrice && manualPrice > 0) ? manualPrice : null;
       stockData[idx].accountId = accountId;
       stockData[idx].note = note;
@@ -6804,6 +6826,7 @@ function saveStock() {
       code: normCode,
       name: sel.name,
       quantity, costPrice, note,
+      buyDate,
       manualPrice: (manualPrice && manualPrice > 0) ? manualPrice : null,
       accountId,
       createdAt: todayStr()
@@ -6890,7 +6913,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818h';
+  b.textContent = 'build 20260818i';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
