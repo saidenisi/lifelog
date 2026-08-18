@@ -6338,7 +6338,7 @@ function calcMA25(candles) {
 
 // --- 上涨止盈点（新策略，替换均线减档）---
 // 触发：当前K线 high < 前一根 high（高点回落）。
-// 第一个最低点 = 前一根 low；再往前找两个波谷（局部最低：low <= 左右邻），
+// 第一个最低点 = 前一根 low；再往前找两个波谷（局部最低：low 严格低于左右邻），
 // 止盈点 = 第二个波谷的 low（即"第三个最低点"）。
 // 返回 { point, triggered }；未触发或无足够波谷返回 null。
 function calcTakeProfitPoint(candles) {
@@ -6351,7 +6351,7 @@ function calcTakeProfitPoint(candles) {
     const low = parseFloat(candles[j].low);
     const left = parseFloat(candles[j - 1].low);
     const right = parseFloat(candles[j + 1].low);
-    if (low <= left && low <= right) troughs.push(low);
+    if (low < left && low < right) troughs.push(low);
   }
   if (troughs.length < 2) return null;
   return { point: troughs[1], triggered: true };
@@ -6877,7 +6877,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818d';
+  b.textContent = 'build 20260818e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
