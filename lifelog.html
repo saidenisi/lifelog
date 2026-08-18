@@ -6020,6 +6020,41 @@ function toggleTodo(id) {
   renderTodosCalendar();
 }
 
+// 自动延期：未完成且「结束日期距今已过 2 天」的待办，自动顺延一周。
+// 单日事项 date → 今天 + 7 天；多日事项整体顺延（保持时长）。
+function autoPostponeOverdueTodos() {
+  var today = todayStr();
+  var todayDate = new Date(today + 'T00:00:00');
+  var weekLater = new Date(todayDate.getTime() + 7 * 86400000);
+  var weekLaterStr = fmtDateFull(weekLater);  // 本地时间格式化，避免 toISOString 的时区偏移
+  var count = 0;
+
+  todosData.forEach(function(t) {
+    if (t._deleted || t.done) return;
+    var end = t.dateEnd || t.date;
+    if (!end) return;
+    var endDate = new Date(end + 'T00:00:00');
+    var diffDays = Math.floor((todayDate.getTime() - endDate.getTime()) / 86400000);
+    if (diffDays < 2) return;  // 还没过 2 天，不延期
+
+    if (isMultiDay(t)) {
+      var dur = Math.floor((new Date(t.dateEnd + 'T00:00:00').getTime() - new Date(t.date + 'T00:00:00').getTime()) / 86400000);
+      t.date = weekLaterStr;
+      t.dateEnd = fmtDateFull(new Date(weekLater.getTime() + dur * 86400000));
+    } else {
+      t.date = weekLaterStr;
+    }
+    t.updatedAt = new Date().toISOString();
+    count++;
+  });
+
+  if (count > 0) {
+    saveAll();  // 写本地 + 触发云端同步
+    console.log('[todos] 自动延期 ' + count + ' 个事项到 ' + weekLaterStr);
+    toast(count + ' 个待办已过期，自动顺延一周 📅');
+  }
+}
+
 function deleteTodo(id) {
   var t = todosData.find(function(x) { return x.id === id; });
   if (!t) return;
@@ -6879,6 +6914,8 @@ document.addEventListener('click', (e) => {
 initTheme();
 // 初始渲染默认页（每日记录）
 renderDaily();
+// 自动延期过期待办（本地数据，覆盖离线场景）
+autoPostponeOverdueTodos();
 // Auto-refresh exchange rates if not yet loaded or outdated (>1 day old)
 (function initRates() {
   const today = todayStr();
@@ -6897,6 +6934,8 @@ renderDaily();
           // Migrate any legacy daily notes + dedupe accounts from cloud, then re-render
           migrateDailyNotes();
           dedupeAccounts();
+          // 云端数据加载后，再检查一次过期待办自动延期（幂等）
+          autoPostponeOverdueTodos();
           renderPage('daily');
           // After first pull, start realtime subscription
           subscribeRealtime();
@@ -6914,7 +6953,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818j';
+  b.textContent = 'build 20260818k';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
