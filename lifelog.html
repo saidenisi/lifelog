@@ -6020,13 +6020,12 @@ function toggleTodo(id) {
   renderTodosCalendar();
 }
 
-// 自动延期：未完成且「结束日期距今已过 2 天」的待办，自动顺延一周。
-// 单日事项 date → 今天 + 7 天；多日事项整体顺延（保持时长）。
+// 自动延期：未完成且「结束日期距今已过 2 天宽限期（第 3 天起）」的待办，自动顺延。
+// 顺延基准 = 原日期 + 7 天（保持每周节奏）。单日 date+7；多日整体 +7 保持时长。
 function autoPostponeOverdueTodos() {
   var today = todayStr();
   var todayDate = new Date(today + 'T00:00:00');
-  var weekLater = new Date(todayDate.getTime() + 7 * 86400000);
-  var weekLaterStr = fmtDateFull(weekLater);  // 本地时间格式化，避免 toISOString 的时区偏移
+  var weekMs = 7 * 86400000;
   var count = 0;
 
   todosData.forEach(function(t) {
@@ -6035,14 +6034,13 @@ function autoPostponeOverdueTodos() {
     if (!end) return;
     var endDate = new Date(end + 'T00:00:00');
     var diffDays = Math.floor((todayDate.getTime() - endDate.getTime()) / 86400000);
-    if (diffDays < 2) return;  // 还没过 2 天，不延期
+    if (diffDays <= 2) return;  // 给足 2 天宽限，第 3 天才顺延
 
     if (isMultiDay(t)) {
-      var dur = Math.floor((new Date(t.dateEnd + 'T00:00:00').getTime() - new Date(t.date + 'T00:00:00').getTime()) / 86400000);
-      t.date = weekLaterStr;
-      t.dateEnd = fmtDateFull(new Date(weekLater.getTime() + dur * 86400000));
+      t.date = fmtDateFull(new Date(new Date(t.date + 'T00:00:00').getTime() + weekMs));
+      t.dateEnd = fmtDateFull(new Date(new Date(t.dateEnd + 'T00:00:00').getTime() + weekMs));
     } else {
-      t.date = weekLaterStr;
+      t.date = fmtDateFull(new Date(new Date(t.date + 'T00:00:00').getTime() + weekMs));
     }
     t.updatedAt = new Date().toISOString();
     count++;
@@ -6050,7 +6048,7 @@ function autoPostponeOverdueTodos() {
 
   if (count > 0) {
     saveAll();  // 写本地 + 触发云端同步
-    console.log('[todos] 自动延期 ' + count + ' 个事项到 ' + weekLaterStr);
+    console.log('[todos] 自动顺延 ' + count + ' 个事项一周');
     toast(count + ' 个待办已过期，自动顺延一周 📅');
   }
 }
@@ -6953,7 +6951,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818k';
+  b.textContent = 'build 20260818l';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
