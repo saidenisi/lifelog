@@ -1378,6 +1378,7 @@ tbody tr:hover{background:var(--surface-hover)}
         <div style="display:flex;gap:10px;align-items:center">
           <button class="mobile-menu-btn" id="mobileMenuBtn9">☰</button>
           <button class="btn btn-ghost btn-sm" onclick="todosGoToday()">📅 今天</button>
+          <button class="btn btn-ghost btn-sm" onclick="debugTodos()" title="诊断">🔍</button>
         </div>
       </div>
 
@@ -6136,6 +6137,21 @@ function deleteTodo(id) {
   renderTodos();
 }
 
+// 诊断：列出 todosData 里含"标签/测试"的条目完整字段（用于排查数据不一致）
+function debugTodos() {
+  var hits = todosData.filter(function(t) {
+    return /标签|测试/.test(String(t.content || ''));
+  });
+  var lines = ['todosData 总条数: ' + todosData.length, '含"标签/测试"的条数: ' + hits.length, ''];
+  hits.forEach(function(t, i) {
+    lines.push('[' + i + '] ' + JSON.stringify(t));
+  });
+  if (!hits.length) lines.push('（没有含"标签/测试"的条目）');
+  lines.push('', 'localStorage 里 lifelog_todos 条数: ' + (DB.get('todos') || []).length);
+  alert(lines.join('\n'));
+}
+window.debugTodos = debugTodos;
+
 /* CSV exports */
 function exportCSV(filename, headers, rows) {
   const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(','))].join('\n');
@@ -7029,7 +7045,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818s';
+  b.textContent = 'build 20260818t';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
