@@ -2005,6 +2005,13 @@ function supabaseFetch(method, path, body) {
     'Authorization': 'Bearer ' + SUPABASE_KEY,
     'Content-Type': 'application/json'
   };
+  // 防止浏览器/中间缓存返回旧数据，GET 请求强制不缓存并加时间戳
+  if (method === 'GET') {
+    headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    headers['Pragma'] = 'no-cache';
+    var sep = path.indexOf('?') === -1 ? '?' : '&';
+    path += sep + '_cb=' + Date.now();
+  }
   var opt = { method: method, headers: headers };
   if (body != null) opt.body = JSON.stringify(body);
   return fetch(SUPABASE_URL + path, opt);
@@ -2105,17 +2112,18 @@ async function pullAllFromCloud() {
 
     // Other keys are arrays — merge by updatedAt (newest wins)
     var remoteArr = resp.data.data || [];
-    var localArr = DB.get(key);
-    var merged = mergeRecords(remoteArr, localArr, 'pull');
+    var localArr = DB.get(key) || [];
 
-    // 检测本地墓碑未传播到云端：合并结果里有 _deleted=true，但云端对应条目不是墓碑/不存在，
-    // 说明删除没同步到云端（其它端会看到旧数据）。标记待补推，pull 完成后 push 一次。
-    var hasLocalTombstone = merged.some(function(m) {
-      if (!m || !m._deleted) return false;
-      var rc = remoteArr.find(function(r) { return r && r.id === m.id; });
+    // 在合并前先检测：本地有墓碑但云端对应条目不是墓碑/不存在，说明删除尚未同步，
+    // 需要在本轮 pull 结束后补推一次，防止其它端继续看到旧数据。
+    var hasLocalTombstone = localArr.some(function(l) {
+      if (!l || !l._deleted) return false;
+      var rc = remoteArr.find(function(r) { return r && r.id === l.id; });
       return !rc || !rc._deleted;
     });
     if (hasLocalTombstone) _pendingPush = true;
+
+    var merged = mergeRecords(remoteArr, localArr, 'pull');
 
     switch(key) {
       case 'fitness': fitnessData = merged; break;
@@ -2145,8 +2153,11 @@ async function pullAllFromCloud() {
   }
 }
 
-// Merge two record arrays by updatedAt: newest wins. A locally-deleted
-// (_deleted) record is authoritative and always propagates the deletion.
+// Merge two record arrays. Strategy:
+// - pull: cloud is authoritative for records it knows (fixes stale local timestamps/bulk updates).
+// - push: local is authoritative (uploads local edits/deletions).
+// - Tombstones: cloud tombstone always deletes locally; local tombstone always stays so it can be pushed.
+// - Local-only records: kept on push, dropped on pull (orphans from other devices' deletes).
 function mergeRecords(cloudArr, localArr, mode) {
   if (!cloudArr || cloudArr.length === 0) return localArr;
   if (!localArr  || localArr.length === 0)  return cloudArr;
@@ -2154,14 +2165,18 @@ function mergeRecords(cloudArr, localArr, mode) {
   cloudArr.forEach(function(r) { if (r && r.id) map[r.id] = r; });
   localArr.forEach(function(l) {
     if (!l || !l.id) return;
-    // 本地墓碑始终胜出（删除要传播，防止已删条目复活）
-    if (l._deleted) { map[l.id] = l; return; }
     var c = map[l.id];
+    // 本地墓碑保留：下次 push 时会传播到云端；pull 阶段它不会覆盖云端。
+    if (l._deleted) { map[l.id] = l; return; }
+    // 云端墓碑（已删除）必须生效，防止已删条目在本地复活
+    if (c && c._deleted) return;
     if (!c) {
-      // 云端没有这条：push 时保留（视为本地新增待上传）；pull 时丢弃（视为其它端已删除的残留，避免复活）
+      // 云端没有这条：push 时保留（本地新增），pull 时丢弃（其它端已删除的残留）
       if (mode === 'push') map[l.id] = l;
       return;
     }
+    // 同 ID 且都未删除：pull 以云端为准；push 以最新 updatedAt 为准
+    if (mode === 'pull') return;
     if (new Date(l.updatedAt || 0) >= new Date(c.updatedAt || 0)) map[l.id] = l;
   });
   return Object.values(map);
@@ -6142,10 +6157,22 @@ function debugTodos() {
   var hits = todosData.filter(function(t) {
     return /标签|测试/.test(String(t.content || ''));
   });
-  var lines = ['todosData 总条数: ' + todosData.length, '含"标签/测试"的条数: ' + hits.length, ''];
-  hits.forEach(function(t, i) {
-    lines.push('[' + i + '] ' + JSON.stringify(t));
-  });
+  var live = hits.filter(function(t) { return !t._deleted; });
+  var dead = hits.filter(function(t) { return t._deleted; });
+  var lines = [
+    'todosData 总条数: ' + todosData.length,
+    '含"标签/测试"：' + hits.length + '（显示中 ' + live.length + '，已删墓碑 ' + dead.length + '）',
+    ''
+  ];
+  if (live.length) {
+    lines.push('【显示中的】');
+    live.forEach(function(t, i) { lines.push('[' + i + '] ' + JSON.stringify(t)); });
+  }
+  if (dead.length) {
+    lines.push('');
+    lines.push('【已删除墓碑】');
+    dead.forEach(function(t, i) { lines.push('[' + i + '] ' + JSON.stringify(t)); });
+  }
   if (!hits.length) lines.push('（没有含"标签/测试"的条目）');
   lines.push('', 'localStorage 里 lifelog_todos 条数: ' + (DB.get('todos') || []).length);
   alert(lines.join('\n'));
@@ -7045,7 +7072,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818t';
+  b.textContent = 'build 20260818u';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
