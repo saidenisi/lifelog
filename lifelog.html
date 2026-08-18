@@ -2191,8 +2191,9 @@ async function pushAllToCloud() {
 // Debounced push: called by saveAll(), batches writes within 500ms
 var _pushTimer = null;
 var _pushRetryCount = 0;
+var _pendingPush = false;  // 有改动但 supabase 尚未初始化完成，待初始化后补推
 function scheduleCloudPush() {
-  if (!supabaseClient) return;
+  if (!supabaseClient) { _pendingPush = true; return; }
   clearTimeout(_pushTimer);
   _pushTimer = setTimeout(pushAllToCloud, 500);
 }
@@ -6976,6 +6977,11 @@ autoPostponeOverdueTodos();
           dedupeAccounts();
           // 云端数据加载后，再检查一次过期待办自动延期（幂等）
           autoPostponeOverdueTodos();
+          // 若初始化完成前有改动（如删除/修改）没推出去，此时补推一次，确保墓碑/修改同步到云端
+          if (_pendingPush) {
+            _pendingPush = false;
+            pushAllToCloud();
+          }
           // 渲染用户当前所在的页面（而非强制回每日记录），
           // 否则无痕模式下用户打开待办页会被切走、误以为数据丢了
           var active = document.querySelector('.page.active');
@@ -6997,7 +7003,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818n';
+  b.textContent = 'build 20260818o';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
