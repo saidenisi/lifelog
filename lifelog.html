@@ -2091,7 +2091,7 @@ async function pullAllFromCloud() {
     // Other keys are arrays — merge by updatedAt (newest wins)
     var remoteArr = resp.data.data || [];
     var localArr = DB.get(key);
-    var merged = mergeRecords(remoteArr, localArr);
+    var merged = mergeRecords(remoteArr, localArr, 'pull');
 
     // 检测本地墓碑未传播到云端：合并结果里有 _deleted=true，但云端对应条目不是墓碑/不存在，
     // 说明删除没同步到云端（其它端会看到旧数据）。标记待补推，pull 完成后 push 一次。
@@ -2132,17 +2132,22 @@ async function pullAllFromCloud() {
 
 // Merge two record arrays by updatedAt: newest wins. A locally-deleted
 // (_deleted) record is authoritative and always propagates the deletion.
-function mergeRecords(cloudArr, localArr) {
+function mergeRecords(cloudArr, localArr, mode) {
   if (!cloudArr || cloudArr.length === 0) return localArr;
   if (!localArr  || localArr.length === 0)  return cloudArr;
   var map = {};
   cloudArr.forEach(function(r) { if (r && r.id) map[r.id] = r; });
   localArr.forEach(function(l) {
     if (!l || !l.id) return;
+    // 本地墓碑始终胜出（删除要传播，防止已删条目复活）
+    if (l._deleted) { map[l.id] = l; return; }
     var c = map[l.id];
-    if (l._deleted || !c || new Date(l.updatedAt || 0) >= new Date(c.updatedAt || 0)) {
-      map[l.id] = l;
+    if (!c) {
+      // 云端没有这条：push 时保留（视为本地新增待上传）；pull 时丢弃（视为其它端已删除的残留，避免复活）
+      if (mode === 'push') map[l.id] = l;
+      return;
     }
+    if (new Date(l.updatedAt || 0) >= new Date(c.updatedAt || 0)) map[l.id] = l;
   });
   return Object.values(map);
 }
@@ -2162,7 +2167,7 @@ async function pushAllToCloud() {
         try {
           var cloudResp = await supabaseClient.from('lifelog_data').select('data').eq('id', key).maybeSingle();
           if (cloudResp.data && cloudResp.data.data) {
-            localValue = mergeRecords(cloudResp.data.data, localValue || []);
+            localValue = mergeRecords(cloudResp.data.data, localValue || [], 'push');
             // Also update local in-memory data
             switch(key) {
               case 'fitness': fitnessData = localValue; break;
@@ -7015,7 +7020,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818q';
+  b.textContent = 'build 20260818r';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
