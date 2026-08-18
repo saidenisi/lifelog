@@ -2174,6 +2174,13 @@ async function pushAllToCloud() {
     } catch(e) { errors++; console.warn('[Sync] push failed', key, e); }
   }
   setSyncStatus(errors ? '上传失败 ⚠️' : '已同步 ✅', errors ? 'error' : 'synced');
+  // 失败自动重试一次（网络抖动常见），避免删除/修改没同步到云端、其它端看到旧数据
+  if (errors && (_pushRetryCount || 0) < 2) {
+    _pushRetryCount = (_pushRetryCount || 0) + 1;
+    setTimeout(function() { if (supabaseClient) pushAllToCloud(); }, 2500);
+  } else {
+    _pushRetryCount = 0;
+  }
   setTimeout(function() {
     if (syncStatusEl() && syncStatusEl().textContent.indexOf('实时') === -1) {
       setSyncStatus('在线', 'online');
@@ -2181,12 +2188,42 @@ async function pushAllToCloud() {
   }, 3000);
 }
 
-// Debounced push: called by saveAll(), batches writes within 2s
+// Debounced push: called by saveAll(), batches writes within 500ms
 var _pushTimer = null;
+var _pushRetryCount = 0;
 function scheduleCloudPush() {
   if (!supabaseClient) return;
   clearTimeout(_pushTimer);
-  _pushTimer = setTimeout(pushAllToCloud, 2000);
+  _pushTimer = setTimeout(pushAllToCloud, 500);
+}
+
+// 页面关闭前，若还有未上传的改动（用户刚操作完就关页面/切设备），用 keepalive 请求立即同步，
+// 避免"删除/修改没同步到云端"导致其它端看到旧数据（无痕模式尤其依赖云端）。
+window.addEventListener('beforeunload', function() {
+  if (_pushTimer) {
+    clearTimeout(_pushTimer);
+    _pushTimer = null;
+    flushPushKeepalive();
+  }
+});
+
+function flushPushKeepalive() {
+  SYNC_KEYS.forEach(function(key) {
+    var val = key === 'rates' ? exchangeRates : DB.get(key);
+    try {
+      fetch(SUPABASE_URL + '/rest/v1/lifelog_data?on_conflict=id', {
+        method: 'POST',
+        keepalive: true,
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates,return=minimal'
+        },
+        body: JSON.stringify({ id: key, data: val, updated_at: new Date().toISOString() })
+      }).catch(function(){});
+    } catch(e) {}
+  });
 }
 
 // Manual sync: pull then push
@@ -6960,7 +6997,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818m';
+  b.textContent = 'build 20260818n';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
