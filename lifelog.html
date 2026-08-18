@@ -2090,6 +2090,15 @@ async function pullAllFromCloud() {
     var localArr = DB.get(key);
     var merged = mergeRecords(remoteArr, localArr);
 
+    // 检测本地墓碑未传播到云端：合并结果里有 _deleted=true，但云端对应条目不是墓碑/不存在，
+    // 说明删除没同步到云端（其它端会看到旧数据）。标记待补推，pull 完成后 push 一次。
+    var hasLocalTombstone = merged.some(function(m) {
+      if (!m || !m._deleted) return false;
+      var rc = remoteArr.find(function(r) { return r && r.id === m.id; });
+      return !rc || !rc._deleted;
+    });
+    if (hasLocalTombstone) _pendingPush = true;
+
     switch(key) {
       case 'fitness': fitnessData = merged; break;
       case 'sleep': sleepData = merged; break;
@@ -7003,7 +7012,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818o';
+  b.textContent = 'build 20260818p';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
