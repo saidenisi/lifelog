@@ -6764,8 +6764,10 @@ function calcMA25(candles) {
 // 触发：出现「高点回落」——某根K线最高点低于前一根最高点。
 // 止盈点粘性：取「最近一次」高点回落锁定止盈点，之后即使创新高也不消失，
 // 直到出现新的回落（止盈点上移）或现价跌破止盈点（提示止盈）。
-// 第一个最低点 = 回落前那根K线的 low；往前「依次」找两个更低的 low（依次新低），
-// 止盈点 = 第三个最低点的 low（依次递减，不是找波谷/局部最低）。
+// 从触发那根K线（最高点低于前一根）开始，往前「依次」找三个最低点：
+//   第一个最低点 = 触发那根K线自己的 low；
+//   再往前找比它更低的 low（依次递减，不是波谷/局部最低），
+//   止盈点 = 第三个最低点的 low。
 // 参数：
 //   buyDate（YYYY-MM-DD，可空）：只在买入日之后的K线里找（不回到买入前）。
 //   maxLookback（可空）：只取最近 N 根K线，避免回退太久。
@@ -6792,10 +6794,10 @@ function calcTakeProfitPoint(candles, buyDate, maxLookback) {
     }
   }
   if (triggerIdx < 0) return null;
-  // 第一个最低点 = 回落前那根（triggerIdx-1）的 low
-  let currentLow = parseFloat(arr[triggerIdx - 1].low);
+  // 第一个最低点 = 触发那根（triggerIdx）自己的 low
+  let currentLow = parseFloat(arr[triggerIdx].low);
   let found = 1;
-  for (let j = triggerIdx - 2; j >= 0; j--) {
+  for (let j = triggerIdx - 1; j >= 0; j--) {
     const low = parseFloat(arr[j].low);
     if (low < currentLow) {
       currentLow = low;  // 依次更低的 low
@@ -7348,7 +7350,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260819b';
+  b.textContent = 'build 20260819c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
