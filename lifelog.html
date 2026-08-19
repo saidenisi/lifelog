@@ -503,6 +503,31 @@ tbody tr:hover{background:var(--surface-hover)}
 .signal-sell50{background:#fff7ed;color:#ea580c;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
 .signal-sell75{background:var(--danger-bg);color:var(--danger);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
 .signal-sellall{background:#fef2f2;color:var(--danger);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;border:1px solid var(--danger)}
+/* ===== 交易面板（四份持仓） ===== */
+.trade-up{color:var(--danger);font-weight:600}
+.trade-down{color:var(--success);font-weight:600}
+.trade-overview{padding:4px 2px 12px;border-bottom:1px solid var(--border-light);margin-bottom:12px}
+.trade-name{font-size:16px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.trade-price{font-size:26px;font-weight:800;margin:6px 0 10px;color:var(--text)}
+.trade-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.trade-stat{background:var(--surface-hover);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.trade-stat .k{font-size:11px;color:var(--text-muted)}
+.trade-stat .v{font-size:15px;font-weight:700}
+.trade-lots{display:flex;flex-direction:column;gap:10px}
+.trade-lot{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.trade-lot.is-sold{opacity:.7;border-style:dashed}
+.trade-lot-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.lot-label{font-weight:700;font-size:14px}
+.lot-qty{font-size:12px;color:var(--text-muted)}
+.lot-row{display:flex;align-items:center;justify-content:space-between;font-size:13px;padding:2px 0}
+.lot-row .k{color:var(--text-muted)}
+.lot-sell{display:flex;gap:8px;align-items:center;margin-top:8px}
+.lot-sell .form-input{flex:1;min-width:0;padding:7px 10px}
+.trade-history{margin-top:14px}
+.trade-history-title{font-size:13px;font-weight:700;margin-bottom:6px}
+.trade-table{width:100%;border-collapse:collapse;font-size:12px}
+.trade-table th,.trade-table td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-light)}
+.trade-table th{color:var(--text-muted);font-weight:600}
 .stock-search-dropdown{
   position:absolute;z-index:50;background:var(--surface);
   border:1px solid var(--border);border-radius:8px;
@@ -1814,6 +1839,22 @@ tbody tr:hover{background:var(--surface-hover)}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('stockModal')">取消</button>
       <button class="btn btn-primary" onclick="saveStock()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Trade Panel Modal (four-lot take-profit strategy) -->
+<div class="modal-overlay" id="tradeModal">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <div class="modal-title">🎯 交易面板</div>
+      <button class="btn-icon" onclick="closeTradeModal()">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:72vh;overflow-y:auto" id="tradeModalBody">
+      <!-- injected by JS -->
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeTradeModal()">关闭</button>
     </div>
   </div>
 </div>
@@ -6415,6 +6456,233 @@ function getStockCurrency(stock) {
   return 'CNY';
 }
 
+// ===== 四份持仓交易模型 =====
+// 用户把一只股票的持仓均分成四份，分别用 日线/120分/60分/30分 的「第三个低点」
+// 作为该份的卖出点，各份独立操作。某份卖出并确认后，该周期卖出点即失效（该份已清仓），
+// 除非之后重新买入该份。
+const LOT_PERIODS = [
+  { key: 'daily', label: '日线', short: '日' },
+  { key: 'm120',  label: '120分', short: '120分' },
+  { key: 'm60',   label: '60分',  short: '60分' },
+  { key: 'm30',   label: '30分',  short: '30分' }
+];
+
+// 确保 stock 具备 lots（四份）与 trades（交易记录）结构；旧数据自动均分四份。
+// 余数归「日线」份（长周期最重要）。仅在 lots 缺失时初始化，之后不再自动改 qty。
+function ensureStockLots(stock) {
+  if (!stock.lots || typeof stock.lots !== 'object') {
+    const total = stock.quantity || 0;
+    const base = Math.floor(total / 4);
+    const rem = total - base * 3; // 第一份（日线）拿余数，保证四份之和=总持仓
+    stock.lots = {
+      daily: { qty: rem,  status: 'holding', soldAt: null, soldDate: null },
+      m120:  { qty: base, status: 'holding', soldAt: null, soldDate: null },
+      m60:   { qty: base, status: 'holding', soldAt: null, soldDate: null },
+      m30:   { qty: base, status: 'holding', soldAt: null, soldDate: null }
+    };
+  }
+  if (!Array.isArray(stock.trades)) stock.trades = [];
+  LOT_PERIODS.forEach(function(p) {
+    if (!stock.lots[p.key]) stock.lots[p.key] = { qty: 0, status: 'holding', soldAt: null, soldDate: null };
+    var lot = stock.lots[p.key];
+    lot.qty = lot.qty || 0;
+    if (lot.status !== 'sold') lot.status = 'holding';
+    lot.soldAt = lot.soldAt || null;
+    lot.soldDate = lot.soldDate || null;
+  });
+  return stock;
+}
+
+function lotHeldQty(stock) {
+  ensureStockLots(stock);
+  return LOT_PERIODS.reduce(function(s, p) {
+    return s + (stock.lots[p.key].status === 'holding' ? (stock.lots[p.key].qty || 0) : 0);
+  }, 0);
+}
+function lotTotalQty(stock) {
+  ensureStockLots(stock);
+  return LOT_PERIODS.reduce(function(s, p) { return s + (stock.lots[p.key].qty || 0); }, 0);
+}
+function lotSoldQty(stock) {
+  return lotTotalQty(stock) - lotHeldQty(stock);
+}
+
+// 某份的卖出点（来自 stockQuotes 缓存里的 tp）；已卖出的份返回 null（该周期失效）
+function lotTakeProfitPoint(stock, periodKey) {
+  const q = stockQuotes[stock.id];
+  if (!q || !q.tp) return null;
+  const lot = (stock.lots && stock.lots[periodKey]) || {};
+  if (lot.status === 'sold') return null; // 已清仓，该周期指标失效
+  const v = q.tp[periodKey];
+  return (v == null) ? null : v;
+}
+
+// 卖出某一份持仓
+function confirmSellLot(stockId, periodKey) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  ensureStockLots(stock);
+  const p = LOT_PERIODS.find(x => x.key === periodKey);
+  const lot = stock.lots[periodKey];
+  if (!lot || lot.status === 'sold') { toast(p.label + ' 份已卖出过，需重新买入后才能再操作'); return; }
+  const qty = lot.qty || 0;
+  if (qty <= 0) { toast('该份持仓数量为 0'); return; }
+  const q = stockQuotes[stockId];
+  const curPrice = (q && q.price != null) ? q.price : null;
+  const priceInput = document.getElementById('lotSellPrice_' + periodKey);
+  const sellPrice = (priceInput && priceInput.value) ? parseFloat(priceInput.value) : curPrice;
+  if (!sellPrice || sellPrice <= 0) { toast('请输入有效卖出价'); return; }
+  const cost = stock.costPrice || 0;
+  const pnl = (sellPrice - cost) * qty;
+  const pnlPct = cost > 0 ? (sellPrice - cost) / cost * 100 : 0;
+  const sign = pnl >= 0 ? '+' : '';
+  if (!confirm(
+    '确认卖出「' + stock.name + '」' + p.label + '份？\n' +
+    '数量：' + qty + ' 股\n' +
+    '卖出价：' + sellPrice.toFixed(2) + '（成本 ' + (cost ? cost.toFixed(3) : '—') + '）\n' +
+    '预计盈亏：' + sign + pnl.toFixed(0) + ' 元（' + sign + pnlPct.toFixed(2) + '%）\n\n' +
+    '卖出后该周期指标点将失效，直到你重新买入。'
+  )) return;
+
+  lot.status = 'sold';
+  lot.soldAt = sellPrice;
+  lot.soldDate = todayStr();
+  stock.trades.unshift({ id: uid(), period: periodKey, label: p.label, qty: qty, price: sellPrice, cost: cost, pnl: pnl, date: todayStr() });
+  stock.quantity = lotHeldQty(stock);
+  saveStocks();
+  saveAll();
+  renderStocks();
+  renderTradeModal(stockId);
+  toast('已卖出 ' + p.label + '份 ' + qty + ' 股 @ ' + sellPrice.toFixed(2) + ' ✅');
+}
+
+// 重新买入某一份（恢复持有，该周期卖出点重新启用）
+function reopenLot(stockId, periodKey) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  ensureStockLots(stock);
+  const p = LOT_PERIODS.find(x => x.key === periodKey);
+  const lot = stock.lots[periodKey];
+  if (!lot || lot.status === 'holding') { toast(p.label + ' 份仍在持有中'); return; }
+  if (!confirm('重新买入「' + stock.name + '」' + p.label + '份？\n数量：' + (lot.qty || 0) + ' 股\n（重新买入后该周期将重新按买入日期计算卖出点）')) return;
+  lot.status = 'holding';
+  lot.soldAt = null;
+  lot.soldDate = null;
+  stock.quantity = lotHeldQty(stock);
+  saveStocks();
+  saveAll();
+  renderStocks();
+  renderTradeModal(stockId);
+  toast('已重新买入 ' + p.label + ' 份 ✅');
+}
+
+// ===== 交易面板 =====
+async function openTradeModal(stockId) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  const q = stockQuotes[stockId];
+  // 行情缺失或超过 5 分钟，先刷新以拿到最新卖出点
+  if (!q || q.price == null || (Date.now() - (q.ts || 0) > 5 * 60 * 1000)) {
+    toast('正在获取行情与卖出点...');
+    try { await fetchStockData(stock); } catch(e) { console.warn(e); }
+  }
+  renderTradeModal(stockId);
+  const modal = document.getElementById('tradeModal');
+  if (modal) modal.classList.add('active');
+}
+function closeTradeModal() {
+  const modal = document.getElementById('tradeModal');
+  if (modal) modal.classList.remove('active');
+}
+
+function renderTradeModal(stockId) {
+  const stock = stockData.find(s => s.id === stockId);
+  const body = document.getElementById('tradeModalBody');
+  if (!stock || !body) return;
+  ensureStockLots(stock);
+  const q = stockQuotes[stockId];
+  const price = (q && q.price != null) ? q.price : null;
+  const cost = stock.costPrice || 0;
+  const heldQty = lotHeldQty(stock);
+  const totalQty = lotTotalQty(stock);
+  const soldQty = totalQty - heldQty;
+  const unrealPnl = (price != null && cost) ? (price - cost) * heldQty : null;
+  const realizedPnl = (stock.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
+  const rSign = realizedPnl >= 0 ? '+' : '';
+
+  let html = '<div class="trade-overview">';
+  html += '<div class="trade-name">' + (q && q.name ? q.name : stock.name) + ' <span class="badge badge-info">' + stock.code + '</span></div>';
+  html += '<div class="trade-price">现价 ' + (price != null ? price.toFixed(2) : '—') + '</div>';
+  html += '<div class="trade-stats">';
+  html += '<div class="trade-stat"><span class="k">成本</span><span class="v">' + (cost ? cost.toFixed(3) : '—') + '</span></div>';
+  html += '<div class="trade-stat"><span class="k">总持仓</span><span class="v">' + totalQty + '</span></div>';
+  html += '<div class="trade-stat"><span class="k">持有/已卖</span><span class="v">' + heldQty + ' / ' + soldQty + '</span></div>';
+  html += '<div class="trade-stat"><span class="k">已实现盈亏</span><span class="v ' + (realizedPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + rSign + realizedPnl.toFixed(0) + '</span></div>';
+  if (unrealPnl != null) {
+    const uSign = unrealPnl >= 0 ? '+' : '';
+    html += '<div class="trade-stat"><span class="k">未实现盈亏</span><span class="v ' + (unrealPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + uSign + unrealPnl.toFixed(0) + '</span></div>';
+  }
+  html += '</div></div>';
+
+  html += '<div class="trade-lots">';
+  LOT_PERIODS.forEach(function(p) {
+    const lot = stock.lots[p.key];
+    const isSold = lot.status === 'sold';
+    const point = lotTakeProfitPoint(stock, p.key);
+    let tpHtml = '', signalHtml = '', actionHtml = '';
+
+    if (isSold) {
+      const lotPnl = (lot.soldAt != null && cost) ? (lot.soldAt - cost) * (lot.qty || 0) : 0;
+      const lSign = lotPnl >= 0 ? '+' : '';
+      tpHtml = '<div class="lot-row"><span class="k">卖出价</span><span class="v">' + (lot.soldAt != null ? lot.soldAt.toFixed(2) : '—') + '</span></div>';
+      tpHtml += '<div class="lot-row"><span class="k">卖出日期</span><span class="v">' + (lot.soldDate || '—') + '</span></div>';
+      tpHtml += '<div class="lot-row"><span class="k">该笔盈亏</span><span class="v ' + (lotPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + lSign + lotPnl.toFixed(0) + '</span></div>';
+      signalHtml = '<span class="badge badge-muted">已卖出 · 指标失效</span>';
+      actionHtml = '<button class="btn btn-ghost btn-sm" onclick="reopenLot(\'' + stock.id + '\',\'' + p.key + '\')">↺ 重新买入</button>';
+    } else {
+      if (point == null) {
+        tpHtml = '<div class="lot-row"><span class="k">卖出点</span><span class="v text-muted">低点不足，暂无</span></div>';
+        signalHtml = '<span class="signal-hold">— 无信号</span>';
+      } else {
+        const breached = price != null && price < point;
+        const dist = (price != null) ? ((price - point) / point * 100) : null;
+        tpHtml = '<div class="lot-row"><span class="k">卖出点</span><span class="v" style="font-weight:700;color:' + (breached ? 'var(--danger)' : 'var(--success)') + '">' + point.toFixed(2) + (dist != null ? ' <span style="font-weight:400;opacity:.8">(' + (dist >= 0 ? '+' : '') + dist.toFixed(2) + '%)</span>' : '') + '</span></div>';
+        signalHtml = breached
+          ? '<span class="signal-sellall">🔻 跌破卖出点</span>'
+          : '<span class="signal-hold">🟢 持有</span>';
+      }
+      actionHtml = '<div class="lot-sell">' +
+        '<input type="number" id="lotSellPrice_' + p.key + '" class="form-input" step="0.001" placeholder="卖出价" value="' + (price != null ? price.toFixed(2) : '') + '">' +
+        '<button class="btn btn-primary btn-sm" onclick="confirmSellLot(\'' + stock.id + '\',\'' + p.key + '\')">确认卖出</button>' +
+        '</div>';
+    }
+
+    html += '<div class="trade-lot' + (isSold ? ' is-sold' : '') + '">' +
+      '<div class="trade-lot-head"><span class="lot-label">' + p.label + '</span>' +
+      '<span class="lot-qty">' + (lot.qty || 0) + ' 股</span>' +
+      '<span style="margin-left:auto">' + signalHtml + '</span></div>' +
+      tpHtml + actionHtml +
+      '</div>';
+  });
+  html += '</div>';
+
+  const trades = stock.trades || [];
+  html += '<div class="trade-history"><div class="trade-history-title">交易记录（' + trades.length + '）</div>';
+  if (trades.length === 0) {
+    html += '<div class="text-muted text-sm" style="padding:6px 0">暂无卖出记录</div>';
+  } else {
+    html += '<table class="trade-table"><thead><tr><th>日期</th><th>周期</th><th>数量</th><th>卖出价</th><th>盈亏</th></tr></thead><tbody>';
+    trades.forEach(function(t) {
+      const sgn = (t.pnl || 0) >= 0 ? '+' : '';
+      html += '<tr><td>' + (t.date || '') + '</td><td>' + (t.label || t.period) + '</td><td>' + t.qty + '</td><td>' + (t.price != null ? t.price.toFixed(2) : '—') + '</td><td class="' + ((t.pnl || 0) >= 0 ? 'trade-up' : 'trade-down') + '">' + sgn + (t.pnl || 0).toFixed(0) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+
+  body.innerHTML = html;
+}
+
 // Parse Tencent quote string: v_code="51~name~code~price~yclose~open~..."
 function parseTencentQuote(code, raw) {
   // Detect Tencent's "no data" response (e.g. unsupported HK codes like 08251)
@@ -6834,6 +7102,7 @@ function renderStocks() {
       ${tpCell()}
       ${signalHtml}
       <td style="text-align:right;white-space:nowrap">
+        <button class="btn-icon" onclick="openTradeModal('${s.id}')" title="交易面板（四份持仓）">🎯</button>
         <button class="btn-icon" onclick="refreshSingleStock('${s.id}')" title="刷新">🔄</button>
         <button class="btn-icon" onclick="openStockModal('${s.id}')" title="编辑">✏️</button>
         <button class="btn-icon" onclick="deleteStock('${s.id}')" title="删除">🗑️</button>
@@ -6963,6 +7232,11 @@ function saveStock() {
   if (id) {
     const idx = stockData.findIndex(s => s.id === id);
     if (idx >= 0) {
+      // 若持仓数量被改动，则重置四份持仓与交易记录（持仓结构已变，交易状态重新开始）
+      if (stockData[idx].quantity !== quantity) {
+        stockData[idx].lots = null;
+        stockData[idx].trades = [];
+      }
       stockData[idx].code = normCode;
       stockData[idx].name = sel.name;
       stockData[idx].quantity = quantity;
@@ -7074,7 +7348,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260819a';
+  b.textContent = 'build 20260819b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
