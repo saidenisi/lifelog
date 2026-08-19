@@ -7234,10 +7234,18 @@ function saveStock() {
   if (id) {
     const idx = stockData.findIndex(s => s.id === id);
     if (idx >= 0) {
-      // 若持仓数量被改动，则重置四份持仓与交易记录（持仓结构已变，交易状态重新开始）
+      // 若持仓数量被改动：**不重置分仓/交易记录**，只把新数量分配给「仍在持有」的份，
+      // 已卖出的份保持不变。这样用户"兜底修正实际持仓/成本价"时不会抹掉已确认的卖出状态。
       if (stockData[idx].quantity !== quantity) {
-        stockData[idx].lots = null;
-        stockData[idx].trades = [];
+        ensureStockLots(stockData[idx]);
+        const holdingKeys = LOT_PERIODS.filter(p => stockData[idx].lots[p.key].status === 'holding').map(p => p.key);
+        if (holdingKeys.length > 0) {
+          const base = Math.floor(quantity / holdingKeys.length);
+          const rem = quantity - base * holdingKeys.length;
+          holdingKeys.forEach((k, i) => {
+            stockData[idx].lots[k].qty = (i === 0) ? base + rem : base;
+          });
+        }
       }
       stockData[idx].code = normCode;
       stockData[idx].name = sel.name;
@@ -7350,7 +7358,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260819d';
+  b.textContent = 'build 20260819e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
