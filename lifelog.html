@@ -920,6 +920,10 @@ tbody tr:hover{background:var(--surface-hover)}
   background:var(--surface);color:var(--text);outline:none;
 }
 .todo-add-input:focus{border-color:var(--primary)}
+.todo-input-row{display:flex;gap:8px;align-items:center;margin-top:8px}
+.todo-input-row .todo-input-text{flex:1;min-width:0}
+.todo-input-row .todo-input-date{flex:1;min-width:0}
+.todo-send-btn{flex-shrink:0;white-space:nowrap;padding:10px 16px}
 .todo-expand{
   border:1px solid var(--border);border-radius:12px;
   padding:12px 14px;
@@ -5963,11 +5967,13 @@ function renderTodoEditRow(t) {
     html += '<span class="todo-tag-chip'+(active?' active':'')+'" data-key="'+key+'" onclick="selectTodoTag(\''+key+'\')" style="'+(active ? 'background:'+tt.color+';color:#fff;border-color:'+tt.color : '')+'">'+tt.label+'</span>';
   });
   html += '</div>';
-  html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-  html += '<input type="text" id="todoEditInput" class="todo-add-input" style="flex:1;min-width:160px" value="'+escapeHtml(t.content)+'">';
-  html += '<input type="date" id="todoEditDate" class="todo-add-input" style="max-width:150px" value="'+t.date+'" title="待办日期">';
-  html += '<input type="date" id="todoEditDateEnd" class="todo-add-input" style="max-width:150px" value="'+(t.dateEnd||'')+'" title="结束日期（留空=单日）">';
-  html += '<button class="btn btn-primary" onclick="saveEditTodo()" style="flex-shrink:0">保存</button>';
+  html += '<div class="todo-input-row" style="margin-top:0">';
+  html += '<input type="text" id="todoEditInput" class="todo-add-input todo-input-text" value="'+escapeHtml(t.content)+'">';
+  html += '<button class="btn btn-primary todo-send-btn" onclick="saveEditTodo()">保存</button>';
+  html += '</div>';
+  html += '<div class="todo-input-row">';
+  html += '<input type="date" id="todoEditDate" class="todo-add-input todo-input-date" value="'+t.date+'" title="待办日期">';
+  html += '<input type="date" id="todoEditDateEnd" class="todo-add-input todo-input-date" value="'+(t.dateEnd||'')+'" title="结束日期（留空=单日）">';
   html += '<button class="btn btn-ghost" onclick="cancelEditTodo()" style="flex-shrink:0">取消</button>';
   html += '</div></div>';
   return html;
@@ -6009,19 +6015,17 @@ function showTodoInput() {
   var el = document.getElementById('todosAddArea');
   if (!el) return;
   el.innerHTML = todoTagChipsHtml() +
-    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
-    '<input type="text" id="todoInput" class="todo-add-input" style="flex:1;min-width:160px" placeholder="输入待办内容" autocomplete="off">'+
-    '<input type="date" id="todoDateEndInput" class="todo-add-input" style="max-width:150px" title="结束日期（留空=单日事项）">'+
-    '<button class="btn btn-primary" id="todoSendBtn" onclick="addTodo()" style="display:none;flex-shrink:0">发送</button>'+
-    '<button class="btn btn-ghost" onclick="cancelTodoInput()" style="flex-shrink:0">取消</button>'+
+    '<div class="todo-input-row">'+
+      '<input type="text" id="todoInput" class="todo-add-input todo-input-text" placeholder="输入待办内容" autocomplete="off">'+
+      '<button class="btn btn-primary todo-send-btn" id="todoSendBtn" onclick="addTodo()">保存</button>'+
+    '</div>'+
+    '<div class="todo-input-row">'+
+      '<input type="date" id="todoDateEndInput" class="todo-add-input todo-input-date" title="结束日期（留空=单日事项）">'+
+      '<button class="btn btn-ghost" onclick="cancelTodoInput()" style="flex-shrink:0">取消</button>'+
     '</div>';
   var input = document.getElementById('todoInput');
   if (input) {
     input.focus();
-    input.addEventListener('input', function() {
-      var btn = document.getElementById('todoSendBtn');
-      if (btn) btn.style.display = input.value.trim() ? '' : 'none';
-    });
     input.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') { e.preventDefault(); addTodo(); }
     });
@@ -7070,7 +7074,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260818v';
+  b.textContent = 'build 20260819a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
