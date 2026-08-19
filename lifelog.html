@@ -6760,18 +6760,18 @@ function calcMA25(candles) {
   return sum / n;
 }
 
-// --- 上涨止盈点（新策略，替换均线减档）---
-// 触发：出现「高点回落」——某根K线最高点低于前一根最高点。
-// 止盈点粘性：取「最近一次」高点回落锁定止盈点，之后即使创新高也不消失，
-// 直到出现新的回落（止盈点上移）或现价跌破止盈点（提示止盈）。
-// 从触发那根K线（最高点低于前一根）开始，往前「依次」找三个最低点：
-//   第一个最低点 = 触发那根K线自己的 low；
-//   再往前找比它更低的 low（依次递减，不是波谷/局部最低），
-//   止盈点 = 第三个最低点的 low。
+// --- 上涨止盈点（「第三个最低点」策略，2026-08-19 定稿）---
+// 1) 找「最近的高点」（顶点）：回看范围内 high 最高的那根K线（阶段顶部，取最后一个达到最高值的）。
+// 2) 若顶点就是最新一根 => 还在涨、尚未回落，止盈点暂无（返回 null）。
+// 3) 从顶点那根（包含）往前，找三个「依次递减」的 low（不要求连续相邻，跳过不满足"更低"的）：
+//    第 1 个 = 顶点自己的 low；往前第一个更低的 = 第 2 个；再往前第一个更低的 = 第 3 个。
+// 4) 第 3 个最低点的 low = 止盈信号位。
+// 锁定：顶点不变则止盈点不变（持续阴跌中不重算）；只有创新高后顶点上移，止盈点才重算；
+//       现价跌破止盈点则提示止盈（卖出后该周期失效）。
 // 参数：
 //   buyDate（YYYY-MM-DD，可空）：只在买入日之后的K线里找（不回到买入前）。
 //   maxLookback（可空）：只取最近 N 根K线，避免回退太久。
-// 返回 { point, triggered }；从未回落或低点不足返回 null。
+// 返回 { point, triggered }；还在涨未回落、或低点不足返回 null。
 function calcTakeProfitPoint(candles, buyDate, maxLookback) {
   if (!candles || candles.length < 4) return null;
   let arr = candles;
@@ -6785,19 +6785,19 @@ function calcTakeProfitPoint(candles, buyDate, maxLookback) {
   if (maxLookback && arr.length > maxLookback) arr = arr.slice(-maxLookback);
   if (arr.length < 4) return null;
   const n = arr.length;
-  // 找最近一次高点回落：arr[i].high < arr[i-1].high（从最新往前扫）
-  let triggerIdx = -1;
-  for (let i = n - 1; i >= 1; i--) {
-    if (parseFloat(arr[i].high) < parseFloat(arr[i - 1].high)) {
-      triggerIdx = i;
-      break;
+  // 顶点 = high 最高那根（用 >= 取最后一个达到最高值的，即"开始跌之前的最后一根"）
+  let vertexIdx = 0;
+  for (let i = 1; i < n; i++) {
+    if (parseFloat(arr[i].high) >= parseFloat(arr[vertexIdx].high)) {
+      vertexIdx = i;
     }
   }
-  if (triggerIdx < 0) return null;
-  // 第一个最低点 = 触发那根（triggerIdx）自己的 low
-  let currentLow = parseFloat(arr[triggerIdx].low);
+  // 顶点是最新一根 => 还在涨，尚未回落
+  if (vertexIdx >= n - 1) return null;
+  // 从顶点（包含）往前找三个依次递减的 low
+  let currentLow = parseFloat(arr[vertexIdx].low);
   let found = 1;
-  for (let j = triggerIdx - 1; j >= 0; j--) {
+  for (let j = vertexIdx - 1; j >= 0; j--) {
     const low = parseFloat(arr[j].low);
     if (low < currentLow) {
       currentLow = low;  // 依次更低的 low
@@ -7350,7 +7350,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260819c';
+  b.textContent = 'build 20260819d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
