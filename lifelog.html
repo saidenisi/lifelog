@@ -2137,6 +2137,127 @@ let financeData = DB.get('finance');
 let medicationsData = DB.get('medications') || [];
 let healthNotesData = DB.get('healthNotes') || [];
 
+// 默认药品/保健品（用户提供的瓶装实物照片）
+const DEFAULT_MEDICATIONS = [
+  {
+    id: 'med-now-d3k2',
+    name: 'NOW Vitamin D-3 & K-2',
+    category: '维生素',
+    purpose: '支持骨骼健康、心血管健康',
+    dosage: '1000 IU / 45 mcg 每粒',
+    frequency: '按说明服用',
+    startDate: '',
+    status: '服用中',
+    notes: '120 粒胶囊，Non-GMO。图片见瓶身标签。',
+    images: ['https://saidenisi.github.io/lifelog/med-images/now-d3k2.jpg']
+  },
+  {
+    id: 'med-life-space-probiotic',
+    name: 'Life-space Triple Strength Probiotic plus',
+    category: '保健品',
+    purpose: '调节肠道菌群、缓解便秘、改善排便规律、支持免疫系统',
+    dosage: '960 亿 CFU 每粒',
+    frequency: '按说明服用',
+    startDate: '',
+    status: '服用中',
+    notes: '30 粒硬胶囊，专利菌株 LPB27，AUST L474537。',
+    images: ['https://saidenisi.github.io/lifelog/med-images/life-space-probiotic.jpg']
+  },
+  {
+    id: 'med-ubio-lipid-gluco',
+    name: 'UBIO Lipid & Gluco Care',
+    category: '保健品',
+    purpose: '维持正常胆固醇水平和血糖水平',
+    dosage: '按标签说明',
+    frequency: '每日 2 次（2 per day，瓶身标注）',
+    startDate: '',
+    status: '服用中',
+    notes: '60 片，含黑蒜提取物和黑胡椒铬。Food Supplement。',
+    images: ['https://saidenisi.github.io/lifelog/med-images/ubio-lipid-gluco.jpg']
+  },
+  {
+    id: 'med-jd-fish-oil',
+    name: '京东京造 鸿洋神 鱼油软胶囊',
+    category: '保健品',
+    purpose: '辅助降血脂',
+    dosage: '1g / 粒，150 粒 / 瓶',
+    frequency: '按说明服用',
+    startDate: '',
+    status: '服用中',
+    notes: '保健食品（鲁食健备 G202137100661），原料采自秘鲁深海。',
+    images: ['https://saidenisi.github.io/lifelog/med-images/jd-fish-oil.jpg']
+  },
+  {
+    id: 'med-opcon-lutein',
+    name: '欧普康视 Lutein Esters 蓝莓咀嚼片',
+    category: '保健品',
+    purpose: '叶黄素补充、眼部健康',
+    dosage: '60 片 / 瓶，净含量 36g',
+    frequency: '按说明服用',
+    startDate: '',
+    status: '服用中',
+    notes: 'Blueberry chewable tablets，Good Taste。',
+    images: ['https://saidenisi.github.io/lifelog/med-images/opcon-lutein.jpg']
+  },
+  {
+    id: 'med-bagekon-x5',
+    name: 'Bagekon X5 氨基酸牡蛎玛咖片',
+    category: '保健品',
+    purpose: '运动营养食品（耐力类）',
+    dosage: '0.5g / 片，90 片 / 瓶，净含量 45g',
+    frequency: '按说明服用',
+    startDate: '',
+    status: '服用中',
+    notes: '特殊膳食 - 运动营养食品耐力类。',
+    images: ['https://saidenisi.github.io/lifelog/med-images/bagekon-x5.jpg']
+  },
+  {
+    id: 'med-enshuangping',
+    name: '恩双平 二甲双胍恩格列净片(I)',
+    category: '药品',
+    purpose: '降糖（2 型糖尿病）',
+    dosage: '每片含盐酸二甲双胍 500mg + 恩格列净 5mg',
+    frequency: '遵医嘱',
+    startDate: '',
+    status: '服用中',
+    notes: '国药准字 H20213448，杭州中美华东制药有限公司。处方药，请遵医嘱。',
+    images: ['https://saidenisi.github.io/lifelog/med-images/enshuangping.jpg']
+  },
+  {
+    id: 'med-lizuan-tiepi',
+    name: '立钻 铁皮枫斗颗粒',
+    category: '药品',
+    purpose: '益气养阴、养胃生津（按说明书）',
+    dosage: '按包装/说明书',
+    frequency: '按说明服用',
+    startDate: '',
+    status: '服用中',
+    notes: 'OTC，浙江天皇药业有限公司。',
+    images: ['https://saidenisi.github.io/lifelog/med-images/lizuan-tiepi.jpg']
+  }
+];
+
+function ensureDefaultMedications() {
+  const now = new Date().toISOString();
+  let changed = false;
+  DEFAULT_MEDICATIONS.forEach(def => {
+    const idx = medicationsData.findIndex(m => m.id === def.id);
+    if (idx < 0) {
+      medicationsData.push({
+        ...def,
+        createdAt: now,
+        updatedAt: now,
+        _deleted: false
+      });
+      changed = true;
+    }
+  });
+  if (changed) {
+    DB.set('medications', medicationsData);
+  }
+}
+ensureDefaultMedications();
+
 // ===== Media Data =====
 let mediaData = DB.get('media') || [];
 let mediaFilter = 'all'; // all/movie/tv/book/show
@@ -7859,7 +7980,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260820a';
+  b.textContent = 'build 20260820b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
