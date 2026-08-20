@@ -1039,6 +1039,17 @@ tbody tr:hover{background:var(--surface-hover)}
   background:var(--border-light);
   color:var(--text-secondary);
 }
+.fit-type-list{display:flex;flex-wrap:wrap;gap:8px}
+.fit-type-item{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 12px;border-radius:20px;font-size:13px;
+  background:var(--border-light);color:var(--text);
+}
+.fit-type-item button{
+  border:none;background:none;cursor:pointer;padding:0 2px;
+  font-size:14px;line-height:1;color:var(--text-muted);
+}
+.fit-type-item button:hover{color:var(--danger)}
 </style>
 </head>
 <body>
@@ -1157,6 +1168,10 @@ tbody tr:hover{background:var(--surface-hover)}
 
       <!-- 健身 -->
       <div class="health-pane" id="pane-fitness">
+        <div class="health-pane-toolbar">
+          <button class="btn btn-primary" onclick="openFitnessModal()">➕ 添加记录</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportFitnessCSV()">📥 导出</button>
+        </div>
         <div class="stat-grid">
           <div class="stat-card fit">
             <div class="stat-icon">📅</div>
@@ -1169,9 +1184,9 @@ tbody tr:hover{background:var(--surface-hover)}
             <div class="stat-value" id="fitMonthlyDuration">0 分钟</div>
           </div>
           <div class="stat-card sleep">
-            <div class="stat-icon">🔥</div>
-            <div class="stat-label">本月消耗热量</div>
-            <div class="stat-value" id="fitMonthlyCalories">0 kcal</div>
+            <div class="stat-icon">📊</div>
+            <div class="stat-label">本月平均时长</div>
+            <div class="stat-value" id="fitMonthlyAvg">0 分钟</div>
           </div>
         </div>
 
@@ -1187,10 +1202,6 @@ tbody tr:hover{background:var(--surface-hover)}
         <div class="card">
           <div class="card-header">
             <div class="card-title">📝 健身记录</div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <button class="btn btn-ghost btn-sm" onclick="exportFitnessCSV()">📥 导出</button>
-              <button class="btn btn-primary btn-sm" onclick="openFitnessModal()">➕ 添加记录</button>
-            </div>
           </div>
           <div class="table-wrap" id="fitnessTableWrap">
             <!-- table injected by JS -->
@@ -1592,20 +1603,10 @@ tbody tr:hover{background:var(--surface-hover)}
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">运动类型</label>
-          <select class="form-select" id="fitType">
-            <option value="跑步">🏃 跑步</option>
-            <option value="力量训练">🏋️ 力量训练</option>
-            <option value="瑜伽">🧘 瑜伽</option>
-            <option value="游泳">🏊 游泳</option>
-            <option value="骑行">🚴 骑行</option>
-            <option value="篮球">🏀 篮球</option>
-            <option value="羽毛球">🏸 羽毛球</option>
-            <option value="足球">⚽ 足球</option>
-            <option value="跳绳">🪢 跳绳</option>
-            <option value="HIIT">🔥 HIIT</option>
-            <option value="徒步">🥾 徒步</option>
-            <option value="其他">📌 其他</option>
-          </select>
+          <div style="display:flex;gap:6px">
+            <select class="form-select" id="fitType" style="flex:1"></select>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="openFitTypeManager()" title="管理运动类型">⚙️ 管理</button>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">运动时长（分钟）</label>
@@ -1620,19 +1621,9 @@ tbody tr:hover{background:var(--surface-hover)}
           <div class="intensity-btn" data-val="高">高强度</div>
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">消耗热量（kcal）</label>
-          <input type="number" class="form-input" id="fitCalories" placeholder="如 300" min="0">
-        </div>
-        <div class="form-group">
-          <label class="form-label">组数</label>
-          <input type="number" class="form-input" id="fitSets" placeholder="如 4" min="0">
-        </div>
-        <div class="form-group">
-          <label class="form-label">每组次数</label>
-          <input type="number" class="form-input" id="fitReps" placeholder="如 12" min="0">
-        </div>
+      <div class="form-group">
+        <label class="form-label">运动地点</label>
+        <input type="text" class="form-input" id="fitLocation" placeholder="如 健身房、户外公园、家里...">
       </div>
       <div class="form-group">
         <label class="form-label">备注</label>
@@ -1642,6 +1633,30 @@ tbody tr:hover{background:var(--surface-hover)}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('fitnessModal')">取消</button>
       <button class="btn btn-primary" onclick="saveFitness()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fit Type Manager Modal -->
+<div class="modal-overlay" id="fitTypeModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">管理运动类型</div>
+      <button class="btn-icon" onclick="closeModal('fitTypeModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">新增运动类型</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" class="form-input" id="fitTypeNew" placeholder="如 爬山、划船..." onkeydown="if(event.key==='Enter')addFitType()">
+          <button class="btn btn-primary btn-sm" onclick="addFitType()">添加</button>
+        </div>
+      </div>
+      <div class="form-label" style="margin:4px 0 8px">现有类型（点 ✕ 删除）</div>
+      <div class="fit-type-list" id="fitTypeList"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('fitTypeModal')">完成</button>
     </div>
   </div>
 </div>
@@ -2136,6 +2151,11 @@ const DB = {
 };
 
 let fitnessData = DB.get('fitness');
+let fitnessTypes = DB.get('fitnessTypes');
+if (!Array.isArray(fitnessTypes) || fitnessTypes.length === 0) {
+  fitnessTypes = ['跑步', '力量训练', '瑜伽', '游泳', '骑行', '篮球', '羽毛球', '足球', '跳绳', 'HIIT', '徒步'];
+  DB.set('fitnessTypes', fitnessTypes);
+}
 let sleepData = DB.get('sleep');
 let financeData = DB.get('finance');
 
@@ -2862,6 +2882,48 @@ function destroyChart(id) {
    FITNESS MODULE
    ============================================================ */
 
+function renderFitTypeOptions(selected) {
+  const sel = document.getElementById('fitType');
+  if (!sel) return;
+  sel.innerHTML = fitnessTypes.map(t => `<option value="${escapeHtml(t)}" ${t === selected ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
+}
+
+function renderFitTypeList() {
+  const list = document.getElementById('fitTypeList');
+  if (!list) return;
+  list.innerHTML = fitnessTypes.map((t, i) =>
+    `<span class="fit-type-item">${escapeHtml(t)}<button onclick="removeFitType(${i})" title="删除">✕</button></span>`
+  ).join('');
+}
+
+function openFitTypeManager() {
+  renderFitTypeList();
+  document.getElementById('fitTypeNew').value = '';
+  document.getElementById('fitTypeModal').classList.add('active');
+}
+
+function addFitType() {
+  const inp = document.getElementById('fitTypeNew');
+  const v = (inp.value || '').trim();
+  if (!v) { toast('请输入运动类型名称'); return; }
+  if (fitnessTypes.includes(v)) { toast('该类型已存在'); return; }
+  fitnessTypes.push(v);
+  DB.set('fitnessTypes', fitnessTypes);
+  inp.value = '';
+  renderFitTypeList();
+  renderFitTypeOptions(document.getElementById('fitType').value);
+  toast('已添加「' + v + '」');
+}
+
+function removeFitType(idx) {
+  const name = fitnessTypes[idx];
+  if (!confirm('删除类型「' + name + '」？已有记录会保留该名称，只是不再出现在下拉选项里。')) return;
+  fitnessTypes = fitnessTypes.filter((_, i) => i !== idx);
+  DB.set('fitnessTypes', fitnessTypes);
+  renderFitTypeList();
+  renderFitTypeOptions(document.getElementById('fitType').value);
+}
+
 function openFitnessModal(id) {
   document.getElementById('fitId').value = id || '';
   document.getElementById('fitnessModalTitle').textContent = id ? '编辑健身记录' : '添加健身记录';
@@ -2869,11 +2931,9 @@ function openFitnessModal(id) {
     const r = fitnessData.find(f => f.id === id);
     if (r) {
       document.getElementById('fitDate').value = r.date;
-      document.getElementById('fitType').value = r.type;
+      renderFitTypeOptions(r.type);
       document.getElementById('fitDuration').value = r.duration || '';
-      document.getElementById('fitCalories').value = r.calories || '';
-      document.getElementById('fitSets').value = r.sets || '';
-      document.getElementById('fitReps').value = r.reps || '';
+      document.getElementById('fitLocation').value = r.location || '';
       document.getElementById('fitNotes').value = r.notes || '';
       document.querySelectorAll('#fitIntensity .intensity-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.val === r.intensity);
@@ -2881,11 +2941,9 @@ function openFitnessModal(id) {
     }
   } else {
     document.getElementById('fitDate').value = todayStr();
-    document.getElementById('fitType').value = '跑步';
+    renderFitTypeOptions(fitnessTypes[0]);
     document.getElementById('fitDuration').value = '';
-    document.getElementById('fitCalories').value = '';
-    document.getElementById('fitSets').value = '';
-    document.getElementById('fitReps').value = '';
+    document.getElementById('fitLocation').value = '';
     document.getElementById('fitNotes').value = '';
     document.querySelectorAll('#fitIntensity .intensity-btn').forEach((b,i) => {
       b.classList.toggle('active', i === 1);
@@ -2917,17 +2975,15 @@ function saveFitness() {
   const type = document.getElementById('fitType').value;
   const duration = parseInt(document.getElementById('fitDuration').value) || 0;
   if (!duration) { toast('请输入运动时长'); return; }
-  const calories = parseInt(document.getElementById('fitCalories').value) || 0;
-  const sets = parseInt(document.getElementById('fitSets').value) || 0;
-  const reps = parseInt(document.getElementById('fitReps').value) || 0;
+  const location = document.getElementById('fitLocation').value.trim();
   const notes = document.getElementById('fitNotes').value;
   const intensity = document.querySelector('#fitIntensity .intensity-btn.active')?.dataset.val || '中';
 
   if (id) {
     const idx = fitnessData.findIndex(f => f.id === id);
-    if (idx >= 0) fitnessData[idx] = {...fitnessData[idx], date, type, duration, calories, sets, reps, notes, intensity};
+    if (idx >= 0) fitnessData[idx] = {...fitnessData[idx], date, type, duration, location, notes, intensity};
   } else {
-    fitnessData.push({id:uid(), date, type, duration, calories, sets, reps, notes, intensity});
+    fitnessData.push({id:uid(), date, type, duration, location, notes, intensity});
   }
   saveAll();
   closeModal('fitnessModal');
@@ -2950,9 +3006,12 @@ function renderFitness() {
     const d = new Date(f.date);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
+  const monthTotal = monthRecords.reduce((s,f)=>s+(f.duration||0),0);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const avg = monthTotal / daysInMonth;
   document.getElementById('fitMonthlyCount').textContent = monthRecords.length + ' 次';
-  document.getElementById('fitMonthlyDuration').textContent = monthRecords.reduce((s,f)=>s+f.duration,0) + ' 分钟';
-  document.getElementById('fitMonthlyCalories').textContent = monthRecords.reduce((s,f)=>s+(f.calories||0),0) + ' kcal';
+  document.getElementById('fitMonthlyDuration').textContent = monthTotal + ' 分钟';
+  document.getElementById('fitMonthlyAvg').textContent = (avg % 1 === 0 ? avg : avg.toFixed(1)) + ' 分钟';
 
   // Chart - last 14 days duration
   const colors = getChartColors();
@@ -3000,17 +3059,17 @@ function renderFitness() {
     return;
   }
   let html = `<table><thead><tr>
-    <th>日期</th><th>运动</th><th>时长</th><th>强度</th><th>热量</th><th>备注</th><th></th>
+    <th>日期</th><th>运动</th><th>时长</th><th>强度</th><th>地点</th><th>备注</th><th></th>
   </tr></thead><tbody>`;
   sorted.forEach(f => {
     const intensityBadge = f.intensity === '高' ? 'badge-danger' : f.intensity === '中' ? 'badge-warning' : 'badge-success';
     html += `<tr>
       <td>${fmtDate(f.date)}</td>
-      <td><span class="chip">${f.type}</span></td>
+      <td><span class="chip">${escapeHtml(f.type)}</span></td>
       <td>${f.duration} 分钟</td>
       <td><span class="badge ${intensityBadge}">${f.intensity}</span></td>
-      <td>${f.calories || '-'} kcal</td>
-      <td class="text-muted text-sm" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.notes || '-'}</td>
+      <td>${f.location ? escapeHtml(f.location) : '-'}</td>
+      <td class="text-muted text-sm" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.notes ? escapeHtml(f.notes) : '-'}</td>
       <td>
         <button class="btn-icon" onclick="openFitnessModal('${f.id}')" title="编辑">✏️</button>
         <button class="btn-icon" onclick="deleteFitness('${f.id}')" title="删除">🗑️</button>
@@ -6899,8 +6958,8 @@ function exportCSV(filename, headers, rows) {
 function exportFitnessCSV() {
   if (!fitnessData.length) return toast('没有数据可导出');
   exportCSV(`fitness_${todayStr()}.csv`,
-    ['日期','运动类型','时长(分钟)','强度','热量(kcal)','组数','次数','备注'],
-    fitnessData.map(f => [f.date, f.type, f.duration, f.intensity, f.calories||0, f.sets||0, f.reps||0, f.notes||''])
+    ['日期','运动类型','时长(分钟)','强度','地点','备注'],
+    fitnessData.map(f => [f.date, f.type, f.duration, f.intensity, f.location||'', f.notes||''])
   );
 }
 function exportSleepCSV() {
@@ -8022,7 +8081,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260820c';
+  b.textContent = 'build 20260820d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
