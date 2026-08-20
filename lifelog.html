@@ -5835,10 +5835,27 @@ function positionTodoExpandPanel() {
   panel.style.position = 'absolute';
   panel.style.left = '0';
   panel.style.right = '0';
-  panel.style.top = (grid.offsetTop + cell.offsetTop + cell.offsetHeight + 4) + 'px';
+  panel.style.top = '0';
+  panel.style.visibility = 'hidden';
   panel.style.zIndex = '6';
   panel.innerHTML = renderTodoExpand();
   el.appendChild(panel);
+
+  // 测量面板实际高度后，决定放在选中格子的下方还是上方，
+  // 避免选中靠近日历底部的一周时面板向下溢出屏幕、输入框不可见。
+  var panelH = panel.offsetHeight;
+  var cellTop = grid.offsetTop + cell.offsetTop;
+  var cellBottom = cellTop + cell.offsetHeight;
+  var gridBottom = grid.offsetTop + grid.offsetHeight;
+
+  var top = cellBottom + 4; // 默认：格子下方
+  if (top + panelH > gridBottom + 4) {
+    top = cellTop - panelH - 4; // 放不下，向上翻到格子上方
+    if (top < grid.offsetTop) top = grid.offsetTop; // 上方也不够则贴住日历顶部
+  }
+
+  panel.style.top = top + 'px';
+  panel.style.visibility = '';
 }
 
 // Render multi-day todos as horizontal bars (measured against actual cell positions)
@@ -6067,6 +6084,10 @@ function showTodoInput() {
   var input = document.getElementById('todoInput');
   if (input) {
     input.focus();
+    // 面板可能内部滚动，确保输入框滚到可见位置（避免被键盘/面板边缘挡住）
+    setTimeout(function() {
+      try { input.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch(e) {}
+    }, 50);
     input.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') { e.preventDefault(); addTodo(); }
     });
@@ -7358,7 +7379,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260819e';
+  b.textContent = 'build 20260819f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
