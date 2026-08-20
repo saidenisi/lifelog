@@ -545,13 +545,19 @@ tbody tr:hover{background:var(--surface-hover)}
 .med-list,.hn-list{display:flex;flex-direction:column;gap:10px}
 .med-card,.hn-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
 .med-card.stopped{opacity:.65}
+.med-body{display:flex;gap:14px;align-items:flex-start}
+.med-side{flex:0 0 120px;display:flex;flex-direction:column;gap:6px}
+.med-photo{width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;background:var(--bg)}
+.med-more{display:flex;gap:6px;flex-wrap:wrap}
+.med-more .med-thumb{width:38px;height:38px}
+.med-main{flex:1 1 auto;min-width:0}
 .med-head,.hn-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .med-name,.hn-title{font-weight:700;font-size:15px}
 .med-imgs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
 .med-thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in}
-.med-fields{display:flex;flex-direction:column;gap:2px;font-size:13px}
+.med-fields{display:flex;flex-direction:column;gap:4px;font-size:13px;margin-top:4px}
 .hn-field b{color:var(--text-muted);font-weight:600;margin-right:4px}
-.med-notes{margin-top:6px}
+.med-notes{margin-top:8px;white-space:pre-wrap;line-height:1.6;font-size:13px;color:var(--text-muted)}
 .hn-content{font-size:14px;line-height:1.7;color:var(--text);margin:6px 0;word-break:break-word}
 .hn-tags{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
 .hn-tag{font-size:12px;color:var(--primary);background:var(--primary-bg);padding:2px 8px;border-radius:10px}
@@ -2141,98 +2147,106 @@ let healthNotesData = DB.get('healthNotes') || [];
 const DEFAULT_MEDICATIONS = [
   {
     id: 'med-now-d3k2',
-    name: 'NOW Vitamin D-3 & K-2',
+    name: 'NOW 诺奥 维生素 D3+K2',
     category: '维生素',
-    purpose: '支持骨骼健康、心血管健康',
-    dosage: '1000 IU / 45 mcg 每粒',
-    frequency: '按说明服用',
+    purpose: '维生素 D3 帮助肠道吸收钙、提升血钙；维生素 K2 引导钙沉积进骨骼、减少钙沉积在血管，兼顾骨骼与心血管健康。Supports Bone Health（维护骨骼）、Cardiovascular Support（心血管辅助），非转基因 Non-GMO，膳食补充剂（不是药品）。',
+    dosage: '每粒 D3 1000 IU + K2 45 mcg；共 120 粒素食胶囊',
+    frequency: '每日 1 粒，随含油脂正餐服用（油脂餐更利于脂溶性 D3/K2 吸收）；一瓶约可吃 4 个月',
     startDate: '',
     status: '服用中',
-    notes: '120 粒胶囊，Non-GMO。图片见瓶身标签。',
+    notes: '①正在服用抗凝药（华法林等）人群，K2 会影响药效，禁止自行服用，务必咨询医生。\n②孕妇、肾病、高钙血症人群使用前咨询医师。\n③膳食补充剂，不能替代药物治疗。',
+    seedVersion: 2,
     images: ['https://saidenisi.github.io/lifelog/med-images/now-d3k2.jpg']
   },
   {
     id: 'med-life-space-probiotic',
-    name: 'Life-space Triple Strength Probiotic plus',
+    name: 'Life-space 三倍强度加强版益生菌（益倍适）',
     category: '保健品',
-    purpose: '调节肠道菌群、缓解便秘、改善排便规律、支持免疫系统',
-    dosage: '960 亿 CFU 每粒',
-    frequency: '按说明服用',
+    purpose: '重建肠道有益菌群；改善便秘、排便节律；辅助免疫系统健康。专利菌株 LPB27、960 亿 CFU 高活性，成人款。',
+    dosage: '每粒 960 亿 CFU（LPB27 专利菌株）；共 30 粒硬胶囊',
+    frequency: '每日 1 粒，随餐或饭后吃；阴凉避光保存，无需冷藏',
     startDate: '',
     status: '服用中',
-    notes: '30 粒硬胶囊，专利菌株 LPB27，AUST L474537。',
+    notes: '①抗生素和益生菌间隔至少 2 小时服用，避免活菌被杀灭失效。\n②免疫严重低下、重症人群服用前咨询医生。\n③膳食补充剂，不能替代药物。\n提示：960 亿属高剂量，适合肠道紊乱/便秘期调理，肠道好转后可减量或间断服用，不建议长期不间断天天吃；可与 D3K2 同餐一起吞服，无冲突。',
+    seedVersion: 2,
     images: ['https://saidenisi.github.io/lifelog/med-images/life-space-probiotic.jpg']
   },
   {
     id: 'med-ubio-lipid-gluco',
-    name: 'UBIO Lipid & Gluco Care',
+    name: 'UBIO Lipid & Gluco Care 脂糖养护片',
     category: '保健品',
-    purpose: '维持正常胆固醇水平和血糖水平',
-    dosage: '按标签说明',
-    frequency: '每日 2 次（2 per day，瓶身标注）',
+    purpose: '帮助维持正常胆固醇、血糖水平，适合血脂、血糖偏高人群日常辅助调理。核心成分：黑大蒜提取物 + 铬元素。食品补充剂。',
+    dosage: '60 片，每日 2 片，一瓶 30 天量',
+    frequency: '每日 2 片，随正餐服用，可分早晚各 1 片',
     startDate: '',
     status: '服用中',
-    notes: '60 片，含黑蒜提取物和黑胡椒铬。Food Supplement。',
+    notes: '①铬元素：如正在服用降糖药/胰岛素，有低血糖风险，务必咨询医生再吃，不要自行叠加。\n②黑蒜提取物仅轻度辅助调节，不能替代降糖、降脂药物，原有药物不可擅自停减。\n③孕妇、哺乳期、肝肾疾病人群使用前建议咨询医师。\n⚠️你血糖偏高，含铬建议多留意餐后血糖波动，定期复查血脂血糖。',
+    seedVersion: 2,
     images: ['https://saidenisi.github.io/lifelog/med-images/ubio-lipid-gluco.jpg']
   },
   {
     id: 'med-jd-fish-oil',
     name: '京东京造 鸿洋神 鱼油软胶囊',
     category: '保健品',
-    purpose: '辅助降血脂',
-    dosage: '1g / 粒，150 粒 / 瓶',
-    frequency: '按说明服用',
+    purpose: 'Omega-3（EPA+DHA），辅助调节血脂、维护心血管健康。蓝帽保健食品，功效：辅助降血脂。原料秘鲁深海鱼油。',
+    dosage: '1g / 粒，共 150 粒',
+    frequency: '每日 2 粒，随含油脂正餐服用，利于吸收',
     startDate: '',
     status: '服用中',
-    notes: '保健食品（鲁食健备 G202137100661），原料采自秘鲁深海。',
+    notes: '①有出血倾向、正在吃抗凝药物谨慎服用，咨询医生。\n②保健食品，不能替代降脂药，不可擅自停用处方药。\n③海鲜鱼过敏者禁用。',
+    seedVersion: 2,
     images: ['https://saidenisi.github.io/lifelog/med-images/jd-fish-oil.jpg']
   },
   {
     id: 'med-opcon-lutein',
-    name: '欧普康视 Lutein Esters 蓝莓咀嚼片',
+    name: '欧普康视 蓝莓叶黄素酯咀嚼片',
     category: '保健品',
-    purpose: '叶黄素补充、眼部健康',
-    dosage: '60 片 / 瓶，净含量 36g',
-    frequency: '按说明服用',
+    purpose: '叶黄素酯转化为叶黄素，帮助维护眼底黄斑、缓解长期看屏幕的眼疲劳，属膳食营养补充，不能治疗近视/眼病。核心成分：叶黄素酯 + 蓝莓提取物。',
+    dosage: '60 片，共 36g，咀嚼片',
+    frequency: '每日 1-2 片，咀嚼服用，饭后吃即可，不需随油脂餐',
     startDate: '',
     status: '服用中',
-    notes: 'Blueberry chewable tablets，Good Taste。',
+    notes: '①不要超量长期大量吃，过量叶黄素会让皮肤轻微发黄，停用会恢复。\n②眼部疾病、眼底病变优先眼科就诊，本品只是营养补充。',
+    seedVersion: 2,
     images: ['https://saidenisi.github.io/lifelog/med-images/opcon-lutein.jpg']
   },
   {
     id: 'med-bagekon-x5',
     name: 'Bagekon X5 氨基酸牡蛎玛咖片',
     category: '保健品',
-    purpose: '运动营养食品（耐力类）',
-    dosage: '0.5g / 片，90 片 / 瓶，净含量 45g',
-    frequency: '按说明服用',
+    purpose: '特殊膳食-运动营养食品（耐力类）。主要原料：玛咖、牡蛎、氨基酸类成分；定位男性精力、耐力营养补充，不是壮阳药、不是药品。',
+    dosage: '0.5g / 片，共 90 片',
+    frequency: '每日 2-3 片，饭后服用；不建议睡前大量吃（部分人会轻微兴奋影响睡眠），建议午饭后吃、避开晚间',
     startDate: '',
     status: '服用中',
-    notes: '特殊膳食 - 运动营养食品耐力类。',
+    notes: '①高血压、心脑血管基础问题、睡眠差人群留意自身反应，出现心慌、燥热就停用。\n②不能替代药物治疗，不要指望治疗男科疾病。\n③与前几款保健品无直接冲突。',
+    seedVersion: 2,
     images: ['https://saidenisi.github.io/lifelog/med-images/bagekon-x5.jpg']
   },
   {
     id: 'med-enshuangping',
     name: '恩双平 二甲双胍恩格列净片(I)',
     category: '药品',
-    purpose: '降糖（2 型糖尿病）',
+    purpose: '处方药（国药准字 H20213448，杭州中美华东制药）。用于 2 型糖尿病血糖控制：二甲双胍减少肝脏糖输出、提升胰岛素敏感性；恩格列净让多余糖分从尿液排出。',
     dosage: '每片含盐酸二甲双胍 500mg + 恩格列净 5mg',
-    frequency: '遵医嘱',
+    frequency: '严格遵医嘱，随餐口服，一日 2 次，一般早晚饭中吃，减轻二甲双胍肠胃不适（腹胀、腹泻）',
     startDate: '',
     status: '服用中',
-    notes: '国药准字 H20213448，杭州中美华东制药有限公司。处方药，请遵医嘱。',
+    notes: '🔴处方药，优先级最高，不可擅自改量停药。\n①UBIO 脂糖片含铬，叠加降糖药低血糖风险升高，留意心慌、出冷汗、手抖等低血糖信号，定期监测血糖。\n②恩格列净增加泌尿生殖感染风险，多喝水。\n③避免大量饮酒（二甲双胍乳酸酸中毒风险）。\n④定期复查肾功能。\n⑤保健品不能替代降糖药；出现低血糖立刻补糖。',
+    seedVersion: 2,
     images: ['https://saidenisi.github.io/lifelog/med-images/enshuangping.jpg']
   },
   {
     id: 'med-lizuan-tiepi',
     name: '立钻 铁皮枫斗颗粒',
     category: '药品',
-    purpose: '益气养阴、养胃生津（按说明书）',
-    dosage: '按包装/说明书',
-    frequency: '按说明服用',
+    purpose: 'OTC 中成药（浙江天皇药业）。益气养阴、养胃生津，针对气阴两虚：口干咽干、眼干、乏力、大便干结、腰膝酸软等。',
+    dosage: '每袋 3g，开水冲服',
+    frequency: '一次 1-2 袋，每日 2-3 次，饭前温水冲饮',
     startDate: '',
     status: '服用中',
-    notes: 'OTC，浙江天皇药业有限公司。',
+    notes: '🟡OTC。\n①正在吃降糖药恩双平，铁皮枫斗有养阴辅助降糖作用，叠加要留意低血糖风险，监测血糖。\n②脾胃虚寒、易拉肚子、大便稀溏者不适合长期吃。\n③与保健品无直接冲突，建议和西药降糖药错开 30-60 分钟服用。',
+    seedVersion: 2,
     images: ['https://saidenisi.github.io/lifelog/med-images/lizuan-tiepi.jpg']
   }
 ];
@@ -2250,6 +2264,24 @@ function ensureDefaultMedications() {
         _deleted: false
       });
       changed = true;
+    } else {
+      const cur = medicationsData[idx];
+      // 仅当种子版本更新时，用种子内容覆盖正文/图片；保留用户控制的 status/startDate
+      if ((def.seedVersion || 0) > (cur.seedVersion || 0)) {
+        medicationsData[idx] = {
+          ...cur,
+          name: def.name,
+          category: def.category,
+          purpose: def.purpose,
+          dosage: def.dosage,
+          frequency: def.frequency,
+          notes: def.notes,
+          images: def.images,
+          seedVersion: def.seedVersion,
+          updatedAt: now
+        };
+        changed = true;
+      }
     }
   });
   if (changed) {
@@ -3436,25 +3468,35 @@ function renderMedications() {
   sorted.forEach(m => {
     const isStopped = m.status === '已停用';
     const catBadge = m.category === '药品' ? 'badge-danger' : m.category === '保健品' ? 'badge-success' : m.category === '维生素' ? 'badge-warning' : 'badge-info';
-    const imgs = (m.images || []).map(src => '<img class="med-thumb" src="'+src+'" alt="" onclick="window.open(\''+src+'\')">').join('');
+    const imgs = (m.images || []);
+    const mainImg = imgs[0];
+    const moreImgs = imgs.slice(1);
+    const moreHtml = moreImgs.length ? '<div class="med-more">'+moreImgs.map(src=>'<img class="med-thumb" src="'+src+'" alt="" loading="lazy" decoding="async" onclick="window.open(\''+src+'\')">').join('')+'</div>' : '';
     const fields = [];
     if (m.purpose) fields.push('<span class="hn-field"><b>用途</b> ' + escapeHtml(m.purpose) + '</span>');
     if (m.dosage) fields.push('<span class="hn-field"><b>剂量</b> ' + escapeHtml(m.dosage) + '</span>');
     if (m.frequency) fields.push('<span class="hn-field"><b>频率</b> ' + escapeHtml(m.frequency) + '</span>');
     html += '<div class="med-card'+(isStopped?' stopped':'')+'">'+
-      '<div class="med-head">'+
-        '<span class="med-name">'+escapeHtml(m.name)+'</span>'+
-        '<span class="badge '+catBadge+'">'+m.category+'</span>'+
-        '<span class="badge '+(isStopped?'badge-muted':'badge-success')+'">'+m.status+'</span>'+
-        '<span style="margin-left:auto;display:flex;gap:4px">'+
-          '<button class="btn-icon" onclick="openMedicationModal(\''+m.id+'\')" title="编辑">✏️</button>'+
-          '<button class="btn-icon" onclick="deleteMedication(\''+m.id+'\')" title="删除">🗑️</button>'+
-        '</span>'+
+      '<div class="med-body">'+
+        '<div class="med-side">'+
+          (mainImg ? '<img class="med-photo" src="'+mainImg+'" alt="" loading="lazy" decoding="async" onclick="window.open(\''+mainImg+'\')">' : '<div class="med-photo" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:11px">无图</div>')+
+          moreHtml+
+        '</div>'+
+        '<div class="med-main">'+
+          '<div class="med-head">'+
+            '<span class="med-name">'+escapeHtml(m.name)+'</span>'+
+            '<span class="badge '+catBadge+'">'+m.category+'</span>'+
+            '<span class="badge '+(isStopped?'badge-muted':'badge-success')+'">'+m.status+'</span>'+
+            '<span style="margin-left:auto;display:flex;gap:4px">'+
+              '<button class="btn-icon" onclick="openMedicationModal(\''+m.id+'\')" title="编辑">✏️</button>'+
+              '<button class="btn-icon" onclick="deleteMedication(\''+m.id+'\')" title="删除">🗑️</button>'+
+            '</span>'+
+          '</div>'+
+          (fields.length ? '<div class="med-fields">'+fields.join('')+'</div>' : '')+
+          (m.notes ? '<div class="med-notes">'+escapeHtml(m.notes)+'</div>' : '')+
+          (m.startDate ? '<div class="med-date text-muted" style="font-size:11px;margin-top:6px">开始 ' + m.startDate + '</div>' : '')+
+        '</div>'+
       '</div>'+
-      (imgs ? '<div class="med-imgs">'+imgs+'</div>' : '')+
-      (fields.length ? '<div class="med-fields">'+fields.join('')+'</div>' : '')+
-      (m.notes ? '<div class="med-notes text-muted text-sm">'+escapeHtml(m.notes)+'</div>' : '')+
-      (m.startDate ? '<div class="med-date text-muted" style="font-size:11px">开始 ' + m.startDate + '</div>' : '')+
     '</div>';
   });
   list.innerHTML = html;
@@ -7980,7 +8022,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260820b';
+  b.textContent = 'build 20260820c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
