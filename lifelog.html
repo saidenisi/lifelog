@@ -3195,15 +3195,15 @@ function matchSection(title, items) {
 // ---- 匹配算法 ----
 function matchedPersonsForProject(p) {
   return personsData.filter(x=>!x._deleted)
-    .map(person => ({person, score: matchScore(p.needTags, person.abilityTags)}))
+    .map(person => ({person, score: matchScore(p.needTags, person.abilityTags), tags: tagIntersect(p.needTags, person.abilityTags)}))
     .filter(m=>m.score>0).sort((a,b)=>b.score-a.score);
 }
 function matchedProjectsForPerson(person) {
   const canHelp = projectsData.filter(x=>!x._deleted)
-    .map(project=>({project, score: matchScore(person.abilityTags, project.needTags)}))
+    .map(project=>({project, score: matchScore(person.abilityTags, project.needTags), tags: tagIntersect(person.abilityTags, project.needTags)}))
     .filter(m=>m.score>0).sort((a,b)=>b.score-a.score);
   const canBeHelpedBy = projectsData.filter(x=>!x._deleted)
-    .map(project=>({project, score: matchScore(person.needTags, project.offerTags)}))
+    .map(project=>({project, score: matchScore(person.needTags, project.offerTags), tags: tagIntersect(person.needTags, project.offerTags)}))
     .filter(m=>m.score>0).sort((a,b)=>b.score-a.score);
   return {canHelp, canBeHelpedBy};
 }
@@ -3507,7 +3507,11 @@ function projectDetailHtml(p) {
   h += tagsBlock('需求（要什么）', p.needTags);
   h += tagsBlock('资源（能给什么）', p.offerTags);
   if (members.length) h += `<div class="net-detail-section"><h4>👥 参与的人</h4><div class="net-sub">${members.map(escapeHtml).join('、')}</div></div>`;
-  h += `<div class="net-match"><h4>🎯 能支持此项目的人（按匹配度）</h4>` + (matched.length ? matched.map(m=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('person','${m.person.id}')"><span>${escapeHtml(m.person.name)}${m.person.identity?'（'+escapeHtml(m.person.identity)+'）':''}</span><span class="net-score">匹配 ${m.score} 项</span></div>`).join('') : '<div class="net-empty">暂无匹配的人（去给人脉补充能力标签）</div>') + `</div>`;
+  h += `<div class="net-match"><h4>🎯 能支持此项目的人（按匹配度）</h4>` + (matched.length ? matched.map(m=>{
+    const per = m.person;
+    return `<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('person','${per.id}')"><span>${escapeHtml(per.name)}${per.identity?'（'+escapeHtml(per.identity)+'）':''}</span><span class="net-score">匹配 ${m.score} 项</span></div>
+    <div class="net-tags" style="margin:-2px 0 8px">${m.tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
+  }).join('') : '<div class="net-empty">暂无匹配的人（去给人脉补充能力标签）</div>') + `</div>`;
   h += followupsHtml(p);
   h += timelineHtml(p);
   if (p.note) h += infoRow('备注', p.note);
@@ -3523,8 +3527,8 @@ function personDetailHtml(p) {
   h += tagsBlock('能力（能提供）', p.abilityTags);
   h += tagsBlock('需求（想要）', p.needTags);
   if (linked.length) h += `<div class="net-detail-section"><h4>🔗 关联的项目</h4>${linked.map(pr=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${pr.id}')"><span>${escapeHtml(pr.name)}</span><span class="net-score">→</span></div>`).join('')}</div>`;
-  h += `<div class="net-match"><h4>🎯 TA 能支持的项目</h4>` + (m.canHelp.length ? m.canHelp.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div>`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
-  h += `<div class="net-match"><h4>🎯 能满足 TA 需求的项目</h4>` + (m.canBeHelpedBy.length ? m.canBeHelpedBy.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div>`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
+  h += `<div class="net-match"><h4>🎯 TA 能支持的项目</h4>` + (m.canHelp.length ? m.canHelp.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div><div class="net-tags" style="margin:-2px 0 8px">${x.tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div>`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
+  h += `<div class="net-match"><h4>🎯 能满足 TA 需求的项目</h4>` + (m.canBeHelpedBy.length ? m.canBeHelpedBy.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div><div class="net-tags" style="margin:-2px 0 8px">${x.tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div>`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
   h += followupsHtml(p);
   h += timelineHtml(p);
   if (p.note) h += infoRow('备注', p.note);
@@ -3621,7 +3625,7 @@ function exportMatchText(kind, id) {
     if ((p.needTags||[]).length) lines.push('需求：' + p.needTags.join('、'));
     if ((p.offerTags||[]).length) lines.push('资源：' + p.offerTags.join('、'));
     const m = matchedPersonsForProject(p);
-    if (m.length) { lines.push(''); lines.push('可对接的人：'); m.forEach(x=>lines.push('· '+x.person.name+(x.person.identity?('（'+x.person.identity+'）'):'')+' —— 匹配'+x.score+'项')); }
+    if (m.length) { lines.push(''); lines.push('可对接的人：'); m.forEach(x=>lines.push('· '+x.person.name+(x.person.identity?('（'+x.person.identity+'）'):'')+'｜能支持：'+x.tags.join('、'))); }
     else lines.push('（暂无匹配的人）');
   } else {
     const p = personsData.find(x=>x.id===id); if(!p) return '';
@@ -3629,8 +3633,8 @@ function exportMatchText(kind, id) {
     if ((p.abilityTags||[]).length) lines.push('能提供：' + p.abilityTags.join('、'));
     if ((p.needTags||[]).length) lines.push('想要：' + p.needTags.join('、'));
     const m = matchedProjectsForPerson(p);
-    if (m.canHelp.length) { lines.push(''); lines.push('TA 能支持的项目：'); m.canHelp.forEach(x=>lines.push('· '+x.project.name+'（匹配'+x.score+'项）')); }
-    if (m.canBeHelpedBy.length) { lines.push(''); lines.push('能满足 TA 需求的项目：'); m.canBeHelpedBy.forEach(x=>lines.push('· '+x.project.name+'（匹配'+x.score+'项）')); }
+    if (m.canHelp.length) { lines.push(''); lines.push('TA 能支持的项目：'); m.canHelp.forEach(x=>lines.push('· '+x.project.name+'｜提供：'+x.tags.join('、'))); }
+    if (m.canBeHelpedBy.length) { lines.push(''); lines.push('能满足 TA 需求的项目：'); m.canBeHelpedBy.forEach(x=>lines.push('· '+x.project.name+'｜满足：'+x.tags.join('、'))); }
     if (!m.canHelp.length && !m.canBeHelpedBy.length) lines.push('（暂无匹配的项目）');
   }
   return lines.join('\n');
@@ -9016,7 +9020,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260820g';
+  b.textContent = 'build 20260820h';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
