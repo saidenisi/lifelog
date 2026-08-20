@@ -1623,7 +1623,11 @@ tbody tr:hover{background:var(--surface-hover)}
       </div>
       <div class="form-group">
         <label class="form-label">运动地点</label>
-        <input type="text" class="form-input" id="fitLocation" placeholder="如 健身房、户外公园、家里...">
+        <div style="display:flex;gap:6px">
+          <input type="text" class="form-input" id="fitLocation" list="fitLocDatalist" placeholder="如 健身房、户外公园..." style="flex:1">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openFitLocManager()" title="管理运动地点">⚙️ 管理</button>
+        </div>
+        <datalist id="fitLocDatalist"></datalist>
       </div>
       <div class="form-group">
         <label class="form-label">备注</label>
@@ -1657,6 +1661,30 @@ tbody tr:hover{background:var(--surface-hover)}
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary" onclick="closeModal('fitTypeModal')">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fit Location Manager Modal -->
+<div class="modal-overlay" id="fitLocModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">管理运动地点</div>
+      <button class="btn-icon" onclick="closeModal('fitLocModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">新增运动地点</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" class="form-input" id="fitLocNew" placeholder="如 游泳馆、公园..." onkeydown="if(event.key==='Enter')addFitLoc()">
+          <button class="btn btn-primary btn-sm" onclick="addFitLoc()">添加</button>
+        </div>
+      </div>
+      <div class="form-label" style="margin:4px 0 8px">现有地点（点 ✕ 删除）</div>
+      <div class="fit-type-list" id="fitLocList"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('fitLocModal')">完成</button>
     </div>
   </div>
 </div>
@@ -2155,6 +2183,11 @@ let fitnessTypes = DB.get('fitnessTypes');
 if (!Array.isArray(fitnessTypes) || fitnessTypes.length === 0) {
   fitnessTypes = ['跑步', '力量训练', '瑜伽', '游泳', '骑行', '篮球', '羽毛球', '足球', '跳绳', 'HIIT', '徒步'];
   DB.set('fitnessTypes', fitnessTypes);
+}
+let fitnessLocations = DB.get('fitnessLocations');
+if (!Array.isArray(fitnessLocations) || fitnessLocations.length === 0) {
+  fitnessLocations = ['家', '健身房', '户外公园', '公司', '操场'];
+  DB.set('fitnessLocations', fitnessLocations);
 }
 let sleepData = DB.get('sleep');
 let financeData = DB.get('finance');
@@ -2924,9 +2957,52 @@ function removeFitType(idx) {
   renderFitTypeOptions(document.getElementById('fitType').value);
 }
 
+function renderFitLocOptions() {
+  const dl = document.getElementById('fitLocDatalist');
+  if (!dl) return;
+  dl.innerHTML = fitnessLocations.map(l => `<option value="${escapeHtml(l)}"></option>`).join('');
+}
+
+function renderFitLocList() {
+  const list = document.getElementById('fitLocList');
+  if (!list) return;
+  list.innerHTML = fitnessLocations.map((l, i) =>
+    `<span class="fit-type-item">${escapeHtml(l)}<button onclick="removeFitLoc(${i})" title="删除">✕</button></span>`
+  ).join('');
+}
+
+function openFitLocManager() {
+  renderFitLocList();
+  document.getElementById('fitLocNew').value = '';
+  document.getElementById('fitLocModal').classList.add('active');
+}
+
+function addFitLoc() {
+  const inp = document.getElementById('fitLocNew');
+  const v = (inp.value || '').trim();
+  if (!v) { toast('请输入地点名称'); return; }
+  if (fitnessLocations.includes(v)) { toast('该地点已存在'); return; }
+  fitnessLocations.push(v);
+  DB.set('fitnessLocations', fitnessLocations);
+  inp.value = '';
+  renderFitLocList();
+  renderFitLocOptions();
+  toast('已添加「' + v + '」');
+}
+
+function removeFitLoc(idx) {
+  const name = fitnessLocations[idx];
+  if (!confirm('删除地点「' + name + '」？已有记录会保留该地点文字，只是不再出现在候选里。')) return;
+  fitnessLocations = fitnessLocations.filter((_, i) => i !== idx);
+  DB.set('fitnessLocations', fitnessLocations);
+  renderFitLocList();
+  renderFitLocOptions();
+}
+
 function openFitnessModal(id) {
   document.getElementById('fitId').value = id || '';
   document.getElementById('fitnessModalTitle').textContent = id ? '编辑健身记录' : '添加健身记录';
+  renderFitLocOptions();
   if (id) {
     const r = fitnessData.find(f => f.id === id);
     if (r) {
@@ -8081,7 +8157,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260820d';
+  b.textContent = 'build 20260820e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
