@@ -528,6 +528,33 @@ tbody tr:hover{background:var(--surface-hover)}
 .trade-table{width:100%;border-collapse:collapse;font-size:12px}
 .trade-table th,.trade-table td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-light)}
 .trade-table th{color:var(--text-muted);font-weight:600}
+/* ===== 健康页顶部标签 + 用药/健康理念 ===== */
+.health-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.health-tab{flex:1;min-width:70px;text-align:center;padding:8px 6px;border-radius:9px;font-size:13px;font-weight:600;color:var(--text-secondary);cursor:pointer;transition:all .15s;white-space:nowrap}
+.health-tab:hover{background:var(--surface-hover)}
+.health-tab.active{background:var(--primary);color:#fff;box-shadow:0 2px 6px rgba(99,102,241,.3)}
+.health-pane{display:none}
+.health-pane.active{display:block}
+.health-pane-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.health-stat{font-size:13px;color:var(--text-secondary)}
+.health-stat .hn-stat-num{font-size:20px;font-weight:800;color:var(--primary)}
+.hn-filters{display:flex;gap:6px;flex-wrap:wrap}
+.hn-chip{padding:4px 10px;border-radius:14px;font-size:12px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);cursor:pointer;transition:all .15s}
+.hn-chip:hover{border-color:var(--primary);color:var(--primary)}
+.hn-chip.active{background:var(--primary-bg);border-color:var(--primary);color:var(--primary);font-weight:600}
+.med-list,.hn-list{display:flex;flex-direction:column;gap:10px}
+.med-card,.hn-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.med-card.stopped{opacity:.65}
+.med-head,.hn-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.med-name,.hn-title{font-weight:700;font-size:15px}
+.med-imgs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
+.med-thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in}
+.med-fields{display:flex;flex-direction:column;gap:2px;font-size:13px}
+.hn-field b{color:var(--text-muted);font-weight:600;margin-right:4px}
+.med-notes{margin-top:6px}
+.hn-content{font-size:14px;line-height:1.7;color:var(--text);margin:6px 0;word-break:break-word}
+.hn-tags{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.hn-tag{font-size:12px;color:var(--primary);background:var(--primary-bg);padding:2px 8px;border-radius:10px}
 .stock-search-dropdown{
   position:absolute;z-index:50;background:var(--surface);
   border:1px solid var(--border);border-radius:8px;
@@ -1023,11 +1050,8 @@ tbody tr:hover{background:var(--surface-hover)}
     </div>
     <nav class="nav">
       <div class="nav-label">主功能</div>
-      <div class="nav-item" data-page="fitness">
-        <span class="icon">💪</span><span>健身记录</span>
-      </div>
-      <div class="nav-item" data-page="sleep">
-        <span class="icon">😴</span><span>睡眠追踪</span>
+      <div class="nav-item" data-page="health">
+        <span class="icon">❤️</span><span>健康</span>
       </div>
       <div class="nav-item" data-page="finance">
         <span class="icon">💰</span><span>投资</span>
@@ -1060,110 +1084,130 @@ tbody tr:hover{background:var(--surface-hover)}
   <main class="main">
     <div class="top-sync-bar offline" id="topSyncBar" onclick="syncNow()" title="点击同步">☁️ 等待连接</div>
 
-    <!-- ===== Fitness Page ===== -->
-    <div class="page" id="page-fitness">
+    <!-- ===== Health Page（睡眠 + 健身 + 用药 + 健康理念） ===== -->
+    <div class="page" id="page-health">
       <div class="page-header">
         <div>
-          <div class="page-title">健身记录</div>
-          <div class="page-subtitle">记录每一次锻炼，见证每一份成长</div>
+          <div class="page-title">健康</div>
+          <div class="page-subtitle">睡眠 · 健身 · 用药 · 健康理念</div>
         </div>
-        <div style="display:flex;gap:10px;align-items:center">
-          <button class="mobile-menu-btn" id="mobileMenuBtn2">☰</button>
-          <button class="btn btn-primary" onclick="openFitnessModal()">➕ 添加记录</button>
-        </div>
+        <button class="mobile-menu-btn" id="mobileMenuBtn2">☰</button>
       </div>
 
-      <div class="stat-grid">
-        <div class="stat-card fit">
-          <div class="stat-icon">📅</div>
-          <div class="stat-label">本月锻炼次数</div>
-          <div class="stat-value" id="fitMonthlyCount">0</div>
-        </div>
-        <div class="stat-card streak">
-          <div class="stat-icon">⏱️</div>
-          <div class="stat-label">本月总时长</div>
-          <div class="stat-value" id="fitMonthlyDuration">0 分钟</div>
-        </div>
-        <div class="stat-card sleep">
-          <div class="stat-icon">🔥</div>
-          <div class="stat-label">本月消耗热量</div>
-          <div class="stat-value" id="fitMonthlyCalories">0 kcal</div>
-        </div>
+      <div class="health-tabs">
+        <div class="health-tab active" data-tab="sleep" onclick="switchHealthTab('sleep')">😴 睡眠</div>
+        <div class="health-tab" data-tab="fitness" onclick="switchHealthTab('fitness')">💪 健身</div>
+        <div class="health-tab" data-tab="medication" onclick="switchHealthTab('medication')">💊 用药</div>
+        <div class="health-tab" data-tab="healthnotes" onclick="switchHealthTab('healthnotes')">💡 健康理念</div>
       </div>
 
-      <div class="card mb-16">
-        <div class="card-header">
-          <div class="card-title">📊 锻炼时长分布</div>
-        </div>
-        <div class="card-body">
-          <div class="chart-container"><canvas id="fitnessChart"></canvas></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">📝 健身记录</div>
-          <button class="btn btn-ghost btn-sm" onclick="exportFitnessCSV()">📥 导出CSV</button>
-        </div>
-        <div class="table-wrap" id="fitnessTableWrap">
-          <!-- table injected by JS -->
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== Sleep Page ===== -->
-    <div class="page" id="page-sleep">
-      <div class="page-header">
-        <div>
-          <div class="page-title">睡眠追踪</div>
-          <div class="page-subtitle">好睡眠是好生活的开始</div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center">
-          <button class="mobile-menu-btn" id="mobileMenuBtn3">☰</button>
-          <button class="btn btn-primary" onclick="openSleepModal()">➕ 添加记录</button>
-        </div>
-      </div>
-
-      <div class="stat-grid">
-        <div class="stat-card sleep">
-          <div class="stat-icon">🌙</div>
-          <div class="stat-label">平均睡眠时长</div>
-          <div class="stat-value" id="sleepAvgDuration">0 小时</div>
-        </div>
-        <div class="stat-card sleep">
-          <div class="stat-icon">😴</div>
-          <div class="stat-label">平均入睡时间</div>
-          <div class="stat-value" id="sleepAvgBedtime">—</div>
-        </div>
-        <div class="stat-card streak">
-          <div class="stat-icon">⏰</div>
-          <div class="stat-label">平均起床时间</div>
-          <div class="stat-value" id="sleepAvgWake">—</div>
-        </div>
-      </div>
-
-      <div class="card mb-16">
-        <div class="card-header">
-          <div class="card-title">🌙 睡眠综合趋势</div>
-          <div style="display:flex;gap:12px;align-items:center;font-size:12px;color:var(--text-muted)">
-            <span><span style="display:inline-block;width:12px;height:3px;background:#8b5cf6;border-radius:2px;vertical-align:middle;margin-right:4px"></span>入睡</span>
-            <span><span style="display:inline-block;width:12px;height:3px;background:#f59e0b;border-radius:2px;vertical-align:middle;margin-right:4px"></span>起床</span>
-            <span><span style="display:inline-block;width:12px;height:10px;background:#0ea5e9;opacity:.5;border-radius:2px;vertical-align:middle;margin-right:4px"></span>时长</span>
+      <!-- 睡眠 -->
+      <div class="health-pane active" id="pane-sleep">
+        <div class="stat-grid">
+          <div class="stat-card sleep">
+            <div class="stat-icon">🌙</div>
+            <div class="stat-label">平均睡眠时长</div>
+            <div class="stat-value" id="sleepAvgDuration">0 小时</div>
+          </div>
+          <div class="stat-card sleep">
+            <div class="stat-icon">😴</div>
+            <div class="stat-label">平均入睡时间</div>
+            <div class="stat-value" id="sleepAvgBedtime">—</div>
+          </div>
+          <div class="stat-card streak">
+            <div class="stat-icon">⏰</div>
+            <div class="stat-label">平均起床时间</div>
+            <div class="stat-value" id="sleepAvgWake">—</div>
           </div>
         </div>
-        <div class="card-body">
-          <div class="chart-container"><canvas id="sleepChart"></canvas></div>
+
+        <div class="card mb-16">
+          <div class="card-header">
+            <div class="card-title">🌙 睡眠综合趋势</div>
+            <div style="display:flex;gap:12px;align-items:center;font-size:12px;color:var(--text-muted)">
+              <span><span style="display:inline-block;width:12px;height:3px;background:#8b5cf6;border-radius:2px;vertical-align:middle;margin-right:4px"></span>入睡</span>
+              <span><span style="display:inline-block;width:12px;height:3px;background:#f59e0b;border-radius:2px;vertical-align:middle;margin-right:4px"></span>起床</span>
+              <span><span style="display:inline-block;width:12px;height:10px;background:#0ea5e9;opacity:.5;border-radius:2px;vertical-align:middle;margin-right:4px"></span>时长</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chart-container"><canvas id="sleepChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📝 睡眠记录</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-ghost btn-sm" onclick="exportSleepCSV()">📥 导出</button>
+              <button class="btn btn-primary btn-sm" onclick="openSleepModal()">➕ 添加记录</button>
+            </div>
+          </div>
+          <div class="table-wrap" id="sleepTableWrap">
+            <!-- table injected by JS -->
+          </div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">📝 睡眠记录</div>
-          <button class="btn btn-ghost btn-sm" onclick="exportSleepCSV()">📥 导出CSV</button>
+      <!-- 健身 -->
+      <div class="health-pane" id="pane-fitness">
+        <div class="stat-grid">
+          <div class="stat-card fit">
+            <div class="stat-icon">📅</div>
+            <div class="stat-label">本月锻炼次数</div>
+            <div class="stat-value" id="fitMonthlyCount">0</div>
+          </div>
+          <div class="stat-card streak">
+            <div class="stat-icon">⏱️</div>
+            <div class="stat-label">本月总时长</div>
+            <div class="stat-value" id="fitMonthlyDuration">0 分钟</div>
+          </div>
+          <div class="stat-card sleep">
+            <div class="stat-icon">🔥</div>
+            <div class="stat-label">本月消耗热量</div>
+            <div class="stat-value" id="fitMonthlyCalories">0 kcal</div>
+          </div>
         </div>
-        <div class="table-wrap" id="sleepTableWrap">
-          <!-- table injected by JS -->
+
+        <div class="card mb-16">
+          <div class="card-header">
+            <div class="card-title">📊 锻炼时长分布</div>
+          </div>
+          <div class="card-body">
+            <div class="chart-container"><canvas id="fitnessChart"></canvas></div>
+          </div>
         </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📝 健身记录</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-ghost btn-sm" onclick="exportFitnessCSV()">📥 导出</button>
+              <button class="btn btn-primary btn-sm" onclick="openFitnessModal()">➕ 添加记录</button>
+            </div>
+          </div>
+          <div class="table-wrap" id="fitnessTableWrap">
+            <!-- table injected by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 用药 -->
+      <div class="health-pane" id="pane-medication">
+        <div class="health-pane-toolbar">
+          <div class="health-stat" id="medStats"></div>
+          <button class="btn btn-primary btn-sm" onclick="openMedicationModal()">➕ 添加药品</button>
+        </div>
+        <div class="med-list" id="medicationList"></div>
+      </div>
+
+      <!-- 健康理念 -->
+      <div class="health-pane" id="pane-healthnotes">
+        <div class="health-pane-toolbar">
+          <div class="hn-filters" id="healthNoteFilters"></div>
+          <button class="btn btn-primary btn-sm" onclick="openHealthNoteModal()">➕ 添加</button>
+        </div>
+        <div class="hn-list" id="healthNoteList"></div>
       </div>
     </div>
 
@@ -1490,8 +1534,7 @@ tbody tr:hover{background:var(--surface-hover)}
 
 <!-- ===== Mobile Bottom Nav ===== -->
 <div class="mobile-nav">
-  <div class="mobile-nav-item" data-page="fitness"><span class="icon">💪</span>健身</div>
-  <div class="mobile-nav-item" data-page="sleep"><span class="icon">😴</span>睡眠</div>
+  <div class="mobile-nav-item" data-page="health"><span class="icon">❤️</span>健康</div>
   <div class="mobile-nav-item" data-page="finance"><span class="icon">💰</span>投资</div>
   <div class="mobile-nav-item" data-page="media"><span class="icon">🎬</span>影音</div>
   <div class="mobile-nav-item active" data-page="daily"><span class="icon">📅</span>每日</div>
@@ -1628,6 +1671,125 @@ tbody tr:hover{background:var(--surface-hover)}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('sleepModal')">取消</button>
       <button class="btn btn-primary" onclick="saveSleep()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Medication Modal -->
+<div class="modal-overlay" id="medicationModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="medModalTitle">添加药品/保健品</div>
+      <button class="btn-icon" onclick="closeModal('medicationModal')">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <input type="hidden" id="medId">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">名称 <span style="color:var(--danger)">*</span></label>
+          <input type="text" class="form-input" id="medName" placeholder="如 阿司匹林、维生素D">
+        </div>
+        <div class="form-group">
+          <label class="form-label">分类</label>
+          <select class="form-select" id="medCategory">
+            <option value="药品">💊 药品</option>
+            <option value="保健品">🌿 保健品</option>
+            <option value="维生素">💛 维生素</option>
+            <option value="其他">📌 其他</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">用途 / 功效</label>
+        <input type="text" class="form-input" id="medPurpose" placeholder="如 降血压、增强免疫力">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">剂量</label>
+          <input type="text" class="form-input" id="medDosage" placeholder="如 100mg">
+        </div>
+        <div class="form-group">
+          <label class="form-label">频率</label>
+          <input type="text" class="form-input" id="medFrequency" placeholder="如 每日一次">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">开始日期</label>
+          <input type="date" class="form-input" id="medStartDate">
+        </div>
+        <div class="form-group">
+          <label class="form-label">状态</label>
+          <select class="form-select" id="medStatus">
+            <option value="服用中">服用中</option>
+            <option value="已停用">已停用</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">药品图片 <span class="text-muted" style="font-size:11px;font-weight:400">（粘贴/上传药品照片）</span></label>
+        <input type="file" id="medImageInput" accept="image/*" multiple style="display:none" onchange="handleMedImageUpload(this)">
+        <div class="daily-images" id="medImages"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">备注</label>
+        <textarea class="form-textarea" id="medNotes" placeholder="其他说明..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('medicationModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveMedication()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Health Note Modal -->
+<div class="modal-overlay" id="healthNoteModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="hnModalTitle">添加健康理念</div>
+      <button class="btn-icon" onclick="closeModal('healthNoteModal')">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <input type="hidden" id="hnId">
+      <div class="form-group">
+        <label class="form-label">标题 <span style="color:var(--danger)">*</span></label>
+        <input type="text" class="form-input" id="hnTitle" placeholder="如 每天喝八杯水的好处">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">分类</label>
+          <select class="form-select" id="hnCategory">
+            <option value="饮食">🍎 饮食</option>
+            <option value="运动">💪 运动</option>
+            <option value="睡眠">😴 睡眠</option>
+            <option value="心理">🧠 心理</option>
+            <option value="中医">🌿 中医</option>
+            <option value="其他">📌 其他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">来源</label>
+          <select class="form-select" id="hnSource">
+            <option value="Obsidian">Obsidian</option>
+            <option value="小红书">小红书</option>
+            <option value="微信">微信</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">标签 <span class="text-muted" style="font-size:11px;font-weight:400">（用逗号分隔）</span></label>
+        <input type="text" class="form-input" id="hnTags" placeholder="如 养生, 饮水, 抗衰老">
+      </div>
+      <div class="form-group">
+        <label class="form-label">内容</label>
+        <textarea class="form-textarea" id="hnContent" style="min-height:140px" placeholder="粘贴你收藏的健康知识..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('healthNoteModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveHealthNote()">保存</button>
     </div>
   </div>
 </div>
@@ -1971,6 +2133,10 @@ let fitnessData = DB.get('fitness');
 let sleepData = DB.get('sleep');
 let financeData = DB.get('finance');
 
+// ===== 用药 & 健康理念 =====
+let medicationsData = DB.get('medications') || [];
+let healthNotesData = DB.get('healthNotes') || [];
+
 // ===== Media Data =====
 let mediaData = DB.get('media') || [];
 let mediaFilter = 'all'; // all/movie/tv/book/show
@@ -2026,6 +2192,8 @@ function saveAll() {
   DB.set('fitness', fitnessData);
   DB.set('sleep', sleepData);
   DB.set('finance', financeData);
+  DB.set('medications', medicationsData);
+  DB.set('healthNotes', healthNotesData);
   DB.set('accounts', accountData);
   DB.set('rates', exchangeRates);
   DB.set('stock', stockData);
@@ -2039,7 +2207,7 @@ function saveAll() {
 // ===== Cloud Sync (Supabase) =====
 const SUPABASE_URL = 'https://byxqubrxnwqxgxqvlgey.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_tGMDLTgbWcq0yy4yKOO_Zg_wsgnalLS';
-const SYNC_KEYS = ['fitness', 'sleep', 'accounts', 'rates', 'stock', 'media', 'dailyNotes', 'todos'];
+const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock', 'media', 'dailyNotes', 'todos'];
 let supabaseClient = null;
 let _pullErrors = 0; // 记录最近一次拉取失败条数，供实时订阅状态判断，避免错误状态被覆盖
 
@@ -2169,6 +2337,8 @@ async function pullAllFromCloud() {
     switch(key) {
       case 'fitness': fitnessData = merged; break;
       case 'sleep': sleepData = merged; break;
+      case 'medications': medicationsData = merged; break;
+      case 'healthNotes': healthNotesData = merged; break;
       case 'accounts': accountData = merged; break;
       case 'stock': stockData = merged; break;
       case 'media': mediaData = merged; break;
@@ -2246,6 +2416,8 @@ async function pushAllToCloud() {
               switch(key) {
                 case 'fitness': fitnessData = localValue; break;
                 case 'sleep': sleepData = localValue; break;
+                case 'medications': medicationsData = localValue; break;
+                case 'healthNotes': healthNotesData = localValue; break;
                 case 'accounts': accountData = localValue; break;
                 case 'stock': stockData = localValue; break;
                 case 'media': mediaData = localValue; break;
@@ -2448,8 +2620,7 @@ function navigate(page) {
 
 function renderPage(page) {
   switch(page) {
-    case 'fitness': renderFitness(); break;
-    case 'sleep': renderSleep(); break;
+    case 'health': renderHealth(); break;
     case 'finance':
       renderFinance();
       // ensure stock quotes loaded so invest accounts show market value
@@ -2977,6 +3148,311 @@ function renderSleep() {
   });
   html += '</tbody></table>';
   document.getElementById('sleepTableWrap').innerHTML = html;
+}
+
+/* ============================================================
+   HEALTH TABS（睡眠/健身/用药/健康理念）+ 用药 + 健康理念
+   ============================================================ */
+
+let currentHealthTab = 'sleep';
+
+function switchHealthTab(tab) {
+  currentHealthTab = tab;
+  document.querySelectorAll('.health-tab').forEach(function(t) {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  document.querySelectorAll('.health-pane').forEach(function(p) {
+    p.classList.toggle('active', p.id === 'pane-' + tab);
+  });
+  if (tab === 'sleep') renderSleep();
+  else if (tab === 'fitness') renderFitness();
+  else if (tab === 'medication') renderMedications();
+  else if (tab === 'healthnotes') renderHealthNotes();
+}
+
+function renderHealth() {
+  switchHealthTab(currentHealthTab || 'sleep');
+}
+
+// ===== 用药 =====
+const MED_CATEGORIES = ['药品', '保健品', '维生素', '其他'];
+const MED_STATUSES = ['服用中', '已停用'];
+let currentMedImages = [];
+
+function openMedicationModal(id) {
+  document.getElementById('medId').value = id || '';
+  document.getElementById('medModalTitle').textContent = id ? '编辑药品/保健品' : '添加药品/保健品';
+  if (id) {
+    const m = medicationsData.find(x => x.id === id);
+    if (m) {
+      document.getElementById('medName').value = m.name || '';
+      document.getElementById('medCategory').value = m.category || '药品';
+      document.getElementById('medPurpose').value = m.purpose || '';
+      document.getElementById('medDosage').value = m.dosage || '';
+      document.getElementById('medFrequency').value = m.frequency || '';
+      document.getElementById('medStartDate').value = m.startDate || '';
+      document.getElementById('medStatus').value = m.status || '服用中';
+      document.getElementById('medNotes').value = m.notes || '';
+      currentMedImages = (m.images || []).slice();
+    }
+  } else {
+    document.getElementById('medName').value = '';
+    document.getElementById('medCategory').value = '药品';
+    document.getElementById('medPurpose').value = '';
+    document.getElementById('medDosage').value = '';
+    document.getElementById('medFrequency').value = '';
+    document.getElementById('medStartDate').value = todayStr();
+    document.getElementById('medStatus').value = '服用中';
+    document.getElementById('medNotes').value = '';
+    currentMedImages = [];
+  }
+  renderMedImages();
+  document.getElementById('medicationModal').classList.add('active');
+}
+
+function triggerMedImageUpload() {
+  document.getElementById('medImageInput').click();
+}
+
+function handleMedImageUpload(input) {
+  var files = input.files;
+  if (!files || !files.length) return;
+  Array.prototype.forEach.call(files, function(file) {
+    if (!file.type || !file.type.startsWith('image/')) return;
+    compressImageToBlob(file, 1200, function(blob) {
+      if (!blob) { toast('图片处理失败'); return; }
+      uploadImageToStorage(blob).then(function(url) {
+        if (url) { currentMedImages.push(url); renderMedImages(); }
+      });
+    });
+  });
+  input.value = '';
+}
+
+function removeMedImage(index) {
+  var url = currentMedImages[index];
+  currentMedImages.splice(index, 1);
+  renderMedImages();
+  if (url && url.indexOf(STORAGE_PUBLIC_PREFIX) === 0 && supabaseClient) {
+    supabaseClient.storage.from(STORAGE_BUCKET).remove([url.slice(STORAGE_PUBLIC_PREFIX.length)]).then(function(){});
+  }
+}
+
+function renderMedImages() {
+  var el = document.getElementById('medImages');
+  if (!el) return;
+  var html = '';
+  currentMedImages.forEach(function(src, idx) {
+    html += '<div class="daily-img-wrap">'+
+      '<img src="'+src+'" alt="">'+
+      '<button class="daily-img-del" onclick="removeMedImage('+idx+')" title="删除">×</button>'+
+    '</div>';
+  });
+  html += '<button class="daily-img-add" onclick="triggerMedImageUpload()" title="添加图片">＋<span>图片</span></button>';
+  el.innerHTML = html;
+}
+
+function saveMedication() {
+  const id = document.getElementById('medId').value;
+  const name = document.getElementById('medName').value.trim();
+  if (!name) { toast('请输入药品/保健品名称'); return; }
+  const prev = id ? medicationsData.find(x => x.id === id) : null;
+  const rec = {
+    id: id || uid(),
+    name: name,
+    category: document.getElementById('medCategory').value,
+    purpose: document.getElementById('medPurpose').value.trim(),
+    dosage: document.getElementById('medDosage').value.trim(),
+    frequency: document.getElementById('medFrequency').value.trim(),
+    startDate: document.getElementById('medStartDate').value,
+    status: document.getElementById('medStatus').value,
+    notes: document.getElementById('medNotes').value.trim(),
+    images: currentMedImages.slice(),
+    createdAt: prev ? (prev.createdAt || new Date().toISOString()) : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  if (id) {
+    const idx = medicationsData.findIndex(x => x.id === id);
+    if (idx >= 0) medicationsData[idx] = rec;
+  } else {
+    medicationsData.push(rec);
+  }
+  saveAll();
+  closeModal('medicationModal');
+  toast('已保存 💊');
+  renderMedications();
+}
+
+function deleteMedication(id) {
+  if (!confirm('确定删除这条药品记录？')) return;
+  const m = medicationsData.find(x => x.id === id);
+  if (m && m.images) m.images.forEach(function(url) {
+    if (url && url.indexOf(STORAGE_PUBLIC_PREFIX) === 0 && supabaseClient) {
+      supabaseClient.storage.from(STORAGE_BUCKET).remove([url.slice(STORAGE_PUBLIC_PREFIX.length)]).then(function(){});
+    }
+  });
+  medicationsData = medicationsData.filter(x => x.id !== id);
+  saveAll();
+  renderMedications();
+  toast('已删除');
+}
+
+function renderMedications() {
+  const stats = document.getElementById('medStats');
+  if (stats) {
+    const active = medicationsData.filter(m => m.status !== '已停用').length;
+    const stopped = medicationsData.length - active;
+    stats.innerHTML = '<span class="hn-stat-num">'+medicationsData.length+'</span> 种 · 服用中 ' + active + ' · 已停用 ' + stopped;
+  }
+  const list = document.getElementById('medicationList');
+  if (!list) return;
+  if (medicationsData.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">💊</div><p>还没有药品记录，添加你正在服用的药品/保健品吧</p><button class="btn btn-primary" onclick="openMedicationModal()">➕ 添加药品</button></div>';
+    return;
+  }
+  const sorted = [...medicationsData].sort((a,b) => (b.updatedAt||'').localeCompare(a.updatedAt||''));
+  let html = '';
+  sorted.forEach(m => {
+    const isStopped = m.status === '已停用';
+    const catBadge = m.category === '药品' ? 'badge-danger' : m.category === '保健品' ? 'badge-success' : m.category === '维生素' ? 'badge-warning' : 'badge-info';
+    const imgs = (m.images || []).map(src => '<img class="med-thumb" src="'+src+'" alt="" onclick="window.open(\''+src+'\')">').join('');
+    const fields = [];
+    if (m.purpose) fields.push('<span class="hn-field"><b>用途</b> ' + escapeHtml(m.purpose) + '</span>');
+    if (m.dosage) fields.push('<span class="hn-field"><b>剂量</b> ' + escapeHtml(m.dosage) + '</span>');
+    if (m.frequency) fields.push('<span class="hn-field"><b>频率</b> ' + escapeHtml(m.frequency) + '</span>');
+    html += '<div class="med-card'+(isStopped?' stopped':'')+'">'+
+      '<div class="med-head">'+
+        '<span class="med-name">'+escapeHtml(m.name)+'</span>'+
+        '<span class="badge '+catBadge+'">'+m.category+'</span>'+
+        '<span class="badge '+(isStopped?'badge-muted':'badge-success')+'">'+m.status+'</span>'+
+        '<span style="margin-left:auto;display:flex;gap:4px">'+
+          '<button class="btn-icon" onclick="openMedicationModal(\''+m.id+'\')" title="编辑">✏️</button>'+
+          '<button class="btn-icon" onclick="deleteMedication(\''+m.id+'\')" title="删除">🗑️</button>'+
+        '</span>'+
+      '</div>'+
+      (imgs ? '<div class="med-imgs">'+imgs+'</div>' : '')+
+      (fields.length ? '<div class="med-fields">'+fields.join('')+'</div>' : '')+
+      (m.notes ? '<div class="med-notes text-muted text-sm">'+escapeHtml(m.notes)+'</div>' : '')+
+      (m.startDate ? '<div class="med-date text-muted" style="font-size:11px">开始 ' + m.startDate + '</div>' : '')+
+    '</div>';
+  });
+  list.innerHTML = html;
+}
+
+// ===== 健康理念 =====
+const HN_CATEGORIES = [
+  { key: '饮食', label: '🍎 饮食' },
+  { key: '运动', label: '💪 运动' },
+  { key: '睡眠', label: '😴 睡眠' },
+  { key: '心理', label: '🧠 心理' },
+  { key: '中医', label: '🌿 中医' },
+  { key: '其他', label: '📌 其他' }
+];
+const HN_SOURCES = ['Obsidian', '小红书', '微信', '其他'];
+let hnFilter = 'all';
+
+function openHealthNoteModal(id) {
+  document.getElementById('hnId').value = id || '';
+  document.getElementById('hnModalTitle').textContent = id ? '编辑健康理念' : '添加健康理念';
+  if (id) {
+    const n = healthNotesData.find(x => x.id === id);
+    if (n) {
+      document.getElementById('hnTitle').value = n.title || '';
+      document.getElementById('hnCategory').value = n.category || '饮食';
+      document.getElementById('hnSource').value = n.source || '微信';
+      document.getElementById('hnTags').value = (n.tags || []).join(', ');
+      document.getElementById('hnContent').value = n.content || '';
+    }
+  } else {
+    document.getElementById('hnTitle').value = '';
+    document.getElementById('hnCategory').value = '饮食';
+    document.getElementById('hnSource').value = '微信';
+    document.getElementById('hnTags').value = '';
+    document.getElementById('hnContent').value = '';
+  }
+  document.getElementById('healthNoteModal').classList.add('active');
+}
+
+function saveHealthNote() {
+  const id = document.getElementById('hnId').value;
+  const title = document.getElementById('hnTitle').value.trim();
+  if (!title) { toast('请输入标题'); return; }
+  const content = document.getElementById('hnContent').value.trim();
+  const tags = document.getElementById('hnTags').value.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+  const prev = id ? healthNotesData.find(x => x.id === id) : null;
+  const rec = {
+    id: id || uid(),
+    title: title,
+    category: document.getElementById('hnCategory').value,
+    source: document.getElementById('hnSource').value,
+    tags: tags,
+    content: content,
+    createdAt: prev ? (prev.createdAt || new Date().toISOString()) : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  if (id) {
+    const idx = healthNotesData.findIndex(x => x.id === id);
+    if (idx >= 0) healthNotesData[idx] = rec;
+  } else {
+    healthNotesData.push(rec);
+  }
+  saveAll();
+  closeModal('healthNoteModal');
+  toast('已保存 💡');
+  renderHealthNotes();
+}
+
+function deleteHealthNote(id) {
+  if (!confirm('确定删除这条健康理念？')) return;
+  healthNotesData = healthNotesData.filter(x => x.id !== id);
+  saveAll();
+  renderHealthNotes();
+  toast('已删除');
+}
+
+function setHnFilter(key) {
+  hnFilter = key;
+  renderHealthNotes();
+}
+
+function renderHealthNotes() {
+  const filters = document.getElementById('healthNoteFilters');
+  if (filters) {
+    let fhtml = '<span class="hn-chip'+(hnFilter==='all'?' active':'')+'" onclick="setHnFilter(\'all\')">全部 '+healthNotesData.length+'</span>';
+    HN_CATEGORIES.forEach(function(c) {
+      const cnt = healthNotesData.filter(n => n.category === c.key).length;
+      fhtml += '<span class="hn-chip'+(hnFilter===c.key?' active':'')+'" onclick="setHnFilter(\''+c.key+'\')">'+c.label+' '+cnt+'</span>';
+    });
+    filters.innerHTML = fhtml;
+  }
+  const list = document.getElementById('healthNoteList');
+  if (!list) return;
+  const filtered = healthNotesData.filter(n => hnFilter === 'all' || n.category === hnFilter);
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">💡</div><p>还没有健康理念，收藏你的健康知识吧</p><button class="btn btn-primary" onclick="openHealthNoteModal()">➕ 添加</button></div>';
+    return;
+  }
+  const sorted = [...filtered].sort((a,b) => (b.updatedAt||'').localeCompare(a.updatedAt||''));
+  const catLabel = k => (HN_CATEGORIES.find(c => c.key === k) || {label:k}).label;
+  let html = '';
+  sorted.forEach(n => {
+    const tagHtml = (n.tags || []).map(t => '<span class="hn-tag">#'+escapeHtml(t)+'</span>').join('');
+    html += '<div class="hn-card">'+
+      '<div class="hn-head">'+
+        '<span class="hn-title">'+escapeHtml(n.title)+'</span>'+
+        '<span class="badge badge-info">'+catLabel(n.category)+'</span>'+
+        '<span class="badge badge-muted">'+(n.source||'')+'</span>'+
+        '<span style="margin-left:auto;display:flex;gap:4px">'+
+          '<button class="btn-icon" onclick="openHealthNoteModal(\''+n.id+'\')" title="编辑">✏️</button>'+
+          '<button class="btn-icon" onclick="deleteHealthNote(\''+n.id+'\')" title="删除">🗑️</button>'+
+        '</span>'+
+      '</div>'+
+      (n.content ? '<div class="hn-content">'+escapeHtml(n.content).replace(/\n/g,'<br>')+'</div>' : '')+
+      (tagHtml ? '<div class="hn-tags">'+tagHtml+'</div>' : '')+
+      '<div class="hn-date text-muted" style="font-size:11px">' + (n.updatedAt ? n.updatedAt.slice(0,10) : '') + '</div>'+
+    '</div>';
+  });
+  list.innerHTML = html;
 }
 
 /* ============================================================
@@ -4793,7 +5269,7 @@ function escapeHtml(s) {
 
 
 function exportAllData() {
-  const data = { fitness: fitnessData, sleep: sleepData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, exportDate: new Date().toISOString() };
+  const data = { fitness: fitnessData, sleep: sleepData, medications: medicationsData, healthNotes: healthNotesData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, exportDate: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -5008,6 +5484,8 @@ function importData(event) {
       if (!confirm('导入将覆盖现有数据，确定继续？')) return;
       if (data.fitness) fitnessData = data.fitness;
       if (data.sleep) sleepData = data.sleep;
+      if (data.medications) medicationsData = data.medications;
+      if (data.healthNotes) healthNotesData = data.healthNotes;
       if (data.finance) financeData = data.finance;
       if (data.accounts) accountData = data.accounts;
       if (data.rates) exchangeRates = data.rates;
@@ -5032,6 +5510,8 @@ function clearAllData() {
   if (!confirm('再次确认：真的要删除所有记录吗？')) return;
   fitnessData = [];
   sleepData = [];
+  medicationsData = [];
+  healthNotesData = [];
   financeData = [];
   accountData = [];
   stockData = [];
@@ -7379,7 +7859,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260819f';
+  b.textContent = 'build 20260820a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
