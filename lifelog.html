@@ -3207,6 +3207,14 @@ function matchedProjectsForPerson(person) {
     .filter(m=>m.score>0).sort((a,b)=>b.score-a.score);
   return {canHelp, canBeHelpedBy};
 }
+function projectKeyInfo(p) {
+  const parts = [];
+  if (p.domain) parts.push('领域:' + p.domain);
+  if (p.status) parts.push(p.status);
+  let s = parts.join(' · ');
+  if (p.intro) s += (s ? ' ｜ ' : '') + p.intro;
+  return s;
+}
 
 // ---- 项目 CRUD ----
 let _tmpMembers = [];
@@ -3527,8 +3535,8 @@ function personDetailHtml(p) {
   h += tagsBlock('能力（能提供）', p.abilityTags);
   h += tagsBlock('需求（想要）', p.needTags);
   if (linked.length) h += `<div class="net-detail-section"><h4>🔗 关联的项目</h4>${linked.map(pr=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${pr.id}')"><span>${escapeHtml(pr.name)}</span><span class="net-score">→</span></div>`).join('')}</div>`;
-  h += `<div class="net-match"><h4>🎯 TA 能支持的项目</h4>` + (m.canHelp.length ? m.canHelp.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div><div class="net-tags" style="margin:-2px 0 8px">${x.tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div>`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
-  h += `<div class="net-match"><h4>🎯 能满足 TA 需求的项目</h4>` + (m.canBeHelpedBy.length ? m.canBeHelpedBy.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div><div class="net-tags" style="margin:-2px 0 8px">${x.tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div>`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
+  h += `<div class="net-match"><h4>🎯 TA 能支持的项目</h4>` + (m.canHelp.length ? m.canHelp.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div><div class="net-tags" style="margin:-2px 0 4px">${x.tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div>${projectKeyInfo(x.project)?`<div class="net-sub" style="margin:0 0 8px">${escapeHtml(projectKeyInfo(x.project))}</div>`:''}`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
+  h += `<div class="net-match"><h4>🎯 能满足 TA 需求的项目</h4>` + (m.canBeHelpedBy.length ? m.canBeHelpedBy.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div><div class="net-tags" style="margin:-2px 0 4px">${x.tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div>${projectKeyInfo(x.project)?`<div class="net-sub" style="margin:0 0 8px">${escapeHtml(projectKeyInfo(x.project))}</div>`:''}`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
   h += followupsHtml(p);
   h += timelineHtml(p);
   if (p.note) h += infoRow('备注', p.note);
@@ -9020,7 +9028,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260820h';
+  b.textContent = 'build 20260820i';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
