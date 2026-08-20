@@ -1077,6 +1077,15 @@ tbody tr:hover{background:var(--surface-hover)}
 .net-detail-section{margin-bottom:14px}
 .net-detail-section h4{font-size:13px;font-weight:600;margin:0 0 6px}
 .net-timeline-item{font-size:12px;color:var(--text-secondary);padding:3px 0;border-bottom:1px dashed var(--border-light)}
+.net-check-list{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:8px;padding:8px}
+.net-check-item{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.net-check-item input{flex-shrink:0}
+.member-pick{position:relative;flex:1;min-width:0}
+.member-pick-dropdown{position:fixed;z-index:320;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;box-shadow:var(--shadow-lg);min-width:200px}
+.member-pick-dropdown .opt{padding:8px 12px;font-size:13px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.member-pick-dropdown .opt:hover,.member-pick-dropdown .opt.hl{background:var(--primary-bg)}
+.member-pick-dropdown .opt .id{color:var(--text-muted);font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.member-pick-dropdown .opt .py{color:var(--text-muted);font-size:11px;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -1640,6 +1649,7 @@ tbody tr:hover{background:var(--surface-hover)}
 
 <datalist id="netTagDatalist"></datalist>
 <datalist id="netGroupDatalist"></datalist>
+<div id="memberPickDropdown" class="member-pick-dropdown" style="display:none"></div>
 
 <!-- 项目 Modal -->
 <div class="modal-overlay" id="netProjectModal">
@@ -1726,6 +1736,10 @@ tbody tr:hover{background:var(--surface-hover)}
       <div class="form-group">
         <label class="form-label">需求标签（想要什么）</label>
         <input type="text" class="form-input" id="netPersonNeedTags" list="netTagDatalist" placeholder="如 资金、客户">
+      </div>
+      <div class="form-group">
+        <label class="form-label">关联项目（勾选 = 该人参与的项目；项目也是人的标签）</label>
+        <div id="netPersonProjects" class="net-check-list"></div>
       </div>
       <div class="form-group">
         <label class="form-label">备注</label>
@@ -3197,6 +3211,7 @@ function matchedProjectsForPerson(person) {
 // ---- 项目 CRUD ----
 let _tmpMembers = [];
 function openNetProject(id) {
+  closeModal('netDetailModal');
   document.getElementById('netProjectId').value = id || '';
   document.getElementById('netProjectModalTitle').textContent = id ? '编辑项目' : '添加项目';
   _tmpMembers = [];
@@ -3227,18 +3242,98 @@ function openNetProject(id) {
 function renderMemberRows() {
   const c = document.getElementById('netProjectMembers');
   if (!c) return;
-  const persons = personsData.filter(p => !p._deleted);
   c.innerHTML = _tmpMembers.map((m, i) => {
-    const opts = persons.map(p => `<option value="${p.id}" ${p.id===m.personId?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+    const per = personsData.find(p => p.id === m.personId);
     return `<div class="member-row">
-      <select>${opts}</select>
-      <input type="text" placeholder="角色" value="${escapeHtml(m.role||'')}">
+      <div class="member-pick">
+        <input type="text" class="member-name" value="${escapeHtml(per ? per.name : '')}" placeholder="输入姓名或拼音首字母" autocomplete="off"
+          onfocus="openMemberPick(${i}, this)" oninput="memberPickInput(${i}, this)" onblur="memberPickBlur()">
+        <input type="hidden" class="member-id" value="${m.personId||''}">
+      </div>
+      <input type="text" class="member-role" placeholder="角色" value="${escapeHtml(m.role||'')}">
       <button type="button" class="btn-icon" onclick="removeMemberRow(${i})">✕</button>
     </div>`;
   }).join('');
 }
 function addMemberRow() { _tmpMembers.push({personId:'', role:''}); renderMemberRows(); }
 function removeMemberRow(i) { _tmpMembers.splice(i,1); renderMemberRows(); }
+
+// ---- 成员可搜索下拉 + 拼音首字母 ----
+const PY_GROUPS = {
+  a:'阿啊安按暗岸案昂奥澳爱艾埃哎哀矮碍',
+  b:'白百柏班办半帮包宝保报抱暴北贝倍备被本逼比毕必边变便别宾兵并病波伯博薄不步部巴八把拔霸罢爸卜布',
+  c:'才材财采蔡参曹草侧测曾查茶柴产昌常长厂畅朝车陈成程承诚城池驰赤冲崇出初除楚储川传窗床春纯慈此从崔存寸错曹岑',
+  d:'达大代带戴丹单但党刀导到道得德登邓迪地弟第点电丁定东冬董动都读杜度段对顿多段',
+  e:'恩儿二鄂',
+  f:'发法凡范方芳防房飞费分丰风冯凤佛夫服符福付傅富复樊',
+  g:'改干甘高告格各葛根耿工公宫龚巩贡古谷顾关官管光广归桂郭国过甘',
+  h:'哈海韩汉杭郝何合河贺赫黑恒衡红洪宏侯后胡湖华化怀淮环黄辉会惠霍郝华',
+  j:'基机姬吉纪季计济贾佳家加甲坚简建江姜蒋金今晋靳京经景敬静九久酒旧居局菊举巨军君金',
+  k:'开凯康柯可克孔寇库况寇',
+  l:'拉来赖兰蓝郎朗劳乐雷冷黎李里理利历立连莲廉良梁廖林临灵凌刘留柳六龙隆楼卢鲁陆路吕旅绿罗洛骆梁',
+  m:'马买麦满毛梅孟米苗妙明莫牟木目慕穆马',
+  n:'那南倪年聂宁牛农宁',
+  o:'欧',
+  p:'潘盘庞裴彭皮平萍蒲普潘',
+  q:'戚齐祁钱前乔秦琴青清庆邱秋曲屈全权齐',
+  r:'冉任荣容柔如阮软瑞闰若任',
+  s:'萨赛三桑沙山商上尚邵佘申沈生胜盛施石时史世市示仕是守寿舒书蜀树双水顺司斯四宋苏宿孙所宋',
+  t:'塔太谈谭汤唐桃陶特藤天田铁同童涂屠土团唐',
+  w:'万汪王网韦为伟卫魏温文闻翁沃吴武伍万',
+  x:'西习席夏先鲜咸向项萧肖谢辛新信兴星邢行熊修秀徐许旭轩薛学雪荀夏',
+  y:'严言颜阎燕杨羊阳姚叶伊衣宜易殷尹印应英营雍永用尤由游于余俞虞宇羽雨玉郁喻袁远岳云杨',
+  z:'载臧曾查翟詹展张章赵甄郑支钟周朱诸祝庄卓宗邹左张周'
+};
+let _pyMap = null;
+function pyChar(ch) {
+  if (!_pyMap) {
+    _pyMap = {};
+    for (const k in PY_GROUPS) { const s = PY_GROUPS[k]; for (let i=0;i<s.length;i++) _pyMap[s[i]] = k; }
+  }
+  return _pyMap[ch] || '';
+}
+function pyOf(name) {
+  return (name||'').split('').map(c => /[a-zA-Z]/.test(c) ? c.toLowerCase() : pyChar(c)).join('');
+}
+function filterMembers(q) {
+  const persons = personsData.filter(p=>!p._deleted);
+  q = (q||'').trim();
+  if (!q) return persons.slice(0, 20).map(p=>({person:p, py:pyOf(p.name)}));
+  const isAlpha = /^[a-zA-Z]+$/.test(q);
+  const lower = q.toLowerCase();
+  return persons.filter(p => {
+    if (isAlpha) return pyOf(p.name).toLowerCase().startsWith(lower);
+    return (p.name||'').includes(q) || (p.identity||'').includes(q);
+  }).slice(0, 20).map(p=>({person:p, py:pyOf(p.name)}));
+}
+let _memberPickIdx = -1;
+let _memberPickInput = null;
+let _memberPickHideTimer = null;
+function openMemberPick(idx, inp) { _memberPickIdx = idx; _memberPickInput = inp; renderMemberPick(inp.value); }
+function memberPickInput(idx, inp) { _memberPickIdx = idx; _memberPickInput = inp; renderMemberPick(inp.value); }
+function memberPickBlur() { clearTimeout(_memberPickHideTimer); _memberPickHideTimer = setTimeout(hideMemberPick, 150); }
+function hideMemberPick() { const d = document.getElementById('memberPickDropdown'); if (d) d.style.display='none'; }
+function renderMemberPick(q) {
+  const d = document.getElementById('memberPickDropdown');
+  if (!d || !_memberPickInput) return;
+  const items = filterMembers(q);
+  if (!items.length) { d.style.display='none'; return; }
+  d.innerHTML = items.map(it => `<div class="opt" onmousedown="pickMember('${it.person.id}')"><span>${escapeHtml(it.person.name)}</span><span class="id">${escapeHtml(it.person.identity||'')}</span><span class="py">${it.py||''}</span></div>`).join('');
+  const r = _memberPickInput.getBoundingClientRect();
+  d.style.left = r.left + 'px';
+  d.style.top = (r.bottom + 4) + 'px';
+  d.style.display = 'block';
+}
+function pickMember(pid) {
+  if (!_memberPickInput) return;
+  const per = personsData.find(p=>p.id===pid);
+  if (!per) return;
+  _memberPickInput.value = per.name;
+  const row = _memberPickInput.closest('.member-row');
+  if (row) { const hidden = row.querySelector('.member-id'); if (hidden) hidden.value = pid; }
+  if (_tmpMembers[_memberPickIdx]) _tmpMembers[_memberPickIdx].personId = pid;
+  hideMemberPick();
+}
 function saveNetProject() {
   const id = document.getElementById('netProjectId').value;
   const name = document.getElementById('netProjectName').value.trim();
@@ -3251,8 +3346,10 @@ function saveNetProject() {
   const note = document.getElementById('netProjectNote').value;
   const members = [];
   document.querySelectorAll('#netProjectMembers .member-row').forEach(row => {
-    const sel = row.querySelector('select'); const inp = row.querySelector('input');
-    if (sel && sel.value) members.push({personId: sel.value, role: (inp?inp.value:'').trim()});
+    const idInput = row.querySelector('.member-id');
+    const roleInput = row.querySelector('.member-role');
+    const pid = idInput ? idInput.value : '';
+    if (pid) members.push({personId: pid, role: roleInput ? roleInput.value.trim() : ''});
   });
   const now = new Date().toISOString();
   if (id) {
@@ -3275,7 +3372,23 @@ function deleteNetProject(id) {
 }
 
 // ---- 人脉 CRUD ----
+let _tmpPersonProjects = [];
+function renderPersonProjects() {
+  const c = document.getElementById('netPersonProjects');
+  if (!c) return;
+  const projs = projectsData.filter(p => !p._deleted).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  if (!projs.length) { c.innerHTML = '<div class="net-empty">还没有项目，先到「项目」里添加</div>'; return; }
+  c.innerHTML = projs.map(p => {
+    const checked = _tmpPersonProjects.includes(p.id);
+    return `<label class="net-check-item"><input type="checkbox" value="${p.id}" ${checked?'checked':''} onchange="togglePersonProject('${p.id}', this.checked)">${escapeHtml(p.name)}</label>`;
+  }).join('');
+}
+function togglePersonProject(pid, checked) {
+  if (checked) { if (!_tmpPersonProjects.includes(pid)) _tmpPersonProjects.push(pid); }
+  else _tmpPersonProjects = _tmpPersonProjects.filter(x=>x!==pid);
+}
 function openNetPerson(id) {
+  closeModal('netDetailModal');
   document.getElementById('netPersonId').value = id || '';
   document.getElementById('netPersonModalTitle').textContent = id ? '编辑人脉' : '添加人脉';
   if (id) {
@@ -3286,6 +3399,7 @@ function openNetPerson(id) {
     document.getElementById('netPersonAbilityTags').value = (p.abilityTags||[]).join('、');
     document.getElementById('netPersonNeedTags').value = (p.needTags||[]).join('、');
     document.getElementById('netPersonNote').value = p.note||'';
+    _tmpPersonProjects = projectsData.filter(pr => !pr._deleted && (pr.members||[]).some(m=>m.personId===id)).map(pr=>pr.id);
   } else {
     document.getElementById('netPersonName').value='';
     document.getElementById('netPersonIdentity').value='';
@@ -3293,12 +3407,14 @@ function openNetPerson(id) {
     document.getElementById('netPersonAbilityTags').value='';
     document.getElementById('netPersonNeedTags').value='';
     document.getElementById('netPersonNote').value='';
+    _tmpPersonProjects = [];
   }
+  renderPersonProjects();
   renderNetDatalists();
   document.getElementById('netPersonModal').classList.add('active');
 }
 function saveNetPerson() {
-  const id = document.getElementById('netPersonId').value;
+  const idInput = document.getElementById('netPersonId').value;
   const name = document.getElementById('netPersonName').value.trim();
   if (!name) { toast('请输入姓名'); return; }
   const identity = document.getElementById('netPersonIdentity').value.trim();
@@ -3307,13 +3423,24 @@ function saveNetPerson() {
   const needTags = parseTagStr(document.getElementById('netPersonNeedTags').value);
   const note = document.getElementById('netPersonNote').value;
   const now = new Date().toISOString();
-  if (id) {
-    const idx = personsData.findIndex(x=>x.id===id);
+  let pid = idInput;
+  if (pid) {
+    const idx = personsData.findIndex(x=>x.id===pid);
     if (idx>=0) personsData[idx] = {...personsData[idx], name, identity, groups, abilityTags, needTags, note, updatedAt: now};
   } else {
-    personsData.push({id: uid(), name, identity, groups, abilityTags, needTags, note, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false});
+    pid = uid();
+    personsData.push({id: pid, name, identity, groups, abilityTags, needTags, note, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false});
   }
+  // 同步「关联项目」：项目也是人的标签，事实源为 project.members
+  const selected = new Set(_tmpPersonProjects);
+  projectsData.forEach(proj => {
+    if (!proj.members) proj.members = [];
+    const has = proj.members.some(m => m.personId === pid);
+    if (selected.has(proj.id) && !has) proj.members.push({personId: pid, role: ''});
+    if (!selected.has(proj.id) && has) proj.members = proj.members.filter(m => m.personId !== pid);
+  });
   savePersons();
+  saveProjects();
   closeModal('netPersonModal');
   collectNetTags(); renderNetDatalists(); renderNetGroupFilters(); renderNetPersons();
   toast('人脉已保存');
@@ -3322,7 +3449,8 @@ function deleteNetPerson(id) {
   const p = personsData.find(x=>x.id===id);
   if (!confirm('删除人脉「'+(p?p.name:'')+'」？')) return;
   personsData = personsData.filter(x=>x.id!==id);
-  savePersons(); closeModal('netDetailModal'); renderNetPersons();
+  projectsData.forEach(pr => { if (pr.members) pr.members = pr.members.filter(m => m.personId !== id); });
+  savePersons(); saveProjects(); closeModal('netDetailModal'); renderNetPersons();
 }
 
 // ---- 分组管理 ----
@@ -3388,11 +3516,13 @@ function projectDetailHtml(p) {
 }
 function personDetailHtml(p) {
   const m = matchedProjectsForPerson(p);
+  const linked = projectsData.filter(pr=>!pr._deleted && (pr.members||[]).some(mm=>mm.personId===p.id));
   let h = '';
   h += infoRow('身份', p.identity);
   if ((p.groups||[]).length) h += tagsBlock('分组', p.groups);
   h += tagsBlock('能力（能提供）', p.abilityTags);
   h += tagsBlock('需求（想要）', p.needTags);
+  if (linked.length) h += `<div class="net-detail-section"><h4>🔗 关联的项目</h4>${linked.map(pr=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${pr.id}')"><span>${escapeHtml(pr.name)}</span><span class="net-score">→</span></div>`).join('')}</div>`;
   h += `<div class="net-match"><h4>🎯 TA 能支持的项目</h4>` + (m.canHelp.length ? m.canHelp.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div>`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
   h += `<div class="net-match"><h4>🎯 能满足 TA 需求的项目</h4>` + (m.canBeHelpedBy.length ? m.canBeHelpedBy.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div>`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
   h += followupsHtml(p);
@@ -8886,7 +9016,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260820f';
+  b.textContent = 'build 20260820g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
