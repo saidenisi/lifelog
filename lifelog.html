@@ -1086,6 +1086,8 @@ tbody tr:hover{background:var(--surface-hover)}
 .member-pick-dropdown .opt:hover,.member-pick-dropdown .opt.hl{background:var(--primary-bg)}
 .member-pick-dropdown .opt .id{color:var(--text-muted);font-size:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .member-pick-dropdown .opt .py{color:var(--text-muted);font-size:11px;flex-shrink:0}
+.net-note{font-size:12px;color:var(--text-secondary);background:var(--border-light);padding:1px 6px;border-radius:6px;margin-left:4px;line-height:1.5}
+.net-tagline{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px}
 </style>
 </head>
 <body>
@@ -3522,7 +3524,7 @@ function openNetDetail(kind, id) {
 }
 function tagNoteItemHtml(t, cls) {
   const tag = tagOf(t), note = noteOf(t);
-  return `<span class="net-tag ${cls||''}">${escapeHtml(tag)}</span>${note?`<span class="net-sub" style="display:inline;margin:0 4px">${escapeHtml(note)}</span>`:''}`;
+  return `<span class="net-tag ${cls||''}">${escapeHtml(tag)}</span>${note?`<span class="net-note">${escapeHtml(note)}</span>`:''}`;
 }
 function personTagListHtml(arr) {
   return (arr||[]).map(t => `<div class="net-tagline" style="margin-bottom:3px">${tagNoteItemHtml(t)}</div>`).join('');
@@ -3542,8 +3544,9 @@ function projectDetailHtml(p) {
   h += `<div class="net-match"><h4>🎯 相关的人脉（按匹配度）</h4>` + (matched.length ? matched.map(m=>{
     const per = m.person;
     let rows = '';
-    if (m.provide.length) rows += `<div class="net-sub">提供：${m.provide.map(t=>`${escapeHtml(tagOf(t))}${noteOf(t)?'（'+escapeHtml(noteOf(t))+'）':''}`).join('、')}</div>`;
-    if (m.need.length) rows += `<div class="net-sub">需求：${m.need.map(t=>`${escapeHtml(tagOf(t))}${noteOf(t)?'（'+escapeHtml(noteOf(t))+'）':''}`).join('、')}</div>`;
+    if (m.provide.length) rows += `<div class="net-tagline" style="margin-top:3px">提供：${m.provide.map(t=>tagNoteItemHtml(t)).join('')}</div>`;
+    if (m.need.length) rows += `<div class="net-tagline" style="margin-top:3px">需求：${m.need.map(t=>tagNoteItemHtml(t)).join('')}</div>`;
+    if (per.note) rows += `<div class="net-sub" style="margin-top:3px">备注：${escapeHtml(per.note)}</div>`;
     return `<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('person','${per.id}')"><span>${escapeHtml(per.name)}${per.identity?'（'+escapeHtml(per.identity)+'）':''}</span><span class="net-score">匹配 ${m.score} 项</span></div>${rows}`;
   }).join('') : '<div class="net-empty">暂无匹配的人（给人脉打上与本项目标签一致的「提供/需求」标签即可串起来）</div>') + `</div>`;
   h += followupsHtml(p);
@@ -9059,7 +9062,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260820j';
+  b.textContent = 'build 20260820k';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
