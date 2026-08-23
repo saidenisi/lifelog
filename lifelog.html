@@ -2831,7 +2831,8 @@ async function pullAllFromCloud() {
 // - pull: cloud is authoritative for records it knows (fixes stale local timestamps/bulk updates).
 // - push: local is authoritative (uploads local edits/deletions).
 // - Tombstones: cloud tombstone always deletes locally; local tombstone always stays so it can be pushed.
-// - Local-only records: kept on push, dropped on pull (orphans from other devices' deletes).
+// - _pendingPush: 本地有尚未同步到云端的改动（新增/修改），pull 时保留本地版本不被覆盖/丢弃，
+//   push 成功后清除标记。没有标记且云端没有的本地记录，pull 时才丢弃（其它端已删除的残留）。
 function mergeRecords(cloudArr, localArr, mode) {
   if (!cloudArr || cloudArr.length === 0) return localArr;
   if (!localArr  || localArr.length === 0)  return cloudArr;
@@ -2844,17 +2845,22 @@ function mergeRecords(cloudArr, localArr, mode) {
     if (l._deleted) { map[l.id] = l; return; }
     // 云端墓碑（已删除）必须生效，防止已删条目在本地复活
     if (c && c._deleted) return;
+    // 本地有未同步改动（新增或修改）：push 时上传；pull 时也保留本地版本（不被云端覆盖/丢弃）
+    if (l._pendingPush) { map[l.id] = l; return; }
     if (!c) {
-      // 云端没有这条：push 时保留（本地新增），pull 时丢弃（其它端已删除的残留）
-      if (mode === 'push') map[l.id] = l;
+      // 云端没有这条：push 时保留并标记未同步；pull 时丢弃（其它端已删除的残留）
+      if (mode === 'push') { l._pendingPush = true; map[l.id] = l; }
       return;
     }
-    // 同 ID 且都未删除：pull 以云端为准；push 以最新 updatedAt 为准
+    // 同 ID 且都未删除、本地无未同步标记
     if (mode === 'pull') return;
-    if (new Date(l.updatedAt || 0) >= new Date(c.updatedAt || 0)) map[l.id] = l;
+    if (new Date(l.updatedAt || 0) >= new Date(c.updatedAt || 0)) { l._pendingPush = true; map[l.id] = l; }
   });
   return Object.values(map);
 }
+
+// 标记某条记录为「本地有未同步改动」（在保存点调用，确保即使尚未 push 也不被 pull 丢弃）
+function markPending(rec) { if (rec && !rec._pendingPush) rec._pendingPush = true; }
 
 // Push all local data to cloud
 async function pushAllToCloud() {
@@ -2897,7 +2903,14 @@ async function pushAllToCloud() {
       var resp = await supabaseFetch('POST', '/rest/v1/lifelog_data?on_conflict=id',
         { id: key, data: localValue, updated_at: new Date().toISOString() }
       );
-      if (!resp.ok) { errors++; console.warn('[Sync] push error', key, resp.status); }
+      if (!resp.ok) {
+        errors++; console.warn('[Sync] push error', key, resp.status);
+      } else if (Array.isArray(localValue)) {
+        // 推送成功：清除未同步标记，后续 pull 不再把这些记录当"未同步"处理
+        var cleared = false;
+        localValue.forEach(function(r) { if (r && r._pendingPush) { delete r._pendingPush; cleared = true; } });
+        if (cleared) DB.set(key, localValue);
+      }
     } catch(e) { errors++; console.warn('[Sync] push failed', key, e); }
   }
   setSyncStatus(errors ? '上传失败 ⚠️' : '已同步 ✅', errors ? 'error' : 'synced');
@@ -3382,9 +3395,9 @@ function saveNetProject() {
   const now = new Date().toISOString();
   if (id) {
     const idx = projectsData.findIndex(x=>x.id===id);
-    if (idx>=0) projectsData[idx] = {...projectsData[idx], name, domain, status, intro, tags, note, members, updatedAt: now};
+    if (idx>=0) projectsData[idx] = {...projectsData[idx], name, domain, status, intro, tags, note, members, updatedAt: now, _pendingPush: true};
   } else {
-    projectsData.push({id: uid(), name, domain, status, intro, tags, note, members, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false});
+    projectsData.push({id: uid(), name, domain, status, intro, tags, note, members, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
   }
   saveProjects();
   closeModal('netProjectModal');
@@ -3454,18 +3467,18 @@ function saveNetPerson() {
   let pid = idInput;
   if (pid) {
     const idx = personsData.findIndex(x=>x.id===pid);
-    if (idx>=0) personsData[idx] = {...personsData[idx], name, identity, groups, abilityTags, needTags, note, updatedAt: now};
+    if (idx>=0) personsData[idx] = {...personsData[idx], name, identity, groups, abilityTags, needTags, note, updatedAt: now, _pendingPush: true};
   } else {
     pid = uid();
-    personsData.push({id: pid, name, identity, groups, abilityTags, needTags, note, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false});
+    personsData.push({id: pid, name, identity, groups, abilityTags, needTags, note, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
   }
   // 同步「关联项目」：项目也是人的标签，事实源为 project.members
   const selected = new Set(_tmpPersonProjects);
   projectsData.forEach(proj => {
     if (!proj.members) proj.members = [];
     const has = proj.members.some(m => m.personId === pid);
-    if (selected.has(proj.id) && !has) proj.members.push({personId: pid, role: ''});
-    if (!selected.has(proj.id) && has) proj.members = proj.members.filter(m => m.personId !== pid);
+    if (selected.has(proj.id) && !has) { proj.members.push({personId: pid, role: ''}); markPending(proj); }
+    if (!selected.has(proj.id) && has) { proj.members = proj.members.filter(m => m.personId !== pid); markPending(proj); }
   });
   savePersons();
   saveProjects();
@@ -3609,6 +3622,7 @@ function timelineHtml(rec) {
     </div></div>`;
 }
 function _netSaveAndRefresh() {
+  markPending(netDetailRecord());
   if (_netDetailKind === 'project') saveProjects(); else savePersons();
   openNetDetail(_netDetailKind, _netDetailId);
 }
@@ -9062,7 +9076,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260820k';
+  b.textContent = 'build 20260823a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
