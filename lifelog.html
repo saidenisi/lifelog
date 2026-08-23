@@ -4218,9 +4218,50 @@ function renderSleep() {
   const yMin = Math.floor(minTime - 1);
   const yMax = Math.ceil(maxTime + 1);
 
+  // 图上动态标注：睡得太晚(入睡晚于7天均) / 睡得太少(时长低于7天均)
+  const avgBed7 = bedtimeData[3];
+  const avgDur7 = durationData[3];
+  const sleepAnnotation = {
+    id: 'sleepAnnotation',
+    afterDraw(chart) {
+      const ctx = chart.ctx;
+      const metaDur = chart.getDatasetMeta(0);
+      const metaBed = chart.getDatasetMeta(1);
+      for (let i = 4; i < 11; i++) {
+        const dur = durationData[i];
+        const bed = bedtimeData[i];
+        if (bed != null && avgBed7 != null && bed > avgBed7) {
+          const el = metaBed.data[i];
+          if (el) {
+            ctx.save();
+            ctx.fillStyle = colors.warning;
+            ctx.font = '11px Inter, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('睡得太晚了', el.x, el.y + 10);
+            ctx.restore();
+          }
+        }
+        if (dur != null && avgDur7 != null && dur < avgDur7) {
+          const el = metaDur.data[i];
+          if (el) {
+            ctx.save();
+            ctx.fillStyle = colors.danger;
+            ctx.font = '11px Inter, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('睡得太少', el.x, el.y - 4);
+            ctx.restore();
+          }
+        }
+      }
+    }
+  };
+
   destroyChart('sleepChart');
   chartInstances.sleepChart = new Chart(document.getElementById('sleepChart'), {
     type: 'bar',
+    plugins: [sleepAnnotation],
     data: {
       labels: labels,
       datasets: [
@@ -9161,7 +9202,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260823c';
+  b.textContent = 'build 20260823d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
