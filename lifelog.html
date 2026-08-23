@@ -991,6 +991,13 @@ tbody tr:hover{background:var(--surface-hover)}
 }
 .todo-expand-title{font-size:13px;font-weight:600;margin-bottom:8px}
 .todo-edit-row{padding:8px;border:1px solid var(--primary);border-radius:8px;background:var(--primary-bg);margin:6px 0}
+.todo-mobile-day{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.todo-mobile-day .day-label{font-weight:600;font-size:13px;margin-bottom:6px;color:var(--text)}
+.todo-mobile-day.empty{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;opacity:.75;cursor:pointer}
+.todo-mobile-day.empty .day-label{margin-bottom:0}
+.todo-mobile-add{color:var(--primary);font-size:12px;margin-top:6px;cursor:pointer}
+.todo-mobile-day.empty .add-hint{color:var(--text-muted);font-size:15px;line-height:1}
+#todosMobileAddArea{margin-bottom:10px}
 
 /* ===== Misc ===== */
 .text-muted{color:var(--text-muted)}
@@ -7287,6 +7294,31 @@ let todosExpanded = false; // whether the selected date's panel is expanded
 let currentTodoTag = ''; // tag selected when adding a todo
 let todoInputActive = false; // guard: typing in progress, skip re-render on sync
 let editingTodoId = null;    // id of the todo being edited (null = none)
+let todosViewStart = '';     // 电脑端 4 周视图的第一天（默认上周一）
+
+// 某日期所在周的周一（周一为起点）
+function mondayOf(dateStr) {
+  var d = new Date(dateStr + 'T00:00:00');
+  var wd = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - wd);
+  return fmtDateFull(d);
+}
+// 日期字符串 +/- 天数
+function shiftDate(dateStr, days) {
+  return fmtDateFull(new Date(new Date(dateStr + 'T00:00:00').getTime() + days * 86400000));
+}
+function initTodosViewStart() {
+  if (!todosViewStart) todosViewStart = shiftDate(mondayOf(todayStr()), -7);
+}
+function hasUnfinishedTodos(dateStr) {
+  return getTodosForDate(dateStr).some(function(t) { return !t.done; });
+}
+function todoDateLabel(dateStr) {
+  var d = new Date(dateStr + 'T00:00:00');
+  var wd = ['日','一','二','三','四','五','六'][d.getDay()];
+  var md = (d.getMonth() + 1) + '月' + d.getDate() + '日';
+  return dateStr === todayStr() ? ('今天 · ' + md) : (md + ' 周' + wd);
+}
 
 // Preset todo tags + colors (vivid, white-on-color for calendar chips/bars)
 const TODO_TAGS = {
@@ -7373,7 +7405,13 @@ function renderTodos() {
     dt.getFullYear()+'年'+(dt.getMonth()+1)+'月'+dt.getDate()+'日 星期'+weekDays[dt.getDay()];
   // While typing/editing, don't re-render the calendar (would drop focus + input)
   if (todoInputActive || editingTodoId) return;
-  renderTodosCalendar();
+  renderTodosView();
+}
+
+// 根据屏幕宽度分流：手机(≤768px)两周纵向列表，电脑 4 周格子视图
+function renderTodosView() {
+  if (window.innerWidth <= 768) renderTodosMobile();
+  else renderTodosCalendar();
 }
 
 function clearTodoEditing() {
@@ -7385,8 +7423,7 @@ function clearTodoEditing() {
 function todosGoToday() {
   clearTodoEditing();
   todosDate = todayStr();
-  todosCalYear = new Date().getFullYear();
-  todosCalMonth = new Date().getMonth();
+  todosViewStart = shiftDate(mondayOf(todayStr()), -7);
   todosExpanded = true;
   renderTodos();
 }
@@ -7397,7 +7434,7 @@ function todosSelectDate(dateStr) {
   // Toggle: clicking the same date again collapses the panel
   if (dateStr === todosDate && todosExpanded) {
     todosExpanded = false;
-    renderTodosCalendar();
+    renderTodosView();
     return;
   }
   todosDate = dateStr;
@@ -7413,13 +7450,19 @@ function todosShiftMonth(delta) {
   todosCalMonth += delta;
   if (todosCalMonth < 0) { todosCalMonth = 11; todosCalYear--; }
   if (todosCalMonth > 11) { todosCalMonth = 0; todosCalYear++; }
-  renderTodosCalendar();
+  renderTodosView();
+}
+
+function todosShiftWeek(delta) {
+  clearTodoEditing();
+  initTodosViewStart();
+  todosViewStart = shiftDate(todosViewStart, delta * 7);
+  renderTodosView();
 }
 
 function todosCalToToday() {
   clearTodoEditing();
-  todosCalYear = new Date().getFullYear();
-  todosCalMonth = new Date().getMonth();
+  todosViewStart = shiftDate(mondayOf(todayStr()), -7);
   todosDate = todayStr();
   todosExpanded = true;
   renderTodos();
@@ -7430,9 +7473,10 @@ function renderTodosCalendar() {
   if (!el) return;
   computeMultiDayLanes();
   var weekDays = ['一','二','三','四','五','六','日'];
-  var year = todosCalYear, month = todosCalMonth;
+  var today = todayStr();
+  initTodosViewStart();
 
-  // Single-day todos for cell summaries (multi-day rendered as bars)
+  // 单日待办按日期分组（多日待办由 renderTodoBars 画横向色条）
   var singleByDate = {};
   todosData.forEach(function(t) {
     if (t._deleted || isMultiDay(t)) return;
@@ -7443,55 +7487,34 @@ function renderTodosCalendar() {
     singleByDate[d].sort(function(a, b) { return (a.done ? 1 : 0) - (b.done ? 1 : 0); });
   });
 
-  // 周一作为一周起点：(getDay()+6)%7 —— 周日→6，周一→0，…周六→5
-  var firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
-  var daysInMonth = new Date(year, month + 1, 0).getDate();
-  var daysInPrev = new Date(year, month, 0).getDate();
-  var today = todayStr();
+  // 连续 4 周 = 28 天（上周一 ~ 下下周周日）
+  var cells = [];
+  for (var i = 0; i < 28; i++) cells.push(shiftDate(todosViewStart, i));
+  var startLabel = cells[0].slice(5).replace('-', '/') + ' - ' + cells[27].slice(5).replace('-', '/');
 
   var html = '<div class="daily-cal-head">'+
-    '<div class="daily-cal-title">'+year+'年'+(month+1)+'月</div>'+
+    '<div class="daily-cal-title">'+startLabel+'</div>'+
     '<div class="daily-cal-nav">'+
-      '<button onclick="todosShiftMonth(-1)" title="上月">◀</button>'+
-      '<button onclick="todosCalToToday()" title="回到本月">●</button>'+
-      '<button onclick="todosShiftMonth(1)" title="下月">▶</button>'+
+      '<button onclick="todosShiftWeek(-1)" title="上一周">◀</button>'+
+      '<button onclick="todosCalToToday()" title="回到本周">●</button>'+
+      '<button onclick="todosShiftWeek(1)" title="下一周">▶</button>'+
     '</div></div>';
 
   html += '<div class="daily-cal-week">';
   weekDays.forEach(function(w) { html += '<div>'+w+'</div>'; });
   html += '</div>';
 
-  var cells = [];
-  var i, dayNum;
-  for (i = firstDay - 1; i >= 0; i--) cells.push({day: daysInPrev - i, month: month - 1, other: true});
-  for (dayNum = 1; dayNum <= daysInMonth; dayNum++) cells.push({day: dayNum, month: month});
-  var remaining = 42 - cells.length;
-  for (i = 1; i <= remaining; i++) cells.push({day: i, month: month + 1, other: true});
-  cells.forEach(function(c) {
-    var y = year, m = c.month;
-    if (m < 0) { m = 11; y--; }
-    if (m > 11) { m = 0; y++; }
-    c.dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(c.day).padStart(2,'0');
-  });
-
-  var selectedRow = -1;
-  cells.forEach(function(c, idx) { if (c.dateStr === todosDate) selectedRow = Math.floor(idx / 7); });
-
   html += '<div class="daily-cal-grid todo-cal-grid">';
-  for (var idx = 0; idx < cells.length; idx++) {
-    var c = cells[idx];
+  cells.forEach(function(dateStr) {
     var cls = 'todo-cal-cell';
-    if (c.other) cls += ' other';
-    if (c.dateStr === today) cls += ' today';
-    if (c.dateStr === todosDate) cls += ' selected';
-
-    var inner = (c.dateStr === today)
-      ? '<div class="d"><span class="t1">今</span><span class="t2">'+lunarDayOnly(c.dateStr)+'</span></div>'
-      : '<div class="d">'+c.day+'</div><div class="lunar">'+lunarSubText(c.dateStr)+'</div>';
-    var items = singleByDate[c.dateStr] || [];
-    // Reserve vertical space below the date for any multi-day bars spanning this
-    // cell, so single-day items sit below the bars instead of being overlapped.
-    var maxLane = todoMaxLaneByDate[c.dateStr];
+    if (dateStr === today) cls += ' today';
+    if (dateStr === todosDate) cls += ' selected';
+    var dayNum = parseInt(dateStr.slice(8), 10);
+    var inner = (dateStr === today)
+      ? '<div class="d"><span class="t1">今</span><span class="t2">'+lunarDayOnly(dateStr)+'</span></div>'
+      : '<div class="d">'+dayNum+'</div><div class="lunar">'+lunarSubText(dateStr)+'</div>';
+    var items = singleByDate[dateStr] || [];
+    var maxLane = todoMaxLaneByDate[dateStr];
     if (typeof maxLane === 'number' && items.length > 0) {
       inner += '<div style="height:'+(20 + maxLane * 19)+'px"></div>';
     }
@@ -7500,12 +7523,75 @@ function renderTodosCalendar() {
       shown.forEach(function(t) { inner += todoCalItemHtml(t); });
       if (items.length > 4) inner += '<div class="todo-cal-more">+'+(items.length - 4)+'</div>';
     }
-    html += '<div class="'+cls+'" data-date="'+c.dateStr+'" onclick="todosSelectDate(\''+c.dateStr+'\')">'+inner+'</div>';
-  }
+    html += '<div class="'+cls+'" data-date="'+dateStr+'" onclick="todosSelectDate(\''+dateStr+'\')">'+inner+'</div>';
+  });
   html += '</div>';
   el.innerHTML = html;
 
   requestAnimationFrame(layoutTodos);
+}
+
+// 手机端：两周纵向列表（每天一个分组，空日期折叠，多日待办每天显示 + 跨度标记）
+function renderTodosMobile() {
+  var el = document.getElementById('todosCalendar');
+  if (!el) return;
+  var today = todayStr();
+  // 动态起点：前天/昨天有未完成待办 → 从前天开始；否则从今天开始
+  var twoDaysAgo = shiftDate(today, -2);
+  var yesterday = shiftDate(today, -1);
+  var start = (hasUnfinishedTodos(yesterday) || hasUnfinishedTodos(twoDaysAgo)) ? twoDaysAgo : today;
+
+  var html = '<div id="todosMobileAddArea">'+renderTodosAddBtn()+'</div>';
+
+  for (var i = 0; i < 14; i++) {
+    var dateStr = shiftDate(start, i);
+    var items = getTodosForDate(dateStr);
+    items.sort(function(a, b) {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      return (a.createdAt || '').localeCompare(b.createdAt || '');
+    });
+    var label = todoDateLabel(dateStr);
+    if (items.length === 0) {
+      // 空日期折叠成窄条，点击可添加
+      html += '<div class="todo-mobile-day empty" onclick="showTodoInputMobile(\''+dateStr+'\')">'+
+        '<span class="day-label">'+label+'</span>'+
+        '<span class="add-hint">＋</span></div>';
+    } else {
+      html += '<div class="todo-mobile-day">';
+      html += '<div class="day-label">'+label+'</div>';
+      items.forEach(function(t) {
+        if (editingTodoId === t.id) html += renderTodoEditRow(t);
+        else html += renderTodoRow(t);
+      });
+      html += '<div class="todo-mobile-add" onclick="showTodoInputMobile(\''+dateStr+'\')">＋ 添加</div>';
+      html += '</div>';
+    }
+  }
+  el.innerHTML = html;
+}
+
+// 手机端添加输入区（顶部容器 #todosMobileAddArea，含可选的开始日期）
+function showTodoInputMobile(dateStr) {
+  todoInputActive = true;
+  todosDate = dateStr || todayStr();
+  var el = document.getElementById('todosMobileAddArea');
+  if (!el) return;
+  el.innerHTML = todoTagChipsHtml() +
+    '<div class="todo-input-row">'+
+      '<input type="text" id="todoInput" class="todo-add-input todo-input-text" placeholder="输入待办内容" autocomplete="off">'+
+      '<button class="btn btn-primary todo-send-btn" onclick="addTodo()">保存</button>'+
+    '</div>'+
+    '<div class="todo-input-row">'+
+      '<input type="date" id="todoDateInput" class="todo-add-input todo-input-date" value="'+todosDate+'" title="待办日期">'+
+      '<input type="date" id="todoDateEndInput" class="todo-add-input todo-input-date" title="结束日期（留空=单日事项）">'+
+      '<button class="btn btn-ghost" onclick="cancelTodoInput()" style="flex-shrink:0">取消</button>'+
+    '</div>';
+  var input = document.getElementById('todoInput');
+  if (input) {
+    input.focus();
+    setTimeout(function() { try { input.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch(e) {} }, 50);
+    input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); addTodo(); } });
+  }
 }
 
 // Position the expand panel as an absolute overlay right below the selected
@@ -7735,6 +7821,9 @@ function renderTodoEditRow(t) {
 }
 
 function renderTodosAddBtn() {
+  if (window.innerWidth <= 768) {
+    return '<button class="todo-add-btn" onclick="showTodoInputMobile(\''+todayStr()+'\')">＋ 添加事项</button>';
+  }
   return '<button class="todo-add-btn" onclick="showTodoInput()">＋ 添加事项</button>';
 }
 
@@ -7794,7 +7883,7 @@ function showTodoInput() {
 function cancelTodoInput() {
   todoInputActive = false;
   currentTodoTag = '';
-  renderTodosCalendar();
+  renderTodosView();
 }
 
 function addTodo() {
@@ -7802,6 +7891,9 @@ function addTodo() {
   if (!input) return;
   var content = input.value.trim();
   if (!content) return;
+  // 手机端支持直接选日期（#todoDateInput）；桌面端沿用 todosDate
+  var dateInput = document.getElementById('todoDateInput');
+  if (dateInput && dateInput.value) todosDate = dateInput.value;
   var dateEnd = document.getElementById('todoDateEndInput').value || '';
   var rec = {
     id: uid(), date: todosDate, content: content, done: false,
@@ -7822,7 +7914,7 @@ function startEditTodo(id) {
   if (!t) return;
   editingTodoId = id;
   currentTodoTag = t.tag || '';
-  renderTodosCalendar();
+  renderTodosView();
 }
 
 function saveEditTodo() {
@@ -7848,7 +7940,7 @@ function saveEditTodo() {
 
 function cancelEditTodo() {
   clearTodoEditing();
-  renderTodosCalendar();
+  renderTodosView();
 }
 
 // Clicking anywhere outside the edit row / a todo row cancels the in-progress edit
@@ -7857,7 +7949,7 @@ document.addEventListener('click', function(e) {
   var t = e.target;
   if (t && t.closest && (t.closest('.todo-edit-row') || t.closest('.todo-row') || t.closest('#todosAddArea'))) return;
   clearTodoEditing();
-  renderTodosCalendar();
+  renderTodosView();
 });
 
 function toggleTodo(id) {
@@ -7867,7 +7959,7 @@ function toggleTodo(id) {
   t.updatedAt = new Date().toISOString();
   saveTodos();
   saveAll();
-  renderTodosCalendar();
+  renderTodosView();
 }
 
 // 自动延期：未完成且「结束日期距今已过 2 天宽限期（第 3 天起）」的待办，自动顺延。
@@ -9076,7 +9168,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260823a';
+  b.textContent = 'build 20260823b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
