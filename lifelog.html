@@ -4153,18 +4153,19 @@ function renderSleep() {
     document.getElementById('sleepAvgWake').textContent = '—';
   }
 
-  // Combined chart - all recorded data; history older than 21 days collapses into one average point
+  // Combined chart - 全部 / 21天 / 14天 / 7天 滚动平均 + 最近7天每日
   const colors = getChartColors();
-  const recentDates = getRecentDates(21);
-  const allSleepDates = [...new Set(sleepData.map(s => s.date))].sort();
-  const olderDates = allSleepDates.filter(d => d < recentDates[0]);
-  const hasOlder = olderDates.length > 0;
-  // Axis: when there is no history older than 21 days, only show from the earliest recorded date onward
-  let axisDates = recentDates;
-  if (!hasOlder && allSleepDates.length > 0) {
-    const earliest = allSleepDates[0];
-    axisDates = recentDates.filter(d => d >= earliest);
+  const today = todayStr();
+
+  function datesBack(n) {
+    const arr = [];
+    for (let i = 0; i < n; i++) arr.push(shiftDate(today, -(n - 1 - i)));
+    return arr;
   }
+  const last7 = datesBack(7);
+  const last14 = datesBack(14);
+  const last21 = datesBack(21);
+  const allDates = [...new Set(sleepData.map(s => s.date))].sort();
 
   function avgMetric(dates, metric) {
     const recs = dates.map(d => sleepData.find(s => s.date === d)).filter(Boolean);
@@ -4172,49 +4173,41 @@ function renderSleep() {
     return recs.reduce((s, r) => s + metric(r), 0) / recs.length;
   }
 
-  const labels = [];
-  if (hasOlder) labels.push('21天前平均');
-  axisDates.forEach(d => labels.push(fmtDate(d)));
+  const labels = ['全部平均', '21天均', '14天均', '7天均'];
+  last7.forEach(d => labels.push(fmtShort(d)));
 
   const durationData = [];
   const bedtimeData = [];
   const wakeData = [];
   const barColors = [];
   const barBorders = [];
-  function pushPoint(rec) {
+  function pushColor(dur) {
+    if (dur == null) { barColors.push('transparent'); barBorders.push('transparent'); }
+    else if (dur >= 7) { barColors.push('rgba(16,185,129,.35)'); barBorders.push(colors.success); }
+    else if (dur >= 6) { barColors.push('rgba(245,158,11,.35)'); barBorders.push(colors.warning); }
+    else { barColors.push('rgba(239,68,68,.35)'); barBorders.push(colors.danger); }
+  }
+  function pushAvg(dates) {
+    const dur = avgMetric(dates, r => r.duration);
+    durationData.push(dur);
+    bedtimeData.push(avgMetric(dates, r => timeToDecimal(r.bedtime, true)));
+    wakeData.push(avgMetric(dates, r => timeToDecimal(r.wakeTime, false)));
+    pushColor(dur);
+  }
+
+  // 4 个平均点（全部 / 21天 / 14天 / 7天）
+  pushAvg(allDates);
+  pushAvg(last21);
+  pushAvg(last14);
+  pushAvg(last7);
+
+  // 最近7天每日
+  last7.forEach(d => {
+    const rec = sleepData.find(s => s.date === d);
     durationData.push(rec ? rec.duration : null);
     bedtimeData.push(rec ? timeToDecimal(rec.bedtime, true) : null);
     wakeData.push(rec ? timeToDecimal(rec.wakeTime, false) : null);
-    if (!rec) {
-      barColors.push('transparent');
-      barBorders.push('transparent');
-    } else if (rec.duration >= 7) {
-      barColors.push('rgba(16,185,129,.35)');
-      barBorders.push(colors.success);
-    } else if (rec.duration >= 6) {
-      barColors.push('rgba(245,158,11,.35)');
-      barBorders.push(colors.warning);
-    } else {
-      barColors.push('rgba(239,68,68,.35)');
-      barBorders.push(colors.danger);
-    }
-  }
-  // Older-than-21-days history → a single average point (duration + average times)
-  if (hasOlder) {
-    const olderDur = avgMetric(olderDates, r => r.duration);
-    const olderBed = avgMetric(olderDates, r => timeToDecimal(r.bedtime, true));
-    const olderWake = avgMetric(olderDates, r => timeToDecimal(r.wakeTime, false));
-    durationData.push(olderDur);
-    bedtimeData.push(olderBed);
-    wakeData.push(olderWake);
-    if (olderDur == null) { barColors.push('transparent'); barBorders.push('transparent'); }
-    else if (olderDur >= 7) { barColors.push('rgba(16,185,129,.35)'); barBorders.push(colors.success); }
-    else if (olderDur >= 6) { barColors.push('rgba(245,158,11,.35)'); barBorders.push(colors.warning); }
-    else { barColors.push('rgba(239,68,68,.35)'); barBorders.push(colors.danger); }
-  }
-  axisDates.forEach(d => {
-    const rec = sleepData.find(s => s.date === d);
-    pushPoint(rec);
+    pushColor(rec ? rec.duration : null);
   });
 
   // Compute Y axis range for time axis based on actual data
@@ -9168,7 +9161,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260823b';
+  b.textContent = 'build 20260823c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
