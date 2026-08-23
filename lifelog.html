@@ -4227,30 +4227,31 @@ function renderSleep() {
       const ctx = chart.ctx;
       const metaDur = chart.getDatasetMeta(0);
       const metaBed = chart.getDatasetMeta(1);
+      const emojiFont = '14px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
       for (let i = 4; i < 11; i++) {
         const dur = durationData[i];
         const bed = bedtimeData[i];
-        if (bed != null && avgBed7 != null && bed > avgBed7) {
+        // 入睡时间：晚→哭脸，不晚→笑脸（紫色线点下方）
+        if (bed != null && avgBed7 != null) {
           const el = metaBed.data[i];
           if (el) {
             ctx.save();
-            ctx.fillStyle = colors.warning;
-            ctx.font = '11px Inter, system-ui, sans-serif';
+            ctx.font = emojiFont;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillText('睡得太晚了', el.x, el.y + 10);
+            ctx.fillText(bed > avgBed7 ? '😢' : '😊', el.x, el.y + 6);
             ctx.restore();
           }
         }
-        if (dur != null && avgDur7 != null && dur < avgDur7) {
+        // 睡眠时长：少→哭脸，不少→笑脸（柱子上方）
+        if (dur != null && avgDur7 != null) {
           const el = metaDur.data[i];
           if (el) {
             ctx.save();
-            ctx.fillStyle = colors.danger;
-            ctx.font = '11px Inter, system-ui, sans-serif';
+            ctx.font = emojiFont;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'bottom';
-            ctx.fillText('睡得太少', el.x, el.y - 4);
+            ctx.fillText(dur < avgDur7 ? '😢' : '😊', el.x, el.y - 2);
             ctx.restore();
           }
         }
@@ -9202,7 +9203,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260823d';
+  b.textContent = 'build 20260823e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
