@@ -4231,27 +4231,27 @@ function renderSleep() {
       for (let i = 4; i < 11; i++) {
         const dur = durationData[i];
         const bed = bedtimeData[i];
-        // 入睡时间：晚→哭脸，不晚→笑脸（紫色线点下方）
-        if (bed != null && avgBed7 != null) {
+        // 入睡时间：不晚于7天均 → 笑脸（紫色线点下方）
+        if (bed != null && avgBed7 != null && bed <= avgBed7) {
           const el = metaBed.data[i];
           if (el) {
             ctx.save();
             ctx.font = emojiFont;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillText(bed > avgBed7 ? '😢' : '😊', el.x, el.y + 6);
+            ctx.fillText('😊', el.x, el.y + 6);
             ctx.restore();
           }
         }
-        // 睡眠时长：少→哭脸，不少→笑脸（柱子上方）
-        if (dur != null && avgDur7 != null) {
+        // 睡眠时长：不低于7天均 → 笑脸（柱子上方）
+        if (dur != null && avgDur7 != null && dur >= avgDur7) {
           const el = metaDur.data[i];
           if (el) {
             ctx.save();
             ctx.font = emojiFont;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'bottom';
-            ctx.fillText(dur < avgDur7 ? '😢' : '😊', el.x, el.y - 2);
+            ctx.fillText('😊', el.x, el.y - 2);
             ctx.restore();
           }
         }
@@ -9203,7 +9203,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260823e';
+  b.textContent = 'build 20260823f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
