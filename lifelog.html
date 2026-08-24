@@ -8296,7 +8296,7 @@ function searchStock(keyword) {
 // Always returns a candidate: real name if Tencent has data, manual fallback otherwise.
 async function tryHkCandidate(code) {
   try {
-    const r = await fetch('https://qt.gtimg.cn/q=hk' + code, { signal: AbortSignal.timeout(4000) });
+    const r = await fetchWithTimeout('https://qt.gtimg.cn/q=hk' + code, {}, 4000);
     const text = await decodeGbk(await r.arrayBuffer());
     const m = text.match(/v_hk\w+="([^"]*)"/);
     if (m && m[1]) {
@@ -8676,18 +8676,21 @@ function confirmOpenPosition(stockId) {
 }
 
 // ===== 交易面板 =====
-async function openTradeModal(stockId) {
+function openTradeModal(stockId) {
   const stock = stockData.find(s => s.id === stockId);
   if (!stock) return;
-  const q = stockQuotes[stockId];
-  // 行情缺失或超过 5 分钟，先刷新以拿到最新卖出点
-  if (!q || q.price == null || (Date.now() - (q.ts || 0) > 5 * 60 * 1000)) {
-    toast('正在获取行情与卖出点...');
-    try { await fetchStockData(stock); } catch(e) { console.warn(e); }
-  }
+  // 立即同步打开弹窗，避免联网请求卡顿/被拦截时按钮“按了没反应”
   renderTradeModal(stockId);
   const modal = document.getElementById('tradeModal');
   if (modal) modal.classList.add('active');
+  // 行情缺失或超过 5 分钟，后台刷新（不阻塞弹窗），完成后若弹窗仍开着再重渲染
+  const q = stockQuotes[stockId];
+  if (!q || q.price == null || (Date.now() - (q.ts || 0) > 5 * 60 * 1000)) {
+    fetchStockData(stock).then(function() {
+      const m = document.getElementById('tradeModal');
+      if (m && m.classList.contains('active')) renderTradeModal(stockId);
+    }).catch(function(e) { console.warn('行情后台刷新失败', e); });
+  }
 }
 function closeTradeModal() {
   const modal = document.getElementById('tradeModal');
@@ -8711,7 +8714,13 @@ function renderTradeModal(stockId) {
 
   let html = '<div class="trade-overview">';
   html += '<div class="trade-name">' + (q && q.name ? q.name : stock.name) + ' <span class="badge badge-info">' + stock.code + '</span></div>';
-  html += '<div class="trade-price">现价 ' + (price != null ? price.toFixed(2) : '—') + '</div>';
+  let quoteNote = '';
+  if (!q || q.price == null) {
+    quoteNote = '<div style="color:var(--text-muted);font-size:12px;margin-top:4px">行情加载中…</div>';
+  } else if (q.error) {
+    quoteNote = '<div style="color:#f59e0b;font-size:12px;margin-top:4px">⚠ 行情: ' + q.error + '</div>';
+  }
+  html += '<div class="trade-price">现价 ' + (price != null ? price.toFixed(2) : '—') + '</div>' + quoteNote;
   html += '<div class="trade-stats">';
   html += '<div class="trade-stat"><span class="k">成本</span><span class="v">' + (cost ? cost.toFixed(3) : '—') + '</span></div>';
   html += '<div class="trade-stat"><span class="k">总持仓</span><span class="v">' + totalQty + '</span></div>';
@@ -8832,10 +8841,21 @@ function parseTencentQuote(code, raw) {
   return { name, price, fullCode };
 }
 
+// 兼容所有浏览器的带超时 fetch（避免 AbortSignal.timeout 在部分国产浏览器不支持时报错，也防止请求永久挂起）
+async function fetchWithTimeout(url, opts, ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, Object.assign({}, opts, { signal: ctrl.signal }));
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function fetchQuote(code) {
   const normCode = normalizeStockCode(code);
   const url = `https://qt.gtimg.cn/q=${normCode}`;
-  const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const resp = await fetchWithTimeout(url, {}, 8000);
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   const text = await decodeGbk(await resp.arrayBuffer());
   console.log('[quote resp]', normCode, 'len=' + text.length, text.slice(0, 120));
@@ -8852,7 +8872,7 @@ async function fetchKLine(code, period, count) {
   } else {
     url = `https://ifzq.gtimg.cn/appstock/app/kline/mkline?param=${normCode},m${period},,${count}`;
   }
-  const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  const resp = await fetchWithTimeout(url, {}, 8000);
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   const json = await resp.json();
   console.log('[kline resp]', normCode, 'period=' + period, json.code, json.msg);
@@ -9557,7 +9577,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260824f';
+  b.textContent = 'build 20260824g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
