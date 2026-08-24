@@ -515,6 +515,8 @@ tbody tr:hover{background:var(--surface-hover)}
 .trade-stat .k{font-size:11px;color:var(--text-muted)}
 .trade-stat .v{font-size:15px;font-weight:700}
 .trade-lots{display:flex;flex-direction:column;gap:10px}
+.trade-open{border:1px solid var(--success);border-radius:10px;padding:10px 12px;background:var(--success-bg);margin-bottom:10px}
+.trade-open .form-input{flex:1;min-width:0;padding:7px 10px}
 .trade-lot{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface)}
 .trade-lot.is-sold{opacity:.7;border-style:dashed}
 .trade-lot-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
@@ -8603,6 +8605,45 @@ function confirmBuyLot(stockId, periodKey) {
   toast('已买入 ' + p.label + '份 ' + qty + ' 股 @ ' + buyPrice.toFixed(2) + ' ✅');
 }
 
+// 建仓买入：填总数量 + 买入价，自动均分四份（余数归日线份），四份同时转为持有
+function confirmOpenPosition(stockId) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  ensureStockLots(stock);
+  const qtyInput = document.getElementById('openQty');
+  const priceInput = document.getElementById('openPrice');
+  const totalQty = parseInt(qtyInput ? qtyInput.value : '', 10);
+  const buyPrice = parseFloat(priceInput ? priceInput.value : '');
+  if (!totalQty || totalQty <= 0) { toast('请输入买入总数量'); return; }
+  if (!buyPrice || buyPrice <= 0) { toast('请输入买入价'); return; }
+  if (!confirm(
+    '确认建仓买入「' + stock.name + '」？\n' +
+    '总数量：' + totalQty + ' 股\n' +
+    '买入价：' + buyPrice.toFixed(2) + '\n\n' +
+    '将自动均分成四份（日线/120分/60分/30分），成本价更新为买入价。'
+  )) return;
+  const base = Math.floor(totalQty / 4);
+  const rem = totalQty - base * 3; // 余数归日线份
+  const dist = { daily: rem, m120: base, m60: base, m30: base };
+  LOT_PERIODS.forEach(function(p) {
+    const lot = stock.lots[p.key];
+    lot.qty = dist[p.key];
+    lot.status = 'holding';
+    lot.soldAt = null;
+    lot.soldDate = null;
+    lot.buyDate = todayStr();
+  });
+  stock.quantity = totalQty;
+  stock.costPrice = buyPrice;
+  stock.buyDate = todayStr();
+  stock.trades.unshift({ id: uid(), side: 'buy', period: 'all', label: '建仓', qty: totalQty, price: buyPrice, cost: buyPrice, pnl: 0, date: todayStr() });
+  saveStocks();
+  saveAll();
+  renderStocks();
+  renderTradeModal(stockId);
+  toast('已建仓买入 ' + totalQty + ' 股 @ ' + buyPrice.toFixed(2) + ' ✅');
+}
+
 // ===== 交易面板 =====
 async function openTradeModal(stockId) {
   const stock = stockData.find(s => s.id === stockId);
@@ -8650,6 +8691,17 @@ function renderTradeModal(stockId) {
     html += '<div class="trade-stat"><span class="k">未实现盈亏</span><span class="v ' + (unrealPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + uSign + unrealPnl.toFixed(0) + '</span></div>';
   }
   html += '</div></div>';
+
+  // 空仓时显示「建仓买入」入口（填总数量 + 价格，自动均分四份）
+  if (heldQty === 0) {
+    html += '<div class="trade-open">' +
+      '<div class="trade-history-title">📥 建仓买入</div>' +
+      '<div style="display:flex;gap:6px;align-items:center">' +
+      '<input type="number" id="openQty" class="form-input" placeholder="总数量(股)" style="flex:1">' +
+      '<input type="number" id="openPrice" class="form-input" step="0.001" placeholder="买入价" value="' + (price != null ? price.toFixed(2) : '') + '" style="flex:1">' +
+      '<button class="btn btn-primary btn-sm" onclick="confirmOpenPosition(\'' + stock.id + '\')">建仓买入</button>' +
+      '</div></div>';
+  }
 
   html += '<div class="trade-lots">';
   LOT_PERIODS.forEach(function(p) {
@@ -9472,7 +9524,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260824c';
+  b.textContent = 'build 20260824d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
