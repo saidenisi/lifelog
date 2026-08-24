@@ -8534,6 +8534,7 @@ function confirmSellLot(stockId, periodKey) {
   lot.soldDate = todayStr();
   stock.trades.unshift({ id: uid(), side: 'sell', period: periodKey, label: p.label, qty: qty, price: sellPrice, cost: cost, pnl: pnl, date: todayStr() });
   stock.quantity = lotHeldQty(stock);
+  stock.updatedAt = new Date().toISOString();
   saveStocks();
   saveAll();
   renderStocks();
@@ -8554,6 +8555,7 @@ function reopenLot(stockId, periodKey) {
   lot.soldAt = null;
   lot.soldDate = null;
   stock.quantity = lotHeldQty(stock);
+  stock.updatedAt = new Date().toISOString();
   saveStocks();
   saveAll();
   renderStocks();
@@ -8598,6 +8600,7 @@ function confirmBuyLot(stockId, periodKey) {
   lot.buyDate = todayStr();
   stock.trades.unshift({ id: uid(), side: 'buy', period: periodKey, label: p.label, qty: qty, price: buyPrice, cost: buyPrice, pnl: 0, date: todayStr() });
   stock.quantity = lotHeldQty(stock);
+  stock.updatedAt = new Date().toISOString();
   saveStocks();
   saveAll();
   renderStocks();
@@ -8637,6 +8640,7 @@ function confirmOpenPosition(stockId) {
   stock.costPrice = buyPrice;
   stock.buyDate = todayStr();
   stock.trades.unshift({ id: uid(), side: 'buy', period: 'all', label: '建仓', qty: totalQty, price: buyPrice, cost: buyPrice, pnl: 0, date: todayStr() });
+  stock.updatedAt = new Date().toISOString();
   saveStocks();
   saveAll();
   renderStocks();
@@ -9421,6 +9425,7 @@ function saveStock() {
       stockData[idx].manualPrice = (manualPrice && manualPrice > 0) ? manualPrice : null;
       stockData[idx].accountId = accountId;
       stockData[idx].note = note;
+      stockData[idx].updatedAt = new Date().toISOString();
     }
   } else {
     const newStock = {
@@ -9431,7 +9436,8 @@ function saveStock() {
       buyDate,
       manualPrice: (manualPrice && manualPrice > 0) ? manualPrice : null,
       accountId,
-      createdAt: todayStr()
+      createdAt: todayStr(),
+      updatedAt: new Date().toISOString()
     };
     stockData.push(newStock);
   }
@@ -9524,7 +9530,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260824d';
+  b.textContent = 'build 20260824e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
