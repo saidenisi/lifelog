@@ -503,6 +503,7 @@ tbody tr:hover{background:var(--surface-hover)}
 .signal-sell50{background:#fff7ed;color:#ea580c;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
 .signal-sell75{background:var(--danger-bg);color:var(--danger);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
 .signal-sellall{background:#fef2f2;color:var(--danger);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;border:1px solid var(--danger)}
+.signal-buy{background:#ecfdf5;color:var(--success);padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;border:1px solid var(--success)}
 /* ===== 交易面板（四份持仓） ===== */
 .trade-up{color:var(--danger);font-weight:600}
 .trade-down{color:var(--success);font-weight:600}
@@ -8464,12 +8465,13 @@ function ensureStockLots(stock) {
   }
   if (!Array.isArray(stock.trades)) stock.trades = [];
   LOT_PERIODS.forEach(function(p) {
-    if (!stock.lots[p.key]) stock.lots[p.key] = { qty: 0, status: 'holding', soldAt: null, soldDate: null };
+    if (!stock.lots[p.key]) stock.lots[p.key] = { qty: 0, status: 'holding', soldAt: null, soldDate: null, buyDate: null };
     var lot = stock.lots[p.key];
     lot.qty = lot.qty || 0;
     if (lot.status !== 'sold') lot.status = 'holding';
     lot.soldAt = lot.soldAt || null;
     lot.soldDate = lot.soldDate || null;
+    lot.buyDate = lot.buyDate || stock.buyDate || stock.createdAt || null;
   });
   return stock;
 }
@@ -8528,7 +8530,7 @@ function confirmSellLot(stockId, periodKey) {
   lot.status = 'sold';
   lot.soldAt = sellPrice;
   lot.soldDate = todayStr();
-  stock.trades.unshift({ id: uid(), period: periodKey, label: p.label, qty: qty, price: sellPrice, cost: cost, pnl: pnl, date: todayStr() });
+  stock.trades.unshift({ id: uid(), side: 'sell', period: periodKey, label: p.label, qty: qty, price: sellPrice, cost: cost, pnl: pnl, date: todayStr() });
   stock.quantity = lotHeldQty(stock);
   saveStocks();
   saveAll();
@@ -8555,6 +8557,50 @@ function reopenLot(stockId, periodKey) {
   renderStocks();
   renderTradeModal(stockId);
   toast('已重新买入 ' + p.label + ' 份 ✅');
+}
+
+// 某份的买入点（来自 stockQuotes 缓存里的 bp）；持有中的份返回 null（不需要买入点）
+function lotBuyPoint(stock, periodKey) {
+  const q = stockQuotes[stock.id];
+  if (!q || !q.bp) return null;
+  const lot = (stock.lots && stock.lots[periodKey]) || {};
+  if (lot.status === 'holding') return null;
+  const v = q.bp[periodKey];
+  return (v == null) ? null : v;
+}
+
+// 买入某一份（恢复持有，更新份级买入日期，该周期卖出点按新买入日重算）
+function confirmBuyLot(stockId, periodKey) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  ensureStockLots(stock);
+  const p = LOT_PERIODS.find(x => x.key === periodKey);
+  const lot = stock.lots[periodKey];
+  if (!lot || lot.status === 'holding') { toast(p.label + ' 份仍在持有中'); return; }
+  const qty = lot.qty || 0;
+  if (qty <= 0) { toast('该份持仓数量为 0，请先编辑股票总持仓'); return; }
+  const q = stockQuotes[stockId];
+  const curPrice = (q && q.price != null) ? q.price : null;
+  const priceInput = document.getElementById('lotBuyPrice_' + periodKey);
+  const buyPrice = (priceInput && priceInput.value) ? parseFloat(priceInput.value) : curPrice;
+  if (!buyPrice || buyPrice <= 0) { toast('请输入有效买入价'); return; }
+  if (!confirm(
+    '确认买入「' + stock.name + '」' + p.label + '份？\n' +
+    '数量：' + qty + ' 股\n' +
+    '买入价：' + buyPrice.toFixed(2) + '\n\n' +
+    '买入后该周期将按新的买入日期重新计算卖出点。'
+  )) return;
+  lot.status = 'holding';
+  lot.soldAt = null;
+  lot.soldDate = null;
+  lot.buyDate = todayStr();
+  stock.trades.unshift({ id: uid(), side: 'buy', period: periodKey, label: p.label, qty: qty, price: buyPrice, cost: buyPrice, pnl: 0, date: todayStr() });
+  stock.quantity = lotHeldQty(stock);
+  saveStocks();
+  saveAll();
+  renderStocks();
+  renderTradeModal(stockId);
+  toast('已买入 ' + p.label + '份 ' + qty + ' 股 @ ' + buyPrice.toFixed(2) + ' ✅');
 }
 
 // ===== 交易面板 =====
@@ -8618,8 +8664,23 @@ function renderTradeModal(stockId) {
       tpHtml = '<div class="lot-row"><span class="k">卖出价</span><span class="v">' + (lot.soldAt != null ? lot.soldAt.toFixed(2) : '—') + '</span></div>';
       tpHtml += '<div class="lot-row"><span class="k">卖出日期</span><span class="v">' + (lot.soldDate || '—') + '</span></div>';
       tpHtml += '<div class="lot-row"><span class="k">该笔盈亏</span><span class="v ' + (lotPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + lSign + lotPnl.toFixed(0) + '</span></div>';
-      signalHtml = '<span class="badge badge-muted">已卖出 · 指标失效</span>';
-      actionHtml = '<button class="btn btn-ghost btn-sm" onclick="reopenLot(\'' + stock.id + '\',\'' + p.key + '\')">↺ 重新买入</button>';
+      // 买入点 + 买入信号（该份已卖出，等待重新买入）
+      const buyPoint = lotBuyPoint(stock, p.key);
+      if (buyPoint == null) {
+        tpHtml += '<div class="lot-row"><span class="k">买入点</span><span class="v text-muted">低点未现 / 数据不足，暂无</span></div>';
+        signalHtml = '<span class="signal-hold">⏳ 等待买入点</span>';
+      } else {
+        const buyBreached = price != null && price > buyPoint;
+        const buyDist = (price != null) ? ((price - buyPoint) / buyPoint * 100) : null;
+        tpHtml += '<div class="lot-row"><span class="k">买入点</span><span class="v" style="font-weight:700;color:' + (buyBreached ? 'var(--success)' : 'var(--text-muted)') + '">' + buyPoint.toFixed(2) + (buyDist != null ? ' <span style="font-weight:400;opacity:.8">(' + (buyDist >= 0 ? '+' : '') + buyDist.toFixed(2) + '%)</span>' : '') + '</span></div>';
+        signalHtml = buyBreached
+          ? '<span class="signal-buy">🔺 突破买点，可买入</span>'
+          : '<span class="signal-hold">等待突破买点</span>';
+      }
+      actionHtml = '<div class="lot-sell">' +
+        '<input type="number" id="lotBuyPrice_' + p.key + '" class="form-input" step="0.001" placeholder="买入价" value="' + (price != null ? price.toFixed(2) : '') + '">' +
+        '<button class="btn btn-primary btn-sm" onclick="confirmBuyLot(\'' + stock.id + '\',\'' + p.key + '\')">确认买入</button>' +
+        '</div>';
     } else {
       if (point == null) {
         tpHtml = '<div class="lot-row"><span class="k">卖出点</span><span class="v text-muted">低点不足，暂无</span></div>';
@@ -8650,12 +8711,16 @@ function renderTradeModal(stockId) {
   const trades = stock.trades || [];
   html += '<div class="trade-history"><div class="trade-history-title">交易记录（' + trades.length + '）</div>';
   if (trades.length === 0) {
-    html += '<div class="text-muted text-sm" style="padding:6px 0">暂无卖出记录</div>';
+    html += '<div class="text-muted text-sm" style="padding:6px 0">暂无交易记录</div>';
   } else {
-    html += '<table class="trade-table"><thead><tr><th>日期</th><th>周期</th><th>数量</th><th>卖出价</th><th>盈亏</th></tr></thead><tbody>';
+    html += '<table class="trade-table"><thead><tr><th>日期</th><th>周期</th><th>类型</th><th>数量</th><th>价格</th><th>盈亏</th></tr></thead><tbody>';
     trades.forEach(function(t) {
+      const isBuy = t.side === 'buy';
       const sgn = (t.pnl || 0) >= 0 ? '+' : '';
-      html += '<tr><td>' + (t.date || '') + '</td><td>' + (t.label || t.period) + '</td><td>' + t.qty + '</td><td>' + (t.price != null ? t.price.toFixed(2) : '—') + '</td><td class="' + ((t.pnl || 0) >= 0 ? 'trade-up' : 'trade-down') + '">' + sgn + (t.pnl || 0).toFixed(0) + '</td></tr>';
+      const pnlCell = isBuy
+        ? '—'
+        : '<span class="' + ((t.pnl || 0) >= 0 ? 'trade-up' : 'trade-down') + '">' + sgn + (t.pnl || 0).toFixed(0) + '</span>';
+      html += '<tr><td>' + (t.date || '') + '</td><td>' + (t.label || t.period) + '</td><td>' + (isBuy ? '<span class="badge badge-success">买入</span>' : '<span class="badge badge-muted">卖出</span>') + '</td><td>' + t.qty + '</td><td>' + (t.price != null ? t.price.toFixed(2) : '—') + '</td><td>' + pnlCell + '</td></tr>';
     });
     html += '</tbody></table>';
   }
@@ -8790,6 +8855,53 @@ function calcTakeProfitPoint(candles, buyDate, maxLookback) {
   return { point: currentLow, triggered: true };
 }
 
+// --- 买入点（「第三个最高点」策略，镜像卖出点，2026-08-24 定稿）---
+// 1) 找「最近的低点」（谷底）：回看范围内 low 最低的那根K线（阶段底部，取最后一个达到最低值的）。
+// 2) 若谷底就是最新一根 => 还在跌、尚未反弹，买入点暂无（返回 null）。
+// 3) 从谷底那根（包含）往前，找三个「依次递增」的 high（不要求连续相邻，跳过不满足"更高"的）：
+//    第 1 个 = 谷底自己的 high；往前第一个更高的 = 第 2 个；再往前第一个更高的 = 第 3 个。
+// 4) 第 3 个最高点的 high = 买入信号位；现价向上突破买入点则提示买入。
+// 参数：
+//   sellDate（YYYY-MM-DD，可空）：只在卖出日之后的K线里找（重新买入不回到卖出前）。
+//   maxLookback（可空）：只取最近 N 根K线，避免回退太久。
+// 返回 { point, triggered }；还在跌未反弹、或高点不足返回 null。
+function calcBuyPoint(candles, sellDate, maxLookback) {
+  if (!candles || candles.length < 4) return null;
+  let arr = candles;
+  if (sellDate) {
+    const b = sellDate.replace(/-/g, '');
+    arr = candles.filter(c => {
+      const d = String(c.day || '').replace(/-/g, '').slice(0, 8);
+      return d >= b;
+    });
+  }
+  if (maxLookback && arr.length > maxLookback) arr = arr.slice(-maxLookback);
+  if (arr.length < 4) return null;
+  const n = arr.length;
+  // 谷底 = low 最低那根（用 <= 取最后一个达到最低值的，即"开始涨之前的最后一根"）
+  let valleyIdx = 0;
+  for (let i = 1; i < n; i++) {
+    if (parseFloat(arr[i].low) <= parseFloat(arr[valleyIdx].low)) {
+      valleyIdx = i;
+    }
+  }
+  // 谷底是最新一根 => 还在跌，尚未反弹
+  if (valleyIdx >= n - 1) return null;
+  // 从谷底（包含）往前找三个依次递增的 high
+  let currentHigh = parseFloat(arr[valleyIdx].high);
+  let found = 1;
+  for (let j = valleyIdx - 1; j >= 0; j--) {
+    const high = parseFloat(arr[j].high);
+    if (high > currentHigh) {
+      currentHigh = high;
+      found++;
+      if (found >= 3) break;
+    }
+  }
+  if (found < 3) return null;
+  return { point: currentHigh, triggered: true };
+}
+
 // --- 综合止盈信号：判断当前价是否跌破各周期止盈点 ---
 // tpMap = { daily: 数值, m120: 数值, m60: 数值, m30: 数值 }，值为 null 表示该周期无信号
 function calcTakeProfitSignal(price, tpMap) {
@@ -8867,11 +8979,13 @@ function getStockSignal(price, ma30, ma60, ma120, maDaily, qty, availableCash) {
 
 // --- Fetch all data for one stock ---
 async function fetchStockData(stock) {
+  ensureStockLots(stock);
   const normCode = normalizeStockCode(stock.code, stock.name);
   const isUS = normCode.startsWith('us');
   const isAShare = /^(sh|sz)/.test(normCode);
   let price = null, name = stock.name;
   const tp = { daily: null, m120: null, m60: null, m30: null };
+  const bp = { daily: null, m120: null, m60: null, m30: null };
   const buyDate = stock.buyDate || stock.createdAt || null;
   let errors = [];
 
@@ -8901,11 +9015,16 @@ async function fetchStockData(stock) {
     errors.push('行情:' + e.message);
   }
 
-  // 2) Daily K-line → daily take-profit point
+  // 2) Daily K-line → daily take-profit point + buy point
   try {
     const klDaily = await fetchKLine(klineCode, 'day', 40);
-    const tpd = calcTakeProfitPoint(klDaily, buyDate, 20);
+    const dailyBuyDate = stock.lots.daily.buyDate || buyDate;
+    const tpd = calcTakeProfitPoint(klDaily, dailyBuyDate, 20);
     if (tpd) tp.daily = tpd.point;
+    // 日线买入点（该份已卖出则用其卖出日过滤，否则不过滤）
+    const dailySellDate = stock.lots.daily.status === 'sold' ? stock.lots.daily.soldDate : null;
+    const bpd = calcBuyPoint(klDaily, dailySellDate, 20);
+    if (bpd) bp.daily = bpd.point;
     // Fallback: if real-time quote failed, try manual price first, then K-line close
     if (price == null) {
       if (stock.manualPrice && stock.manualPrice > 0) {
@@ -8939,10 +9058,13 @@ async function fetchStockData(stock) {
         fetchKLine(klineCode, 60, 40),
         fetchKLine(klineCode, 120, 40)
       ]);
-      const tp30 = calcTakeProfitPoint(kl30, buyDate); if (tp30) tp.m30 = tp30.point;
-      const tp60 = calcTakeProfitPoint(kl60, buyDate); if (tp60) tp.m60 = tp60.point;
-      const tp120 = calcTakeProfitPoint(kl120, buyDate); if (tp120) tp.m120 = tp120.point;
-      console.log('[stock intraday]', stock.name, klineCode, '止盈点 30/60/120=', tp.m30, tp.m60, tp.m120);
+      const tp30 = calcTakeProfitPoint(kl30, stock.lots.m30.buyDate || buyDate); if (tp30) tp.m30 = tp30.point;
+      const tp60 = calcTakeProfitPoint(kl60, stock.lots.m60.buyDate || buyDate); if (tp60) tp.m60 = tp60.point;
+      const tp120 = calcTakeProfitPoint(kl120, stock.lots.m120.buyDate || buyDate); if (tp120) tp.m120 = tp120.point;
+      const bp30 = calcBuyPoint(kl30, stock.lots.m30.status === 'sold' ? stock.lots.m30.soldDate : null); if (bp30) bp.m30 = bp30.point;
+      const bp60 = calcBuyPoint(kl60, stock.lots.m60.status === 'sold' ? stock.lots.m60.soldDate : null); if (bp60) bp.m60 = bp60.point;
+      const bp120 = calcBuyPoint(kl120, stock.lots.m120.status === 'sold' ? stock.lots.m120.soldDate : null); if (bp120) bp.m120 = bp120.point;
+      console.log('[stock intraday]', stock.name, klineCode, '止盈点 30/60/120=', tp.m30, tp.m60, tp.m120, '买入点 30/60/120=', bp.m30, bp.m60, bp.m120);
     } catch(e) {
       console.warn('[stock intraday failed]', stock.name, klineCode, e.message);
       errors.push('分钟K线:' + e.message);
@@ -8955,7 +9077,7 @@ async function fetchStockData(stock) {
   } else {
     const signal = calcTakeProfitSignal(price, tp);
     stockQuotes[stock.id] = {
-      price, tp, signal, name, ts: Date.now(),
+      price, tp, bp, signal, name, ts: Date.now(),
       error: errors.length ? errors.join(' / ') : null
     };
     // Persist corrected name back to stockData (fixes old dirty name from search bug)
@@ -9043,7 +9165,18 @@ function renderStocks() {
 
     // Signal cell
     let signalHtml = '<td class="text-muted">—</td>';
-    if (hasPrice && q.signal) {
+    const emptyPosition = lotHeldQty(s) === 0;  // 空仓（可建仓）
+    if (hasPrice && emptyPosition) {
+      const buyPoint = (q.bp && q.bp.daily != null) ? q.bp.daily : null;
+      if (buyPoint != null) {
+        const buyBreached = price > buyPoint;
+        signalHtml = buyBreached
+          ? `<td><span class="signal-buy">🔺 突破买点 ${buyPoint.toFixed(2)}，可建仓</span></td>`
+          : `<td><span class="signal-hold">⏳ 等待买点 ${buyPoint.toFixed(2)}</span></td>`;
+      } else {
+        signalHtml = `<td><span class="signal-hold">⏳ 空仓，等待买入点</span></td>`;
+      }
+    } else if (hasPrice && q.signal) {
       const sig = q.signal;
       const detail = sig.breached.length
         ? sig.breached.join('<br>')
@@ -9339,7 +9472,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260824b';
+  b.textContent = 'build 20260824c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
