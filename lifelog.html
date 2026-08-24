@@ -2908,13 +2908,24 @@ async function pushAllToCloud() {
         } catch(e) { console.warn('[Sync] merge failed for', key, e); }
       }
 
+      // 上传前剥离本地辅助字段 _pendingPush（该标记只在本地用于 pull 判断，不应写入云端）
+      var uploadValue = localValue;
+      if (Array.isArray(localValue)) {
+        uploadValue = localValue.map(function(r) {
+          if (!r) return r;
+          var copy = {};
+          Object.keys(r).forEach(function(k) { copy[k] = r[k]; });
+          delete copy._pendingPush;
+          return copy;
+        });
+      }
       var resp = await supabaseFetch('POST', '/rest/v1/lifelog_data?on_conflict=id',
-        { id: key, data: localValue, updated_at: new Date().toISOString() }
+        { id: key, data: uploadValue, updated_at: new Date().toISOString() }
       );
       if (!resp.ok) {
         errors++; console.warn('[Sync] push error', key, resp.status);
       } else if (Array.isArray(localValue)) {
-        // 推送成功：清除未同步标记，后续 pull 不再把这些记录当"未同步"处理
+        // 推送成功：清除本地未同步标记
         var cleared = false;
         localValue.forEach(function(r) { if (r && r._pendingPush) { delete r._pendingPush; cleared = true; } });
         if (cleared) DB.set(key, localValue);
@@ -2958,6 +2969,17 @@ window.addEventListener('beforeunload', function() {
 function flushPushKeepalive() {
   SYNC_KEYS.forEach(function(key) {
     var val = key === 'rates' ? exchangeRates : DB.get(key);
+    // 同样剥离本地辅助字段 _pendingPush，避免写入云端
+    var upload = val;
+    if (Array.isArray(val)) {
+      upload = val.map(function(r) {
+        if (!r) return r;
+        var copy = {};
+        Object.keys(r).forEach(function(k) { copy[k] = r[k]; });
+        delete copy._pendingPush;
+        return copy;
+      });
+    }
     try {
       fetch(SUPABASE_URL + '/rest/v1/lifelog_data?on_conflict=id', {
         method: 'POST',
@@ -2968,7 +2990,7 @@ function flushPushKeepalive() {
           'Content-Type': 'application/json',
           'Prefer': 'resolution=merge-duplicates,return=minimal'
         },
-        body: JSON.stringify({ id: key, data: val, updated_at: new Date().toISOString() })
+        body: JSON.stringify({ id: key, data: upload, updated_at: new Date().toISOString() })
       }).catch(function(){});
     } catch(e) {}
   });
@@ -9317,7 +9339,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260824a';
+  b.textContent = 'build 20260824b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
