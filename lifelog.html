@@ -9576,9 +9576,61 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260824h';
+  b.textContent = 'build 20260824i';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
+})();
+</script>
+
+<script>
+// ===== 临时诊断面板（build 20260824i，定位后移除）=====
+(function(){
+  var panel = document.createElement('div');
+  panel.id = 'diagPanel';
+  panel.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;background:#fffbe6;color:#1a1a1a;font:12px/1.5 monospace;padding:8px 10px;border-bottom:2px solid #f59e0b;max-height:42vh;overflow:auto;white-space:pre-wrap;word-break:break-all';
+  var logs = [];
+  function render(){ panel.textContent = logs.join('\n'); }
+  function log(msg){ logs.push(msg); render(); panel.scrollTop = panel.scrollHeight; }
+  // close button
+  var close = document.createElement('span');
+  close.textContent = '  ✕';
+  close.style.cssText = 'position:absolute;top:4px;right:8px;cursor:pointer;font-size:14px;font-weight:bold;color:#b45309';
+  close.onclick = function(){ panel.style.display = 'none'; };
+  panel.appendChild(close);
+  var txt = document.createElement('div');
+  txt.style.cssText = 'padding-right:30px';
+  panel.appendChild(txt);
+  panel.log = function(m){ logs.push(m); txt.textContent = logs.join('\n'); panel.scrollTop = panel.scrollHeight; };
+  document.body.appendChild(panel);
+  panel.log('DIAG build 20260824i | UA: ' + navigator.userAgent.slice(0,80));
+  panel.log('vw=' + window.innerWidth + ' vh=' + window.innerHeight + ' dpr=' + window.devicePixelRatio);
+
+  window.addEventListener('error', function(e){
+    panel.log('⚠️ onerror: ' + (e.message || (e.error && e.error.message) || e.type));
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    var r = e.reason;
+    panel.log('⚠️ unhandledrejection: ' + (r && r.message ? r.message : String(r)));
+  });
+
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    while (t && t !== document.body && !(t.tagName === 'BUTTON' || (t.getAttribute && t.getAttribute('onclick')))) t = t.parentElement;
+    if (!t || !t.tagName || t.tagName === 'HTML' || t.tagName === 'BODY') return;
+    var txtStr = (t.textContent || t.innerText || '').trim().replace(/\s+/g,' ').slice(0,24);
+    var oc = t.getAttribute ? t.getAttribute('onclick') : null;
+    panel.log('👆 [' + t.tagName + '] "' + txtStr + '"' + (oc ? ' · ' + oc : ' · (无onclick)'));
+    setTimeout(function(){
+      var m = document.querySelector('.modal-overlay.active');
+      if (m) {
+        var r = m.getBoundingClientRect();
+        var cs = getComputedStyle(m);
+        panel.log('   → 弹窗已激活: ' + m.id + ' | display=' + cs.display + ' | rect.top=' + Math.round(r.top) + ' rect.h=' + Math.round(r.height));
+      } else {
+        panel.log('   → 弹窗未激活(NONE)');
+      }
+    }, 150);
+  }, true);
 })();
 </script>
 
