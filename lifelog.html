@@ -9576,7 +9576,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260824i';
+  b.textContent = 'build 20260824j';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
@@ -9602,7 +9602,7 @@ checkBackupReminder();
   panel.appendChild(txt);
   panel.log = function(m){ logs.push(m); txt.textContent = logs.join('\n'); panel.scrollTop = panel.scrollHeight; };
   document.body.appendChild(panel);
-  panel.log('DIAG build 20260824i | UA: ' + navigator.userAgent.slice(0,80));
+  panel.log('DIAG build 20260824j | UA: ' + navigator.userAgent.slice(0,80));
   panel.log('vw=' + window.innerWidth + ' vh=' + window.innerHeight + ' dpr=' + window.devicePixelRatio);
 
   window.addEventListener('error', function(e){
@@ -9631,6 +9631,33 @@ checkBackupReminder();
       }
     }, 150);
   }, true);
+})();
+</script>
+
+<script>
+// ===== 修复：小米浏览器不应用 .modal-overlay.active{display:flex}，改用内联 display(!important) 强制显示/隐藏（build 20260824j）=====
+(function(){
+  function sync(el){
+    if (!el || !el.classList) return;
+    var v = null;
+    if (el.classList.contains('modal-overlay')) {
+      v = el.classList.contains('active') ? 'flex' : 'none';
+    } else if (el.classList.contains('sidebar-overlay')) {
+      v = el.classList.contains('active') ? 'block' : 'none';
+    }
+    if (v) el.style.setProperty('display', v, 'important');
+  }
+  // 初始同步（所有弹窗默认无 active → display:none，与 CSS 一致）
+  document.querySelectorAll('.modal-overlay, .sidebar-overlay').forEach(sync);
+  // 监听 class 变化，自动同步内联 display
+  if (window.MutationObserver) {
+    new MutationObserver(function(muts){
+      for (var i = 0; i < muts.length; i++) {
+        var mu = muts[i];
+        if (mu.type === 'attributes' && mu.attributeName === 'class') sync(mu.target);
+      }
+    }).observe(document.body, { subtree:true, attributes:true, attributeFilter:['class'] });
+  }
 })();
 </script>
 
