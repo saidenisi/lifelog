@@ -1516,6 +1516,7 @@ tbody tr:hover{background:var(--surface-hover)}
         <div style="display:flex;gap:10px;align-items:center">
           <button class="mobile-menu-btn" id="mobileMenuBtn9">☰</button>
           <button class="btn btn-ghost btn-sm" onclick="todosGoToday()">📅 今天</button>
+          <button class="btn btn-ghost btn-sm" id="todosViewToggle" onclick="toggleTodosMobileView()" style="display:none">📅 月视图</button>
           <button class="btn btn-ghost btn-sm" onclick="debugTodos()" title="诊断">🔍</button>
         </div>
       </div>
@@ -7330,6 +7331,7 @@ let currentTodoTag = ''; // tag selected when adding a todo
 let todoInputActive = false; // guard: typing in progress, skip re-render on sync
 let editingTodoId = null;    // id of the todo being edited (null = none)
 let todosViewStart = '';     // 电脑端 4 周视图的第一天（默认上周一）
+let todosMobileMode = 'list'; // 手机端视图模式：'list'=两周列表 / 'month'=月视图
 
 // 某日期所在周的周一（周一为起点）
 function mondayOf(dateStr) {
@@ -7443,10 +7445,34 @@ function renderTodos() {
   renderTodosView();
 }
 
-// 根据屏幕宽度分流：手机(≤768px)两周纵向列表，电脑 4 周格子视图
+// 根据屏幕宽度分流：手机(≤768px)两周列表/月视图，电脑 4 周格子视图
 function renderTodosView() {
-  if (window.innerWidth <= 768) renderTodosMobile();
-  else renderTodosCalendar();
+  updateTodosViewToggle();
+  if (window.innerWidth <= 768) {
+    if (todosMobileMode === 'month') renderTodosMonth();
+    else renderTodosMobile();
+  } else {
+    renderTodosCalendar();
+  }
+}
+
+// 手机端：切换「两周列表 / 月视图」
+function toggleTodosMobileView() {
+  clearTodoEditing();
+  todosMobileMode = (todosMobileMode === 'month') ? 'list' : 'month';
+  renderTodosView();
+}
+
+// 更新手机端切换按钮的显示与文字（只在手机端显示）
+function updateTodosViewToggle() {
+  const btn = document.getElementById('todosViewToggle');
+  if (!btn) return;
+  if (window.innerWidth <= 768) {
+    btn.style.display = '';
+    btn.textContent = (todosMobileMode === 'month') ? '📋 两周' : '📅 月视图';
+  } else {
+    btn.style.display = 'none';
+  }
 }
 
 function clearTodoEditing() {
@@ -7459,6 +7485,8 @@ function todosGoToday() {
   clearTodoEditing();
   todosDate = todayStr();
   todosViewStart = shiftDate(mondayOf(todayStr()), -7);
+  todosCalYear = new Date().getFullYear();
+  todosCalMonth = new Date().getMonth();
   todosExpanded = true;
   renderTodos();
 }
@@ -7497,6 +7525,15 @@ function todosShiftWeek(delta) {
 
 function todosCalToToday() {
   clearTodoEditing();
+  todosCalYear = new Date().getFullYear();
+  todosCalMonth = new Date().getMonth();
+  todosDate = todayStr();
+  todosExpanded = true;
+  renderTodos();
+}
+
+function todosBackToWeek() {
+  clearTodoEditing();
   todosViewStart = shiftDate(mondayOf(todayStr()), -7);
   todosDate = todayStr();
   todosExpanded = true;
@@ -7531,7 +7568,7 @@ function renderTodosCalendar() {
     '<div class="daily-cal-title">'+startLabel+'</div>'+
     '<div class="daily-cal-nav">'+
       '<button onclick="todosShiftWeek(-1)" title="上一周">◀</button>'+
-      '<button onclick="todosCalToToday()" title="回到本周">●</button>'+
+      '<button onclick="todosBackToWeek()" title="回到本周">●</button>'+
       '<button onclick="todosShiftWeek(1)" title="下一周">▶</button>'+
     '</div></div>';
 
@@ -7560,6 +7597,83 @@ function renderTodosCalendar() {
     }
     html += '<div class="'+cls+'" data-date="'+dateStr+'" onclick="todosSelectDate(\''+dateStr+'\')">'+inner+'</div>';
   });
+  html += '</div>';
+  el.innerHTML = html;
+
+  requestAnimationFrame(layoutTodos);
+}
+
+// 手机端月视图：按月显示（6 周 42 格，多日待办横向色条，点击日期展开）
+function renderTodosMonth() {
+  var el = document.getElementById('todosCalendar');
+  if (!el) return;
+  computeMultiDayLanes();
+  var weekDays = ['一','二','三','四','五','六','日'];
+  var year = todosCalYear, month = todosCalMonth;
+
+  var singleByDate = {};
+  todosData.forEach(function(t) {
+    if (t._deleted || isMultiDay(t)) return;
+    if (!singleByDate[t.date]) singleByDate[t.date] = [];
+    singleByDate[t.date].push(t);
+  });
+  Object.keys(singleByDate).forEach(function(d) {
+    singleByDate[d].sort(function(a, b) { return (a.done ? 1 : 0) - (b.done ? 1 : 0); });
+  });
+
+  var firstDay = (new Date(year, month, 1).getDay() + 6) % 7;
+  var daysInMonth = new Date(year, month + 1, 0).getDate();
+  var daysInPrev = new Date(year, month, 0).getDate();
+  var today = todayStr();
+
+  var html = '<div class="daily-cal-head">'+
+    '<div class="daily-cal-title">'+year+'年'+(month+1)+'月</div>'+
+    '<div class="daily-cal-nav">'+
+      '<button onclick="todosShiftMonth(-1)" title="上月">◀</button>'+
+      '<button onclick="todosCalToToday()" title="回到本月">●</button>'+
+      '<button onclick="todosShiftMonth(1)" title="下月">▶</button>'+
+    '</div></div>';
+
+  html += '<div class="daily-cal-week">';
+  weekDays.forEach(function(w) { html += '<div>'+w+'</div>'; });
+  html += '</div>';
+
+  var cells = [];
+  var i, dayNum;
+  for (i = firstDay - 1; i >= 0; i--) cells.push({day: daysInPrev - i, month: month - 1, other: true});
+  for (dayNum = 1; dayNum <= daysInMonth; dayNum++) cells.push({day: dayNum, month: month});
+  var remaining = 42 - cells.length;
+  for (i = 1; i <= remaining; i++) cells.push({day: i, month: month + 1, other: true});
+  cells.forEach(function(c) {
+    var y = year, m = c.month;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    c.dateStr = y + '-' + String(m+1).padStart(2,'0') + '-' + String(c.day).padStart(2,'0');
+  });
+
+  html += '<div class="daily-cal-grid todo-cal-grid">';
+  for (var idx = 0; idx < cells.length; idx++) {
+    var c = cells[idx];
+    var cls = 'todo-cal-cell';
+    if (c.other) cls += ' other';
+    if (c.dateStr === today) cls += ' today';
+    if (c.dateStr === todosDate) cls += ' selected';
+
+    var inner = (c.dateStr === today)
+      ? '<div class="d"><span class="t1">今</span><span class="t2">'+lunarDayOnly(c.dateStr)+'</span></div>'
+      : '<div class="d">'+c.day+'</div><div class="lunar">'+lunarSubText(c.dateStr)+'</div>';
+    var items = singleByDate[c.dateStr] || [];
+    var maxLane = todoMaxLaneByDate[c.dateStr];
+    if (typeof maxLane === 'number' && items.length > 0) {
+      inner += '<div style="height:'+(20 + maxLane * 19)+'px"></div>';
+    }
+    if (items.length) {
+      var shown = items.slice(0, 4);
+      shown.forEach(function(t) { inner += todoCalItemHtml(t); });
+      if (items.length > 4) inner += '<div class="todo-cal-more">+'+(items.length - 4)+'</div>';
+    }
+    html += '<div class="'+cls+'" data-date="'+c.dateStr+'" onclick="todosSelectDate(\''+c.dateStr+'\')">'+inner+'</div>';
+  }
   html += '</div>';
   el.innerHTML = html;
 
@@ -7856,7 +7970,7 @@ function renderTodoEditRow(t) {
 }
 
 function renderTodosAddBtn() {
-  if (window.innerWidth <= 768) {
+  if (window.innerWidth <= 768 && todosMobileMode !== 'month') {
     return '<button class="todo-add-btn" onclick="showTodoInputMobile(\''+todayStr()+'\')">＋ 添加事项</button>';
   }
   return '<button class="todo-add-btn" onclick="showTodoInput()">＋ 添加事项</button>';
@@ -9203,7 +9317,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260823f';
+  b.textContent = 'build 20260824a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
