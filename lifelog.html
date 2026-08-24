@@ -603,14 +603,13 @@ tbody tr:hover{background:var(--surface-hover)}
 
 /* ===== Modal ===== */
 .modal-overlay{
-  position:fixed;inset:0;
+  position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;
   background:rgba(0,0,0,.4);
   display:none;
   align-items:center;
   justify-content:center;
   z-index:200;
   padding:20px;
-  backdrop-filter:blur(4px);
   animation:fadeIn .2s;
 }
 .modal-overlay.active{display:flex}
@@ -1047,7 +1046,7 @@ tbody tr:hover{background:var(--surface-hover)}
 /* Overlay for mobile sidebar */
 .sidebar-overlay{
   display:none;
-  position:fixed;inset:0;
+  position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;
   background:rgba(0,0,0,.3);
   z-index:99;
 }
@@ -9577,7 +9576,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260824g';
+  b.textContent = 'build 20260824h';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
