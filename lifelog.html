@@ -2716,6 +2716,11 @@ function supabaseFetch(method, path, body) {
     'Authorization': 'Bearer ' + SUPABASE_KEY,
     'Content-Type': 'application/json'
   };
+  // on_conflict=id 的 upsert 必须配合该 Prefer 头，否则对已存在的集合返回 409
+  //（主推 pushAllToCloud 之前漏了这个头，导致本地改动一直推不上去、跨端不同步）
+  if (method === 'POST' || method === 'PATCH') {
+    headers['Prefer'] = 'resolution=merge-duplicates';
+  }
   // cache: 'no-store' 防止浏览器缓存旧数据（不能用 ?_cb= 之类的额外查询参数，
   // PostgREST 对未知参数会返回 400，导致拉取全部失败）
   var opt = { method: method, headers: headers, cache: 'no-store' };
@@ -9664,7 +9669,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260825b';
+  b.textContent = 'build 20260825c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
