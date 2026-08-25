@@ -2888,7 +2888,12 @@ function mergeRecords(cloudArr, localArr, mode) {
     // 云端墓碑（已删除）必须生效，防止已删条目在本地复活
     if (c && c._deleted) return;
     // 本地有未同步改动（新增或修改）：push 时上传；pull 时也保留本地版本（不被云端覆盖/丢弃）
-    if (l._pendingPush) { map[l.id] = l; return; }
+    // 但必须比时间：仅当本地比云端新（或云端没有这条）才保留本地；
+    // 否则说明本地的 _pendingPush 是"旧端残留"（标记未清、内容已旧），应以云端为准。
+    if (l._pendingPush) {
+      if (!c || new Date(l.updatedAt || 0) > new Date(c.updatedAt || 0)) { map[l.id] = l; }
+      return;
+    }
     if (!c) {
       // 云端没有这条：push 时保留并标记未同步；pull 时丢弃（其它端已删除的残留）
       if (mode === 'push') { l._pendingPush = true; map[l.id] = l; }
@@ -9675,7 +9680,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260825d';
+  b.textContent = 'build 20260825e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
