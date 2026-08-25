@@ -9662,6 +9662,12 @@ autoPostponeOverdueTodos();
     });
   }, 300);
 })();
+// 定时自动拉取（每 60s）+ 切回页面时立即拉取：保证打开的设备持续同步到其它端的改动，
+// 不依赖实时订阅（SDK 可能加载失败）。满足"两边必须同步"。
+setInterval(function() { pullAllFromCloud(); }, 60000);
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden) pullAllFromCloud();
+});
 // Backup reminder check
 checkBackupReminder();
 
@@ -9669,7 +9675,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260825c';
+  b.textContent = 'build 20260825d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
