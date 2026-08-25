@@ -6887,8 +6887,56 @@ let _dailyAutoSaveTimer = null;
 
 function saveDailyNotes() { DB.set('dailyNotes', dailyNotes); }
 
+// 每日记录是「每天一条」，id 必须按日期确定，否则两端各自新建同一天记录时 id 不同、
+// 同步按 id 匹配会把其中一边静默丢弃（造成"某些日期的事项不同步"）。
+function dailyNoteId(dateStr) { return 'daily-' + dateStr; }
+
 function getDailyNote(dateStr) {
   return dailyNotes.find(function(n) { return n.date === dateStr && !n._deleted; });
+}
+
+// 归一化：把历史遗留的「随机 id / 同日期多条」每日记录，按日期合并成一条并重设为确定性 id。
+// 幂等；两端各自运行后都会收敛到同一 id + 最新内容，从而同步一致。
+function normalizeDailyNotes() {
+  var changed = false;
+  var byDate = {};
+  dailyNotes.forEach(function(n) {
+    if (!n || !n.date) return;
+    (byDate[n.date] = byDate[n.date] || []).push(n);
+  });
+  var out = [];
+  Object.keys(byDate).forEach(function(date) {
+    var did = dailyNoteId(date);
+    var arr = byDate[date];
+    var alive = arr.filter(function(n){ return !n._deleted; });
+    var tombs = arr.filter(function(n){ return n._deleted; });
+    var keep = null;
+    if (alive.length) {
+      alive.sort(function(a,b){ return new Date(b.updatedAt||0) - new Date(a.updatedAt||0); });
+      keep = alive[0];
+      for (var i = 1; i < alive.length; i++) {
+        var other = alive[i];
+        ['experience','knowledge','reflection'].forEach(function(k){ if (!keep[k] && other[k]) keep[k] = other[k]; });
+        if ((!keep.images || !keep.images.length) && other.images && other.images.length) keep.images = other.images;
+        if ((!keep.tags || !keep.tags.length) && other.tags && other.tags.length) keep.tags = other.tags;
+        other._deleted = true;
+        out.push(other);
+        keep._pendingPush = true;
+        changed = true;
+      }
+      if (keep.id !== did) {
+        out.push({ id: keep.id, date: date, _deleted: true, updatedAt: new Date().toISOString() });
+        keep.id = did;
+        keep._pendingPush = true;
+        changed = true;
+      }
+    }
+    if (keep) out.push(keep);
+    tombs.forEach(function(t){ out.push(t); });
+  });
+  dailyNotes = out;
+  if (changed) { saveDailyNotes(); }
+  return changed;
 }
 
 // Collect all tags with usage counts
@@ -6921,7 +6969,7 @@ function migrateDailyNotes() {
       if (!existing.experience && expText) { existing.experience = expText; existing.updatedAt = new Date().toISOString(); }
     } else {
       dailyNotes.push({
-        id: uid(), date: date,
+        id: dailyNoteId(date), date: date,
         experience: expText, knowledge: '', reflection: '',
         images: [],
         createdAt: items[0].createdAt || new Date().toISOString(),
@@ -7013,12 +7061,13 @@ function saveDailyNoteSilent() {
     note.tags = currentTags.slice();
     note.updatedAt = new Date().toISOString();
     note._deleted = false;
+    note._pendingPush = true;
   } else {
     dailyNotes.push({
-      id: uid(), date: dailyDate,
+      id: dailyNoteId(dailyDate), date: dailyDate,
       experience: exp, knowledge: know, reflection: refl,
       images: currentImages.slice(), tags: currentTags.slice(),
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _pendingPush: true
     });
   }
   saveDailyNotes();
@@ -7058,12 +7107,13 @@ function saveDailyNote() {
       note.tags = currentTags.slice();
       note.updatedAt = new Date().toISOString();
       note._deleted = false;
+      note._pendingPush = true;
     } else {
       dailyNotes.push({
-        id: uid(), date: dailyDate,
+        id: dailyNoteId(dailyDate), date: dailyDate,
         experience: exp, knowledge: know, reflection: refl,
         images: currentImages.slice(), tags: currentTags.slice(),
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _pendingPush: true
       });
     }
     saveDailyNotes();
@@ -7401,6 +7451,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 迁移旧数据（本地已有）
 migrateDailyNotes();
+// 在 pull 之前先归一化本地每日记录（随机 id → 按日期确定性 id），并标记待推送，
+// 防止本地尚未同步的某天记录在随后的 pull 中被当作"云端没有的残留"丢弃。
+if (normalizeDailyNotes()) _pendingPush = true;
 
 /* ============================================================
    TODOS MODULE — 待办事项（日历规划 + 打勾）
@@ -8129,7 +8182,7 @@ function addTodo() {
   var rec = {
     id: uid(), date: todosDate, content: content, done: false,
     tag: currentTodoTag,
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _pendingPush: true
   };
   if (dateEnd && dateEnd > todosDate) rec.dateEnd = dateEnd;
   todosData.push(rec);
@@ -8162,6 +8215,7 @@ function saveEditTodo() {
   var dateEnd = document.getElementById('todoEditDateEnd').value || '';
   if (dateEnd && dateEnd > t.date) t.dateEnd = dateEnd; else delete t.dateEnd;
   t.updatedAt = new Date().toISOString();
+  t._pendingPush = true;
   editingTodoId = null;
   currentTodoTag = '';
   saveTodos();
@@ -8188,6 +8242,7 @@ function toggleTodo(id) {
   if (!t) return;
   t.done = !t.done;
   t.updatedAt = new Date().toISOString();
+  t._pendingPush = true;
   saveTodos();
   saveAll();
   renderTodosView();
@@ -9582,6 +9637,8 @@ autoPostponeOverdueTodos();
     pullAllFromCloud().then(function() {
       // Migrate any legacy daily notes + dedupe accounts from cloud, then re-render
       migrateDailyNotes();
+      // 归一化每日记录（随机 id → 按日期确定性 id + 同日期合并），有变化则标记待推送
+      if (normalizeDailyNotes()) _pendingPush = true;
       dedupeAccounts();
       // 云端数据加载后，再检查一次过期待办自动延期（幂等）
       autoPostponeOverdueTodos();
@@ -9607,7 +9664,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260825a';
+  b.textContent = 'build 20260825b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
