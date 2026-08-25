@@ -7,7 +7,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>生活记录 · LifeLog</title>
+<title>人生手账 · LifeHub</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📓</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -1133,10 +1134,10 @@ tbody tr:hover{background:var(--surface-hover)}
   <!-- ===== Sidebar ===== -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <div class="logo">🌿</div>
+      <div class="logo">📓</div>
       <div class="logo-text">
-        <h1>LifeLog</h1>
-        <p>生活记录</p>
+        <h1>LifeHub</h1>
+        <p>人生手账</p>
       </div>
     </div>
     <nav class="nav">
@@ -1150,10 +1151,10 @@ tbody tr:hover{background:var(--surface-hover)}
       <div class="nav-item" data-page="media">
         <span class="icon">🎬</span><span>影音书演</span>
       </div>
-      <div class="nav-item active" data-page="daily">
+      <div class="nav-item" data-page="daily">
         <span class="icon">📅</span><span>每日记录</span>
       </div>
-      <div class="nav-item" data-page="todos">
+      <div class="nav-item active" data-page="todos">
         <span class="icon">✅</span><span>待办事项</span>
       </div>
       <div class="nav-item" data-page="network">
@@ -1450,7 +1451,7 @@ tbody tr:hover{background:var(--surface-hover)}
     </div>
 
     <!-- ===== Daily Notes Page ===== -->
-    <div class="page active" id="page-daily">
+    <div class="page" id="page-daily">
       <div class="page-header">
         <div>
           <div class="page-title">每日记录</div>
@@ -1536,7 +1537,7 @@ tbody tr:hover{background:var(--surface-hover)}
     </div>
 
     <!-- ===== Todos Page ===== -->
-    <div class="page" id="page-todos">
+    <div class="page active" id="page-todos">
       <div class="page-header">
         <div>
           <div class="page-title">待办事项</div>
@@ -1616,9 +1617,9 @@ tbody tr:hover{background:var(--surface-hover)}
         <div class="card-header"><div class="card-title">ℹ️ 关于</div></div>
         <div class="card-body">
           <p class="text-sm text-muted">
-            LifeLog v1.1 — 一个个人生活记录应用，涵盖健身、睡眠、财务投资和股票投资四大模块。<br>
-            所有数据存储在浏览器本地（LocalStorage），不会上传到服务器。<br>
-            支持桌面和移动端，随时随地记录你的生活。
+            LifeHub（人生手账）— 一个个人生活与工作记录应用，涵盖每日记录、待办事项、人脉、健康、财务投资与股票投资。<br>
+            数据通过云端在多设备间同步，也保留本地缓存（离线可用）。<br>
+            支持桌面和移动端，随时随地记录你的生活与工作。
           </p>
         </div>
       </div>
@@ -1675,8 +1676,8 @@ tbody tr:hover{background:var(--surface-hover)}
   <div class="mobile-nav-item" data-page="health"><span class="icon">❤️</span>健康</div>
   <div class="mobile-nav-item" data-page="finance"><span class="icon">💰</span>投资</div>
   <div class="mobile-nav-item" data-page="media"><span class="icon">🎬</span>影音</div>
-  <div class="mobile-nav-item active" data-page="daily"><span class="icon">📅</span>每日</div>
-  <div class="mobile-nav-item" data-page="todos"><span class="icon">✅</span>待办</div>
+  <div class="mobile-nav-item" data-page="daily"><span class="icon">📅</span>每日</div>
+  <div class="mobile-nav-item active" data-page="todos"><span class="icon">✅</span>待办</div>
   <div class="mobile-nav-item" data-page="network"><span class="icon">👥</span>人脉</div>
   <div class="mobile-nav-item" data-page="export"><span class="icon">📦</span>数据</div>
 </div>
@@ -2436,8 +2437,8 @@ tbody tr:hover{background:var(--surface-hover)}
 
 <script>
 /* ============================================================
-   LifeLog - Life Tracking App
-   Data stored in localStorage
+   LifeHub (人生手账) - Life & Work Tracking App
+   Data stored in localStorage + synced via Supabase
    ============================================================ */
 
 // ===== Data Layer =====
@@ -2903,7 +2904,20 @@ function mergeRecords(cloudArr, localArr, mode) {
     if (mode === 'pull') return;
     if (new Date(l.updatedAt || 0) >= new Date(c.updatedAt || 0)) { l._pendingPush = true; map[l.id] = l; }
   });
-  return Object.values(map);
+  // 结果顺序：优先按「本地顺序」返回（股票/待办靠数组顺序表达用户手动排序），
+  // 云端独有的条目按云端顺序追加到末尾。否则 push/pull 会用云端顺序覆盖掉本地手动排序。
+  var result = [];
+  var seen = {};
+  localArr.forEach(function(l) {
+    if (!l || !l.id) return;
+    if (seen[l.id]) return;
+    var v = map[l.id];
+    if (v) { result.push(v); seen[l.id] = true; }
+  });
+  cloudArr.forEach(function(r) {
+    if (r && r.id && !seen[r.id]) { result.push(r); seen[r.id] = true; }
+  });
+  return result;
 }
 
 // 标记某条记录为「本地有未同步改动」（在保存点调用，确保即使尚未 push 也不被 pull 丢弃）
@@ -9626,8 +9640,8 @@ document.addEventListener('click', (e) => {
   }
 });
 initTheme();
-// 初始渲染默认页（每日记录）
-renderDaily();
+// 初始渲染默认页（待办事项）
+navigate('todos');
 // 自动延期过期待办（本地数据，覆盖离线场景）
 autoPostponeOverdueTodos();
 // Auto-refresh exchange rates if not yet loaded or outdated (>1 day old)
@@ -9680,7 +9694,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260825e';
+  b.textContent = 'build 20260825f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
