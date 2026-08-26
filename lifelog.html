@@ -3720,7 +3720,7 @@ function projectDetailHtml(p) {
   if (members.length) {
     const memberHtml = members.map(m =>
       `<div style="cursor:pointer;padding:5px 0;border-bottom:1px solid var(--border-light)" onclick="openNetDetail('person','${m.per.id}')">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px"><span>${escapeHtml(m.per.name)}${m.active?'':' <span style="color:var(--text-muted);font-size:12px">（已离开）</span>'}</span><span class="net-score">→</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px"><span>${escapeHtml(m.per.name)}${m.per.identity?` <span style="color:var(--text-muted);font-size:12px">（${escapeHtml(m.per.identity)}）</span>`:''}${m.active?'':' <span style="color:var(--text-muted);font-size:12px">（已离开）</span>'}</span><span class="net-score">→</span></div>
         ${m.note?`<div style="text-indent:2em;font-size:12px;color:var(--text-muted);margin-top:2px;line-height:1.5">${escapeHtml(m.note)}</div>`:''}
       </div>`
     ).join('');
@@ -9759,7 +9759,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260826f';
+  b.textContent = 'build 20260826g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
