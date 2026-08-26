@@ -1638,7 +1638,7 @@ tbody tr:hover{background:var(--surface-hover)}
       <div class="health-tabs">
         <div class="health-tab active" data-net-tab="project" onclick="switchNetTab('project')">📁 项目</div>
         <div class="health-tab" data-net-tab="person" onclick="switchNetTab('person')">👤 人脉</div>
-        <div class="health-tab" data-net-tab="match" onclick="switchNetTab('match')">🔗 匹配中心</div>
+        <div class="health-tab" data-net-tab="memo" onclick="switchNetTab('memo')">📝 记事本</div>
       </div>
 
       <div class="net-pane active" id="netProjectPane">
@@ -1655,14 +1655,11 @@ tbody tr:hover{background:var(--surface-hover)}
         <div class="net-list" id="netPersonList" style="margin-top:10px"></div>
       </div>
 
-      <div class="net-pane" id="netMatchPane">
-        <div class="card">
-          <div class="card-body">
-            <label class="form-label">按标签查看（输入联想已有标签）</label>
-            <input type="text" class="form-input" id="netMatchTagInput" list="netTagDatalist" placeholder="如 融资、软件开发…" oninput="renderNetMatch()">
-          </div>
+      <div class="net-pane" id="netMemoPane">
+        <div class="health-pane-toolbar">
+          <button class="btn btn-primary" onclick="openMemoModal()">➕ 新建记事</button>
         </div>
-        <div id="netMatchResult"></div>
+        <div class="net-list" id="netMemoList" style="margin-top:10px"></div>
       </div>
     </div>
 
@@ -1784,6 +1781,27 @@ tbody tr:hover{background:var(--surface-hover)}
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary" onclick="closeModal('netGroupModal')">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- 记事本 Modal -->
+<div class="modal-overlay" id="memoModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="memoModalTitle">新建记事</div>
+      <button class="btn-icon" onclick="closeModal('memoModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="memoId">
+      <div class="form-group">
+        <label class="form-label">内容</label>
+        <textarea class="form-textarea" id="memoContent" placeholder="随手记点什么…" style="min-height:160px"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('memoModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveMemo()">保存</button>
     </div>
   </div>
 </div>
@@ -2449,11 +2467,13 @@ let projectsData = DB.get('projects') || [];
 let personsData = DB.get('persons') || [];
 let netGroupsData = DB.get('netGroups') || [];
 let netTagsData = DB.get('netTags') || [];
+let memosData = DB.get('memos') || [];
 let netTab = 'project';
 let netGroupFilter = 'all';
 const NET_STATUSES = ['筹备中', '进行中', '已暂停', '已完成', '已搁置'];
 function saveProjects() { DB.set('projects', projectsData); scheduleCloudPush(); }
 function savePersons() { DB.set('persons', personsData); scheduleCloudPush(); }
+function saveMemos() { DB.set('memos', memosData); scheduleCloudPush(); }
 function saveNetGroups() { DB.set('netGroups', netGroupsData); }
 function saveNetTags() { DB.set('netTags', netTagsData); }
 
@@ -2673,6 +2693,7 @@ function saveAll() {
   DB.set('todos', todosData);
   DB.set('projects', projectsData);
   DB.set('persons', personsData);
+  DB.set('memos', memosData);
   // Trigger background cloud sync (debounced)
   scheduleCloudPush();
 }
@@ -2680,7 +2701,7 @@ function saveAll() {
 // ===== Cloud Sync (Supabase) =====
 const SUPABASE_URL = 'https://byxqubrxnwqxgxqvlgey.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_tGMDLTgbWcq0yy4yKOO_Zg_wsgnalLS';
-const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock', 'media', 'dailyNotes', 'todos', 'projects', 'persons'];
+const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock', 'media', 'dailyNotes', 'todos', 'projects', 'persons', 'memos'];
 let supabaseClient = null;
 let _pullErrors = 0; // 记录最近一次拉取失败条数，供实时订阅状态判断，避免错误状态被覆盖
 
@@ -2827,6 +2848,7 @@ async function pullAllFromCloud() {
       case 'todos': todosData = merged; break;
       case 'projects': projectsData = merged; break;
       case 'persons': personsData = merged; break;
+      case 'memos': memosData = merged; break;
     }
     DB.set(key, merged);
     changed = true;
@@ -2933,6 +2955,7 @@ async function pushAllToCloud() {
                 case 'todos': todosData = localValue; break;
                 case 'projects': projectsData = localValue; break;
                 case 'persons': personsData = localValue; break;
+                case 'memos': memosData = localValue; break;
               }
               DB.set(key, localValue);
             }
@@ -3195,14 +3218,14 @@ function renderNetwork() {
 function switchNetTab(tab) {
   netTab = tab;
   document.querySelectorAll('[data-net-tab]').forEach(t => t.classList.toggle('active', t.dataset.netTab === tab));
-  const map = {project:'netProjectPane', person:'netPersonPane', match:'netMatchPane'};
+  const map = {project:'netProjectPane', person:'netPersonPane', memo:'netMemoPane'};
   Object.keys(map).forEach(k => {
     const pane = document.getElementById(map[k]);
     if (pane) pane.classList.toggle('active', k === tab);
   });
   if (tab === 'project') renderNetProjects();
   else if (tab === 'person') { renderNetGroupFilters(); renderNetPersons(); }
-  else renderNetMatch();
+  else renderMemos();
 }
 function netEmptyHtml(icon, text, onclick) {
   return `<div class="empty-state"><div class="empty-icon">${icon}</div><p>${text}</p><button class="btn btn-primary" onclick="${onclick}">➕ 添加</button></div>`;
@@ -3266,24 +3289,54 @@ function personCardHtml(p) {
 }
 
 // ---- 匹配中心 ----
-function renderNetMatch() {
-  const inp = document.getElementById('netMatchTagInput');
-  const tag = inp ? inp.value.trim() : '';
-  const res = document.getElementById('netMatchResult');
-  if (!res) return;
-  if (!tag) { res.innerHTML = '<div class="net-empty" style="margin-top:12px">输入一个标签，看它在项目和人脉两边的分布</div>'; return; }
-  const projHas = projectsData.filter(p=>!p._deleted && projectTags(p).map(tagOf).includes(tag)).map(p=>({kind:'project',id:p.id,name:p.name}));
-  const perAbil = personsData.filter(p=>!p._deleted && (p.abilityTags||[]).map(tagOf).includes(tag)).map(p=>({kind:'person',id:p.id,name:p.name}));
-  const perNeed = personsData.filter(p=>!p._deleted && (p.needTags||[]).map(tagOf).includes(tag)).map(p=>({kind:'person',id:p.id,name:p.name}));
-  let html = '';
-  html += matchSection('📁 带「'+tag+'」标签的项目', projHas);
-  html += matchSection('👤 能提供「'+tag+'」的人', perAbil);
-  html += matchSection('👤 想要「'+tag+'」的人', perNeed);
-  res.innerHTML = html || '<div class="net-empty">这个标签还没有人用到</div>';
+function renderMemos() {
+  const list = document.getElementById('netMemoList');
+  if (!list) return;
+  const items = memosData.filter(m => !m._deleted).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+  if (!items.length) { list.innerHTML = netEmptyHtml('📝','还没有记事，点击「新建记事」开始', 'openMemoModal()'); return; }
+  list.innerHTML = items.map(m => {
+    const t = (m.updatedAt || m.createdAt || '').slice(0,16).replace('T',' ');
+    return `<div class="net-card">
+      <div class="net-sub" style="white-space:pre-wrap;line-height:1.6;font-size:13px">${escapeHtml(m.content||'')}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+        <span style="font-size:11px;color:var(--text-muted)">${t}</span>
+        <span style="display:flex;gap:4px">
+          <button class="btn-icon" onclick="openMemoModal('${m.id}')" title="编辑">✏️</button>
+          <button class="btn-icon" onclick="deleteMemo('${m.id}')" title="删除">🗑️</button>
+        </span>
+      </div>
+    </div>`;
+  }).join('');
 }
-function matchSection(title, items) {
-  if (!items.length) return '';
-  return `<div class="net-match"><h4>${title}（${items.length}）</h4>${items.map(it=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('${it.kind}','${it.id}')"><span>${escapeHtml(it.name)}</span><span class="net-score">→</span></div>`).join('')}</div>`;
+function openMemoModal(id) {
+  document.getElementById('memoId').value = id || '';
+  document.getElementById('memoModalTitle').textContent = id ? '编辑记事' : '新建记事';
+  document.getElementById('memoContent').value = id ? ((memosData.find(x=>x.id===id)||{}).content || '') : '';
+  document.getElementById('memoModal').classList.add('active');
+  setTimeout(function(){ const el = document.getElementById('memoContent'); if (el) el.focus(); }, 50);
+}
+function saveMemo() {
+  const id = document.getElementById('memoId').value;
+  const content = document.getElementById('memoContent').value.trim();
+  if (!content) { toast('内容不能为空'); return; }
+  const now = new Date().toISOString();
+  if (id) {
+    const idx = memosData.findIndex(x=>x.id===id);
+    if (idx>=0) memosData[idx] = {...memosData[idx], content, updatedAt: now, _pendingPush: true};
+  } else {
+    memosData.push({id: uid(), content, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
+  }
+  saveMemos();
+  closeModal('memoModal');
+  renderMemos();
+  toast('已保存');
+}
+function deleteMemo(id) {
+  if (!confirm('删除这条记事？')) return;
+  const m = memosData.find(x=>x.id===id);
+  if (m) { m._deleted = true; m.updatedAt = new Date().toISOString(); m._pendingPush = true; }
+  saveMemos();
+  renderMemos();
 }
 
 // ---- 匹配算法 ----
@@ -6621,7 +6674,7 @@ function escapeHtml(s) {
 
 
 function exportAllData() {
-  const data = { fitness: fitnessData, sleep: sleepData, medications: medicationsData, healthNotes: healthNotesData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, projects: projectsData, persons: personsData, exportDate: new Date().toISOString() };
+  const data = { fitness: fitnessData, sleep: sleepData, medications: medicationsData, healthNotes: healthNotesData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, projects: projectsData, persons: personsData, memos: memosData, exportDate: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -6847,6 +6900,7 @@ function importData(event) {
       if (data.todos) todosData = data.todos;
       if (data.projects) projectsData = data.projects;
       if (data.persons) personsData = data.persons;
+      if (data.memos) memosData = data.memos;
       saveAll();
       saveAccounts();
       DB.set('rates', exchangeRates);
@@ -6874,6 +6928,7 @@ function clearAllData() {
   todosData = [];
   projectsData = [];
   personsData = [];
+  memosData = [];
   netGroupsData = [];
   netTagsData = [];
   exchangeRates = { rates: {}, date: '' };
@@ -9704,7 +9759,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260826e';
+  b.textContent = 'build 20260826f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
