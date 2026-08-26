@@ -3519,20 +3519,37 @@ function deleteNetProject(id) {
 }
 
 // ---- 人脉 CRUD ----
-let _tmpPersonProjects = [];
+let _tmpPersonProjects = {}; // { projectId: {role, active, note} }
 function renderPersonProjects() {
   const c = document.getElementById('netPersonProjects');
   if (!c) return;
   const projs = projectsData.filter(p => !p._deleted).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   if (!projs.length) { c.innerHTML = '<div class="net-empty">还没有项目，先到「项目」里添加</div>'; return; }
   c.innerHTML = projs.map(p => {
-    const checked = _tmpPersonProjects.includes(p.id);
-    return `<label class="net-check-item"><input type="checkbox" value="${p.id}" ${checked?'checked':''} onchange="togglePersonProject('${p.id}', this.checked)">${escapeHtml(p.name)}</label>`;
+    const info = _tmpPersonProjects[p.id];
+    const checked = !!info;
+    return `<div style="padding:4px 0;border-bottom:1px solid var(--border-light)">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+        <input type="checkbox" ${checked?'checked':''} onchange="togglePersonProject('${p.id}', this.checked)">
+        <span>${escapeHtml(p.name)}</span>
+      </label>
+      ${checked ? `
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px 24px">
+          <input type="text" class="form-input" placeholder="角色（发起人/对接人…）" value="${escapeHtml(info.role||'')}" oninput="setPersonProjectField('${p.id}','role',this.value)" style="flex:1;min-width:120px;padding:6px 8px;font-size:13px">
+          <label style="flex:0 0 auto;display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap"><input type="checkbox" ${info.active!==false?'checked':''} onchange="setPersonProjectField('${p.id}','active',this.checked)" style="flex:0 0 auto;width:auto;margin:0"> 活跃</label>
+          <input type="text" class="form-input" placeholder="关系备注（可选）" value="${escapeHtml(info.note||'')}" oninput="setPersonProjectField('${p.id}','note',this.value)" style="flex:1 0 100%;min-width:0;padding:6px 8px;font-size:13px">
+        </div>` : ''}
+    </div>`;
   }).join('');
 }
+function setPersonProjectField(pid, field, value) {
+  if (!_tmpPersonProjects[pid]) _tmpPersonProjects[pid] = {role:'', active:true, note:''};
+  _tmpPersonProjects[pid][field] = value;
+}
 function togglePersonProject(pid, checked) {
-  if (checked) { if (!_tmpPersonProjects.includes(pid)) _tmpPersonProjects.push(pid); }
-  else _tmpPersonProjects = _tmpPersonProjects.filter(x=>x!==pid);
+  if (checked) { if (!_tmpPersonProjects[pid]) _tmpPersonProjects[pid] = {role:'', active:true, note:''}; }
+  else delete _tmpPersonProjects[pid];
+  renderPersonProjects();
 }
 function openNetPerson(id) {
   closeModal('netDetailModal');
@@ -3546,7 +3563,11 @@ function openNetPerson(id) {
     document.getElementById('netPersonAbilityTags').value = tagsToText(p.abilityTags);
     document.getElementById('netPersonNeedTags').value = tagsToText(p.needTags);
     document.getElementById('netPersonNote').value = p.note||'';
-    _tmpPersonProjects = projectsData.filter(pr => !pr._deleted && (pr.members||[]).some(m=>m.personId===id)).map(pr=>pr.id);
+    _tmpPersonProjects = {};
+    projectsData.filter(pr => !pr._deleted && (pr.members||[]).some(m=>m.personId===id)).forEach(pr => {
+      const m = (pr.members||[]).find(x=>x.personId===id);
+      _tmpPersonProjects[pr.id] = {role: (m&&m.role)||'', active: !m || m.active !== false, note: (m&&m.note)||''};
+    });
   } else {
     document.getElementById('netPersonName').value='';
     document.getElementById('netPersonIdentity').value='';
@@ -3554,7 +3575,7 @@ function openNetPerson(id) {
     document.getElementById('netPersonAbilityTags').value='';
     document.getElementById('netPersonNeedTags').value='';
     document.getElementById('netPersonNote').value='';
-    _tmpPersonProjects = [];
+    _tmpPersonProjects = {};
   }
   renderPersonProjects();
   renderNetDatalists();
@@ -3578,13 +3599,25 @@ function saveNetPerson() {
     pid = uid();
     personsData.push({id: pid, name, identity, groups, abilityTags, needTags, note, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
   }
-  // 同步「关联项目」：项目也是人的标签，事实源为 project.members
-  const selected = new Set(_tmpPersonProjects);
+  // 同步「参与项目」：事实源为 project.members，这里同时写入每个项目的角色/活跃/备注
   projectsData.forEach(proj => {
     if (!proj.members) proj.members = [];
+    const info = _tmpPersonProjects[proj.id];
     const has = proj.members.some(m => m.personId === pid);
-    if (selected.has(proj.id) && !has) { proj.members.push({personId: pid, role: '', active: true, note: ''}); markPending(proj); }
-    if (!selected.has(proj.id) && has) { proj.members = proj.members.filter(m => m.personId !== pid); markPending(proj); }
+    if (info) {
+      if (has) {
+        const m = proj.members.find(x => x.personId === pid);
+        m.role = info.role || '';
+        m.active = info.active !== false;
+        m.note = info.note || '';
+      } else {
+        proj.members.push({personId: pid, role: info.role||'', active: info.active !== false, note: info.note||''});
+      }
+      markPending(proj);
+    } else if (has) {
+      proj.members = proj.members.filter(m => m.personId !== pid);
+      markPending(proj);
+    }
   });
   savePersons();
   saveProjects();
@@ -3649,7 +3682,6 @@ function personTagListHtml(arr) {
   return (arr||[]).map(t => `<div class="net-tagline" style="margin-bottom:3px">${tagNoteItemHtml(t)}</div>`).join('');
 }
 function projectDetailHtml(p) {
-  const matched = matchedPersonsForProject(p);
   const members = (p.members||[]).map(m => {
     const per = personsData.find(x=>x.id===m.personId);
     return per ? {per, role: m.role||'', active: m.active !== false, note: m.note||''} : null;
@@ -3665,14 +3697,6 @@ function projectDetailHtml(p) {
     ).join('');
     h += `<div class="net-detail-section"><h4>👥 参与的人（${members.length}）</h4>${memberHtml}</div>`;
   }
-  h += `<div class="net-match"><h4>🎯 推荐人脉（按标签匹配，非实际关系）</h4>` + (matched.length ? matched.map(m=>{
-    const per = m.person;
-    let rows = '';
-    if (m.provide.length) rows += `<div class="net-tagline" style="margin-top:3px">提供：${m.provide.map(t=>tagNoteItemHtml(t)).join('')}</div>`;
-    if (m.need.length) rows += `<div class="net-tagline" style="margin-top:3px">需求：${m.need.map(t=>tagNoteItemHtml(t)).join('')}</div>`;
-    if (per.note) rows += `<div class="net-sub" style="margin-top:3px">备注：${escapeHtml(per.note)}</div>`;
-    return `<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('person','${per.id}')"><span>${escapeHtml(per.name)}${per.identity?'（'+escapeHtml(per.identity)+'）':''}</span><span class="net-score">匹配 ${m.score} 项</span></div>${rows}`;
-  }).join('') : '<div class="net-empty">暂无匹配的人（给人脉打上与本项目标签一致的「提供/需求」标签即可串起来）</div>') + `</div>`;
   h += followupsHtml(p);
   h += timelineHtml(p);
   if (p.note) h += infoRow('备注', p.note);
@@ -3680,7 +3704,6 @@ function projectDetailHtml(p) {
   return h;
 }
 function personDetailHtml(p) {
-  const m = matchedProjectsForPerson(p);
   const linked = projectsData.filter(pr=>!pr._deleted && (pr.members||[]).some(mm=>mm.personId===p.id)).map(pr => {
     const mm = (pr.members||[]).find(x=>x.personId===p.id);
     return {pr, role: (mm&&mm.role)||'', active: !mm || mm.active !== false, note: (mm&&mm.note)||''};
@@ -3691,8 +3714,6 @@ function personDetailHtml(p) {
   if ((p.abilityTags||[]).length) h += `<div class="net-detail-section"><h4>提供（能提供什么）</h4>${personTagListHtml(p.abilityTags)}</div>`;
   if ((p.needTags||[]).length) h += `<div class="net-detail-section"><h4>需求（想要什么）</h4>${personTagListHtml(p.needTags)}</div>`;
   if (linked.length) h += `<div class="net-detail-section"><h4>📁 参与的项目（${linked.length}）</h4>${linked.map(l=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${l.pr.id}')"><span>${escapeHtml(l.pr.name)}${l.role?` <span style="color:var(--text-muted)">· ${escapeHtml(l.role)}</span>`:''}${l.active?'':' <span style="color:var(--text-muted);font-size:12px">（已离开）</span>'}</span><span class="net-score">→</span></div>${l.note?`<div class="net-sub" style="margin:0 0 6px">${escapeHtml(l.note)}</div>`:''}`).join('')}</div>`;
-  h += `<div class="net-match"><h4>🎯 TA 能支持的项目（推荐）</h4>` + (m.canHelp.length ? m.canHelp.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div><div class="net-tags" style="margin:-2px 0 4px">${x.tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div>${projectKeyInfo(x.project)?`<div class="net-sub" style="margin:0 0 8px">${escapeHtml(projectKeyInfo(x.project))}</div>`:''}`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
-  h += `<div class="net-match"><h4>🎯 能满足 TA 需求的项目（推荐）</h4>` + (m.canBeHelpedBy.length ? m.canBeHelpedBy.map(x=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${x.project.id}')"><span>${escapeHtml(x.project.name)}</span><span class="net-score">匹配 ${x.score} 项</span></div><div class="net-tags" style="margin:-2px 0 4px">${x.tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div>${projectKeyInfo(x.project)?`<div class="net-sub" style="margin:0 0 8px">${escapeHtml(projectKeyInfo(x.project))}</div>`:''}`).join('') : '<div class="net-empty">暂无</div>') + `</div>`;
   h += followupsHtml(p);
   h += timelineHtml(p);
   if (p.note) h += infoRow('备注', p.note);
@@ -3705,7 +3726,6 @@ function detailFooter(kind, id) {
   return `<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
     <button class="btn btn-ghost" onclick="${editFn}('${id}')">✏️ 编辑</button>
     <button class="btn btn-ghost" onclick="${delFn}('${id}')">🗑️ 删除</button>
-    <button class="btn btn-primary" onclick="exportMatch('${kind}','${id}')">📋 导出匹配清单</button>
   </div>`;
 }
 function followupsHtml(rec) {
@@ -9694,7 +9714,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260825f';
+  b.textContent = 'build 20260826a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
