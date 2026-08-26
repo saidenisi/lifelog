@@ -2781,7 +2781,10 @@ function withTimeout(promise, ms) {
 }
 
 // Pull all data from cloud (in parallel, each with timeout), merge into local
+// 抢救模式：URL 带 ?rescue=1 时只读本地 localStorage、绝不联网拉取/推送（用于数据恢复，防止云端假数据覆盖本地真实数据）
+var __RESCUE_MODE__ = (function(){ try { return /[?&]rescue=1\b/.test(location.search); } catch(e){ return false; } })();
 async function pullAllFromCloud() {
+  if (__RESCUE_MODE__) { setSyncStatus('抢救模式（仅本地，未联网）', 'online'); return; }
   setSyncStatus('拉取中...', 'syncing');
   var changed = false;
   var errors = 0;
@@ -2921,6 +2924,7 @@ function markPending(rec) { if (rec && !rec._pendingPush) rec._pendingPush = tru
 
 // Push all local data to cloud
 async function pushAllToCloud() {
+  if (__RESCUE_MODE__) return;
   setSyncStatus('上传中...', 'syncing');
   var errors = 0;
   for (var i = 0; i < SYNC_KEYS.length; i++) {
@@ -3001,6 +3005,7 @@ var _pushTimer = null;
 var _pushRetryCount = 0;
 var _pendingPush = false;  // 有改动但尚未推送（如页面初始化早期），待稍后补推
 function scheduleCloudPush() {
+  if (__RESCUE_MODE__) return;
   clearTimeout(_pushTimer);
   _pushTimer = setTimeout(pushAllToCloud, 500);
 }
@@ -3053,6 +3058,7 @@ async function syncNow() {
 
 // Supabase Realtime — detect cloud changes instantly（依赖 SDK，SDK 加载失败则跳过，不影响基础同步）
 function subscribeRealtime() {
+  if (__RESCUE_MODE__) return;
   if (!supabaseClient) { initSupabase(); }
   if (!supabaseClient) return;
   try {
@@ -9676,8 +9682,24 @@ autoPostponeOverdueTodos();
     refreshRates();
   }
 })();
+// 抢救模式提示条：显示"仅本地、未联网"并给出导出按钮（供数据恢复场景使用）
+function showRescueBanner() {
+  try {
+    var bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:#fff;font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;padding:10px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+    bar.innerHTML = '<span style="font-weight:600">🛟 抢救模式（仅本地，未联网）</span>'
+      + '<span style="font-size:12px;opacity:.95">点右侧按钮导出全部数据，把下载的 JSON 文件发回给协助者即可恢复</span>'
+      + '<button onclick="exportAllData()" style="margin-left:auto;background:#fff;color:#dc2626;border:none;padding:7px 16px;border-radius:6px;font-weight:700;cursor:pointer">📥 导出全部数据</button>';
+    document.body.appendChild(bar);
+  } catch(e) { console.warn('rescue banner fail', e); }
+}
 // Init Supabase & sync（同步走原生 fetch，不依赖 SDK 加载；SDK 仅用于可选实时订阅）
 (function initCloudSync() {
+  if (__RESCUE_MODE__) {
+    setSyncStatus('抢救模式（仅本地，未联网）', 'online');
+    showRescueBanner();
+    return; // 抢救模式：不加载 SDK、不 pull、不 push，只读本地数据
+  }
   setSyncStatus('在线', 'online');
   // 后台尝试加载 SDK（用于实时订阅），加载失败也不影响基础同步
   tryInitSupabase(35, function() {});
@@ -9708,10 +9730,12 @@ autoPostponeOverdueTodos();
 })();
 // 定时自动拉取（每 60s）+ 切回页面时立即拉取：保证打开的设备持续同步到其它端的改动，
 // 不依赖实时订阅（SDK 可能加载失败）。满足"两边必须同步"。
-setInterval(function() { pullAllFromCloud(); }, 60000);
-document.addEventListener('visibilitychange', function() {
-  if (!document.hidden) pullAllFromCloud();
-});
+if (!__RESCUE_MODE__) {
+  setInterval(function() { pullAllFromCloud(); }, 60000);
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) pullAllFromCloud();
+  });
+}
 // Backup reminder check
 checkBackupReminder();
 
@@ -9719,7 +9743,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260826c';
+  b.textContent = 'build 20260826d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
