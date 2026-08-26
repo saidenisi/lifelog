@@ -3608,9 +3608,11 @@ function saveNetPerson() {
       } else {
         proj.members.push({personId: pid, active: info.active !== false, note: info.note||''});
       }
+      proj.updatedAt = now;
       markPending(proj);
     } else if (has) {
       proj.members = proj.members.filter(m => m.personId !== pid);
+      proj.updatedAt = now;
       markPending(proj);
     }
   });
@@ -3624,7 +3626,13 @@ function deleteNetPerson(id) {
   const p = personsData.find(x=>x.id===id);
   if (!confirm('删除人脉「'+(p?p.name:'')+'」？')) return;
   personsData = personsData.filter(x=>x.id!==id);
-  projectsData.forEach(pr => { if (pr.members) pr.members = pr.members.filter(m => m.personId !== id); });
+  projectsData.forEach(pr => {
+    if (pr.members && pr.members.some(m => m.personId === id)) {
+      pr.members = pr.members.filter(m => m.personId !== id);
+      pr.updatedAt = new Date().toISOString();
+      markPending(pr);
+    }
+  });
   savePersons(); saveProjects(); closeModal('netDetailModal'); renderNetPersons();
 }
 
@@ -9711,7 +9719,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260826b';
+  b.textContent = 'build 20260826c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
