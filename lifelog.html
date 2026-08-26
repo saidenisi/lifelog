@@ -1723,7 +1723,7 @@ tbody tr:hover{background:var(--surface-hover)}
         <input type="text" class="form-input" id="netProjectTags" list="netTagDatalist" placeholder="如 融资、额度、开发、地产">
       </div>
       <div class="form-group">
-        <label class="form-label">参与的人（选人 + 角色）</label>
+        <label class="form-label">参与的人（选人 + 项目备注）</label>
         <div id="netProjectMembers"></div>
         <button type="button" class="btn btn-ghost btn-sm" onclick="addMemberRow()">➕ 添加成员</button>
       </div>
@@ -1774,12 +1774,8 @@ tbody tr:hover{background:var(--surface-hover)}
         <input type="text" class="form-input" id="netPersonNeedTags" list="netTagDatalist" placeholder="如 资金：需3000万周转、客户">
       </div>
       <div class="form-group">
-        <label class="form-label">关联项目（勾选 = 该人参与的项目；项目也是人的标签）</label>
+        <label class="form-label">参与的项目（勾选后填写项目备注）</label>
         <div id="netPersonProjects" class="net-check-list"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">备注</label>
-        <textarea class="form-textarea" id="netPersonNote" placeholder="资源、需求、背景…"></textarea>
       </div>
     </div>
     <div class="modal-footer">
@@ -3378,6 +3374,12 @@ function openNetProject(id) {
   renderNetDatalists();
   document.getElementById('netProjectModal').classList.add('active');
 }
+// 项目备注 = 角色 + 关系备注 合并后的单一字段（旧数据里两者都存时合并展示，分开存时各取其一）
+function memberNoteText(m) {
+  if (!m) return '';
+  return [m.role, m.note].filter(Boolean).join(' · ');
+}
+
 function renderMemberRows() {
   const c = document.getElementById('netProjectMembers');
   if (!c) return;
@@ -3389,10 +3391,9 @@ function renderMemberRows() {
           onfocus="openMemberPick(${i}, this)" oninput="memberPickInput(${i}, this)" onblur="memberPickBlur()">
         <input type="hidden" class="member-id" value="${m.personId||''}">
       </div>
-      <input type="text" class="member-role" placeholder="角色（发起人/对接人…）" value="${escapeHtml(m.role||'')}">
+      <input type="text" class="member-note" placeholder="项目备注（角色/说明）" value="${escapeHtml(memberNoteText(m))}" style="flex:1;min-width:0">
       <label style="flex:0 0 auto;display:flex;align-items:center;gap:3px;font-size:12px;white-space:nowrap"><input type="checkbox" class="member-active" ${m.active!==false?'checked':''} style="flex:0 0 auto;width:auto;margin:0"> 活跃</label>
       <button type="button" class="btn-icon" onclick="removeMemberRow(${i})" style="flex:0 0 auto">✕</button>
-      <input type="text" class="member-note" placeholder="关系备注（可选，如：已转介绍给某人）" value="${escapeHtml(m.note||'')}" style="flex:1 0 100%;min-width:0">
     </div>`;
   }).join('');
 }
@@ -3487,13 +3488,11 @@ function saveNetProject() {
   const members = [];
   document.querySelectorAll('#netProjectMembers .member-row').forEach(row => {
     const idInput = row.querySelector('.member-id');
-    const roleInput = row.querySelector('.member-role');
     const activeInput = row.querySelector('.member-active');
     const noteInput = row.querySelector('.member-note');
     const pid = idInput ? idInput.value : '';
     if (pid) members.push({
       personId: pid,
-      role: roleInput ? roleInput.value.trim() : '',
       active: activeInput ? activeInput.checked : true,
       note: noteInput ? noteInput.value.trim() : ''
     });
@@ -3535,19 +3534,18 @@ function renderPersonProjects() {
       </label>
       ${checked ? `
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px 24px">
-          <input type="text" class="form-input" placeholder="角色（发起人/对接人…）" value="${escapeHtml(info.role||'')}" oninput="setPersonProjectField('${p.id}','role',this.value)" style="flex:1;min-width:120px;padding:6px 8px;font-size:13px">
+          <input type="text" class="form-input" placeholder="项目备注（角色/说明）" value="${escapeHtml(info.note||'')}" oninput="setPersonProjectField('${p.id}','note',this.value)" style="flex:1;min-width:120px;padding:6px 8px;font-size:13px">
           <label style="flex:0 0 auto;display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap"><input type="checkbox" ${info.active!==false?'checked':''} onchange="setPersonProjectField('${p.id}','active',this.checked)" style="flex:0 0 auto;width:auto;margin:0"> 活跃</label>
-          <input type="text" class="form-input" placeholder="关系备注（可选）" value="${escapeHtml(info.note||'')}" oninput="setPersonProjectField('${p.id}','note',this.value)" style="flex:1 0 100%;min-width:0;padding:6px 8px;font-size:13px">
         </div>` : ''}
     </div>`;
   }).join('');
 }
 function setPersonProjectField(pid, field, value) {
-  if (!_tmpPersonProjects[pid]) _tmpPersonProjects[pid] = {role:'', active:true, note:''};
+  if (!_tmpPersonProjects[pid]) _tmpPersonProjects[pid] = {active:true, note:''};
   _tmpPersonProjects[pid][field] = value;
 }
 function togglePersonProject(pid, checked) {
-  if (checked) { if (!_tmpPersonProjects[pid]) _tmpPersonProjects[pid] = {role:'', active:true, note:''}; }
+  if (checked) { if (!_tmpPersonProjects[pid]) _tmpPersonProjects[pid] = {active:true, note:''}; }
   else delete _tmpPersonProjects[pid];
   renderPersonProjects();
 }
@@ -3562,11 +3560,10 @@ function openNetPerson(id) {
     document.getElementById('netPersonGroups').value = (p.groups||[]).join('、');
     document.getElementById('netPersonAbilityTags').value = tagsToText(p.abilityTags);
     document.getElementById('netPersonNeedTags').value = tagsToText(p.needTags);
-    document.getElementById('netPersonNote').value = p.note||'';
     _tmpPersonProjects = {};
     projectsData.filter(pr => !pr._deleted && (pr.members||[]).some(m=>m.personId===id)).forEach(pr => {
       const m = (pr.members||[]).find(x=>x.personId===id);
-      _tmpPersonProjects[pr.id] = {role: (m&&m.role)||'', active: !m || m.active !== false, note: (m&&m.note)||''};
+      _tmpPersonProjects[pr.id] = {active: !m || m.active !== false, note: memberNoteText(m)};
     });
   } else {
     document.getElementById('netPersonName').value='';
@@ -3574,7 +3571,6 @@ function openNetPerson(id) {
     document.getElementById('netPersonGroups').value='';
     document.getElementById('netPersonAbilityTags').value='';
     document.getElementById('netPersonNeedTags').value='';
-    document.getElementById('netPersonNote').value='';
     _tmpPersonProjects = {};
   }
   renderPersonProjects();
@@ -3589,17 +3585,16 @@ function saveNetPerson() {
   const groups = parseTagStr(document.getElementById('netPersonGroups').value);
   const abilityTags = parseTagNoteStr(document.getElementById('netPersonAbilityTags').value);
   const needTags = parseTagNoteStr(document.getElementById('netPersonNeedTags').value);
-  const note = document.getElementById('netPersonNote').value;
   const now = new Date().toISOString();
   let pid = idInput;
   if (pid) {
     const idx = personsData.findIndex(x=>x.id===pid);
-    if (idx>=0) personsData[idx] = {...personsData[idx], name, identity, groups, abilityTags, needTags, note, updatedAt: now, _pendingPush: true};
+    if (idx>=0) personsData[idx] = {...personsData[idx], name, identity, groups, abilityTags, needTags, updatedAt: now, _pendingPush: true};
   } else {
     pid = uid();
-    personsData.push({id: pid, name, identity, groups, abilityTags, needTags, note, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
+    personsData.push({id: pid, name, identity, groups, abilityTags, needTags, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
   }
-  // 同步「参与项目」：事实源为 project.members，这里同时写入每个项目的角色/活跃/备注
+  // 同步「参与项目」：事实源为 project.members，这里写入每个项目的备注（项目备注）+ 活跃
   projectsData.forEach(proj => {
     if (!proj.members) proj.members = [];
     const info = _tmpPersonProjects[proj.id];
@@ -3607,11 +3602,11 @@ function saveNetPerson() {
     if (info) {
       if (has) {
         const m = proj.members.find(x => x.personId === pid);
-        m.role = info.role || '';
-        m.active = info.active !== false;
         m.note = info.note || '';
+        m.active = info.active !== false;
+        delete m.role;
       } else {
-        proj.members.push({personId: pid, role: info.role||'', active: info.active !== false, note: info.note||''});
+        proj.members.push({personId: pid, active: info.active !== false, note: info.note||''});
       }
       markPending(proj);
     } else if (has) {
@@ -3684,7 +3679,7 @@ function personTagListHtml(arr) {
 function projectDetailHtml(p) {
   const members = (p.members||[]).map(m => {
     const per = personsData.find(x=>x.id===m.personId);
-    return per ? {per, role: m.role||'', active: m.active !== false, note: m.note||''} : null;
+    return per ? {per, active: m.active !== false, note: memberNoteText(m)} : null;
   }).filter(Boolean);
   let h = '';
   h += infoRow('领域', p.domain);
@@ -3693,7 +3688,10 @@ function projectDetailHtml(p) {
   h += tagsBlock('标签（核心信息）', projectTags(p));
   if (members.length) {
     const memberHtml = members.map(m =>
-      `<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('person','${m.per.id}')"><span>${escapeHtml(m.per.name)}${m.role?` <span style="color:var(--text-muted)">· ${escapeHtml(m.role)}</span>`:''}${m.active?'':' <span style="color:var(--text-muted);font-size:12px">（已离开）</span>'}</span><span class="net-score">→</span></div>${m.note?`<div class="net-sub" style="margin:0 0 6px">${escapeHtml(m.note)}</div>`:''}`
+      `<div style="cursor:pointer;padding:5px 0;border-bottom:1px solid var(--border-light)" onclick="openNetDetail('person','${m.per.id}')">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px"><span>${escapeHtml(m.per.name)}${m.active?'':' <span style="color:var(--text-muted);font-size:12px">（已离开）</span>'}</span><span class="net-score">→</span></div>
+        ${m.note?`<div style="text-indent:2em;font-size:12px;color:var(--text-muted);margin-top:2px;line-height:1.5">${escapeHtml(m.note)}</div>`:''}
+      </div>`
     ).join('');
     h += `<div class="net-detail-section"><h4>👥 参与的人（${members.length}）</h4>${memberHtml}</div>`;
   }
@@ -3706,17 +3704,16 @@ function projectDetailHtml(p) {
 function personDetailHtml(p) {
   const linked = projectsData.filter(pr=>!pr._deleted && (pr.members||[]).some(mm=>mm.personId===p.id)).map(pr => {
     const mm = (pr.members||[]).find(x=>x.personId===p.id);
-    return {pr, role: (mm&&mm.role)||'', active: !mm || mm.active !== false, note: (mm&&mm.note)||''};
+    return {pr, active: !mm || mm.active !== false, note: memberNoteText(mm)};
   });
   let h = '';
   h += infoRow('身份', p.identity);
   if ((p.groups||[]).length) h += tagsBlock('分组', p.groups);
   if ((p.abilityTags||[]).length) h += `<div class="net-detail-section"><h4>提供（能提供什么）</h4>${personTagListHtml(p.abilityTags)}</div>`;
   if ((p.needTags||[]).length) h += `<div class="net-detail-section"><h4>需求（想要什么）</h4>${personTagListHtml(p.needTags)}</div>`;
-  if (linked.length) h += `<div class="net-detail-section"><h4>📁 参与的项目（${linked.length}）</h4>${linked.map(l=>`<div class="net-match-item" style="cursor:pointer" onclick="openNetDetail('project','${l.pr.id}')"><span>${escapeHtml(l.pr.name)}${l.role?` <span style="color:var(--text-muted)">· ${escapeHtml(l.role)}</span>`:''}${l.active?'':' <span style="color:var(--text-muted);font-size:12px">（已离开）</span>'}</span><span class="net-score">→</span></div>${l.note?`<div class="net-sub" style="margin:0 0 6px">${escapeHtml(l.note)}</div>`:''}`).join('')}</div>`;
+  if (linked.length) h += `<div class="net-detail-section"><h4>📁 参与的项目（${linked.length}）</h4>${linked.map(l=>`<div style="cursor:pointer;padding:5px 0;border-bottom:1px solid var(--border-light)" onclick="openNetDetail('project','${l.pr.id}')"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px"><span>${escapeHtml(l.pr.name)}${l.active?'':' <span style="color:var(--text-muted);font-size:12px">（已离开）</span>'}</span><span class="net-score">→</span></div>${l.note?`<div style="text-indent:2em;font-size:12px;color:var(--text-muted);margin-top:2px;line-height:1.5">${escapeHtml(l.note)}</div>`:''}</div>`).join('')}</div>`;
   h += followupsHtml(p);
   h += timelineHtml(p);
-  if (p.note) h += infoRow('备注', p.note);
   h += detailFooter('person', p.id);
   return h;
 }
@@ -9714,7 +9711,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260826a';
+  b.textContent = 'build 20260826b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
