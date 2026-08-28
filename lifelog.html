@@ -1466,7 +1466,10 @@ tbody tr:hover{background:var(--surface-hover)}
 
       <div class="card" id="dailyHighlightCard" style="margin-bottom:16px">
         <div class="card-body" style="padding:14px 16px">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">📖 随机划线</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:12px;color:var(--text-muted)">📖 随机划线</div>
+            <button class="btn btn-ghost btn-sm" onclick="nextHighlight()">下一条 →</button>
+          </div>
           <div id="dailyHighlightText" style="font-size:14px;line-height:1.7"></div>
           <div id="dailyHighlightBook" style="font-size:12px;color:var(--text-muted);margin-top:10px"></div>
         </div>
@@ -2522,8 +2525,15 @@ function getCurrentHighlight() {
 // 本次打开页面显示的笔记（初始化时取一次 + 推进游标，刷新/下次打开才换下一条）
 let _dailyHighlight = null;
 function initDailyHighlight() {
-  _dailyHighlight = getCurrentHighlight();
-  if (_dailyHighlight) advanceHlCursor();
+  nextHighlight();
+}
+// 取当前游标处笔记并推进游标、渲染（"下一条"按钮与初始化共用）
+function nextHighlight() {
+  const h = getCurrentHighlight();
+  if (!h) return;
+  advanceHlCursor();
+  _dailyHighlight = h;
+  renderDailyHighlight();
 }
 function renderDailyHighlight() {
   const card = document.getElementById('dailyHighlightCard');
@@ -9827,7 +9837,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260828a';
+  b.textContent = 'build 20260828b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
