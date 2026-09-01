@@ -6557,6 +6557,55 @@ const STATUS_MAP = {
   abandoned: { icon: '🚫', label: '弃了' }
 };
 
+// 影音卡片时间显示（单值类型用 date，范围类型用 dateStart~dateEnd）
+function mediaDateDisplay(m) {
+  const isRange = (m.type === 'tv' || m.type === 'book');
+  if (!isRange) return m.date ? fmtDate(m.date) : '';
+  const start = m.dateStart || '';
+  const end = m.dateEnd || '';
+  if (!start && !end) return '';
+  if (!end || m.status === 'ongoing') return fmtDate(start) + ' ~ 至今';
+  return fmtDate(start) + ' ~ ' + fmtDate(end);
+}
+// 按时间从近到远（降序）：范围类型用 dateEnd，单值类型用 date
+function mediaSortTime(a, b) {
+  const da = a.dateEnd || a.date || a.dateStart || '';
+  const db = b.dateEnd || b.date || b.dateStart || '';
+  return db.localeCompare(da);
+}
+function mediaCardHtml(m) {
+  const t = MEDIA_TYPES[m.type] || MEDIA_TYPES.movie;
+  const s = STATUS_MAP[m.status] || STATUS_MAP.done;
+  const dateStr = mediaDateDisplay(m);
+  const statusCls = m.status==='done'?'badge-success':m.status==='ongoing'?'badge-info':m.status==='pending'?'badge-warning':'badge-muted';
+  return `
+      <div class="media-card">
+        ${m.cover
+          ? `<img class="media-card-cover" src="${m.cover}" referrerpolicy="no-referrer" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="media-card-bar" style="background:${t.color};display:none"></div>`
+          : `<div class="media-card-bar" style="background:${t.color}"></div>`}
+        <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+          <div class="media-card-body">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px">
+              <div style="display:flex;align-items:center;gap:4px;min-width:0">
+                <span style="font-size:13px;flex-shrink:0">${t.icon}</span>
+                <span style="font-weight:600;font-size:12px;line-height:1.3;word-break:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(m.title)}</span>
+              </div>
+              <span class="badge ${statusCls}" style="font-size:9px;white-space:nowrap;flex-shrink:0">${s.icon} ${s.label}</span>
+            </div>
+            ${dateStr ? `<div class="media-date-row">📅 ${dateStr}</div>` : ''}
+            ${m.notes ? `<div class="media-related">${escapeHtml(m.notes)}</div>` : ''}
+          </div>
+          <div class="media-card-foot">
+            <span class="media-type-chip" style="background:${t.color}15;color:${t.color}">${t.label}</span>
+            <div style="display:flex;gap:2px">
+              <button class="btn-icon" onclick="openMediaModal('${m.id}')" title="编辑" style="font-size:11px">✏️</button>
+              <button class="btn-icon" onclick="deleteMedia('${m.id}')" title="删除" style="font-size:11px">🗑️</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+}
+
 function renderMedia() {
   // ---- Stats bar ----
   const alive = mediaData.filter(m => !m._deleted);
@@ -6599,59 +6648,26 @@ function renderMedia() {
   }
 
   let filtered = mediaFilter === 'all' ? alive : alive.filter(m => m.type === mediaFilter);
-  // Sort: by completion date (newest first); range types use dateEnd, single types use date
-  filtered = filtered.slice().sort((a, b) => {
-    const da = a.dateEnd || a.date || a.dateStart || '';
-    const db = b.dateEnd || b.date || b.dateStart || '';
-    return db.localeCompare(da);
-  });
+  filtered = filtered.slice().sort(mediaSortTime);
 
-  function formatDateDisplay(m) {
-    const t = MEDIA_TYPES[m.type] || MEDIA_TYPES.movie;
-    const isRange = (m.type === 'tv' || m.type === 'book');
-    if (!isRange) {
-      return m.date ? fmtDate(m.date) : '';
-    }
-    // Range
-    const start = m.dateStart || '';
-    const end = m.dateEnd || '';
-    if (!start && !end) return '';
-    if (!end || m.status === 'ongoing') return fmtDate(start) + ' ~ 至今';
-    return fmtDate(start) + ' ~ ' + fmtDate(end);
+  if (mediaFilter === 'all') {
+    // 「全部」视图：按状态分组（待看/在看/看完/弃了），每组内按时间从近到远
+    const groups = [
+      { key: 'pending', label: '⏳ 待看' },
+      { key: 'ongoing', label: '▶️ 在看' },
+      { key: 'done', label: '✅ 看完' },
+      { key: 'abandoned', label: '🚫 弃了' }
+    ];
+    let html = '';
+    groups.forEach(g => {
+      const items = filtered.filter(m => m.status === g.key);
+      if (items.length === 0) return;
+      html += `<div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin:14px 0 8px">${g.label}（${items.length}）</div><div class="media-grid">${items.map(mediaCardHtml).join('')}</div>`;
+    });
+    wrap.innerHTML = html;
+  } else {
+    wrap.innerHTML = `<div class="media-grid">${filtered.map(mediaCardHtml).join('')}</div>`;
   }
-
-  wrap.innerHTML = `<div class="media-grid">${filtered.map(m => {
-    const t = MEDIA_TYPES[m.type] || MEDIA_TYPES.movie;
-    const s = STATUS_MAP[m.status] || STATUS_MAP.done;
-    const dateStr = formatDateDisplay(m);
-    const statusCls = m.status==='done'?'badge-success':m.status==='ongoing'?'badge-info':m.status==='pending'?'badge-warning':'badge-muted';
-    return `
-      <div class="media-card">
-        ${m.cover
-          ? `<img class="media-card-cover" src="${m.cover}" referrerpolicy="no-referrer" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display=''"><div class="media-card-bar" style="background:${t.color};display:none"></div>`
-          : `<div class="media-card-bar" style="background:${t.color}"></div>`}
-        <div style="flex:1;display:flex;flex-direction:column;min-width:0">
-          <div class="media-card-body">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px">
-              <div style="display:flex;align-items:center;gap:4px;min-width:0">
-                <span style="font-size:13px;flex-shrink:0">${t.icon}</span>
-                <span style="font-weight:600;font-size:12px;line-height:1.3;word-break:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(m.title)}</span>
-              </div>
-              <span class="badge ${statusCls}" style="font-size:9px;white-space:nowrap;flex-shrink:0">${s.icon} ${s.label}</span>
-            </div>
-            ${dateStr ? `<div class="media-date-row">📅 ${dateStr}</div>` : ''}
-            ${m.notes ? `<div class="media-related">${escapeHtml(m.notes)}</div>` : ''}
-          </div>
-          <div class="media-card-foot">
-            <span class="media-type-chip" style="background:${t.color}15;color:${t.color}">${t.label}</span>
-            <div style="display:flex;gap:2px">
-              <button class="btn-icon" onclick="openMediaModal('${m.id}')" title="编辑" style="font-size:11px">✏️</button>
-              <button class="btn-icon" onclick="deleteMedia('${m.id}')" title="删除" style="font-size:11px">🗑️</button>
-            </div>
-          </div>
-        </div>
-      </div>`;
-  }).join('')}</div>`;
 }
 
 function setMediaFilter(f) { mediaFilter = f; renderMedia(); }
@@ -6690,7 +6706,7 @@ function openMediaModal(id) {
   initCoverPasteDrop();
 }
 
-async function saveMedia() {
+function saveMedia() {
   const id = document.getElementById('mediaId').value;
   const title = document.getElementById('mediaTitle').value.trim();
   if (!title) { toast('请输入标题'); return; }
@@ -6698,14 +6714,6 @@ async function saveMedia() {
   const status = document.getElementById('mediaStatus').value;
   const notes = document.getElementById('mediaNotes').value.trim();
   let cover = document.getElementById('mediaCover').value || document.getElementById('mediaCoverUrl').value.trim() || '';
-
-  // If cover upload is still in flight, wait for it before saving
-  if (_coverUploadPromise) {
-    toast('封面保存中，请稍候…');
-    var uploaded = await _coverUploadPromise;
-    if (uploaded) cover = uploaded;
-    _coverUploadPromise = null;
-  }
 
   // Date: single or range based on type
   const isRange = (type === 'tv' || type === 'book');
@@ -6718,18 +6726,40 @@ async function saveMedia() {
   }
 
   const now = new Date().toISOString();
+  let savedId = id;
   if (id) {
     const idx = mediaData.findIndex(m => m.id === id);
     if (idx >= 0) {
       Object.assign(mediaData[idx], { type, title, date, dateStart, dateEnd, status, notes, cover, updatedAt: now, _pendingPush: true });
     }
   } else {
-    mediaData.push({ id: uid(), type, title, date, dateStart, dateEnd, status, notes, cover, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true });
+    savedId = uid();
+    mediaData.push({ id: savedId, type, title, date, dateStart, dateEnd, status, notes, cover, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true });
   }
+
+  // 立即保存 + 关闭 + 渲染（不等待封面上传，避免保存卡顿）
   saveMediaData();
   closeModal('mediaModal');
   renderMedia();
   toast(id ? '记录已更新 ✏️' : '记录已添加 ✅');
+
+  // 若封面仍在后台上传，完成后回填记录封面
+  if (_coverUploadPromise) {
+    const pending = _coverUploadPromise;
+    _coverUploadPromise = null;
+    pending.then(function(url) {
+      if (url) {
+        const rec = mediaData.find(function(x) { return x.id === savedId; });
+        if (rec) {
+          rec.cover = url;
+          rec.updatedAt = new Date().toISOString();
+          rec._pendingPush = true;
+          saveMediaData();
+          renderMedia();
+        }
+      }
+    }).catch(function() {});
+  }
 }
 
 function deleteMedia(id) {
@@ -9841,7 +9871,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260828c';
+  b.textContent = 'build 20260828d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
