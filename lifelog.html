@@ -6559,8 +6559,9 @@ const STATUS_MAP = {
 
 function renderMedia() {
   // ---- Stats bar ----
+  const alive = mediaData.filter(m => !m._deleted);
   const counts = { movie: 0, tv: 0, book: 0, show: 0 };
-  mediaData.forEach(m => { if (counts[m.type] != null) counts[m.type]++; });
+  alive.forEach(m => { if (counts[m.type] != null) counts[m.type]++; });
   const statCards = Object.entries(MEDIA_TYPES).map(([k, v]) =>
     `<div class="stat-card-mini" style="border-left:3px solid ${v.color}">
       <div style="font-size:11px;color:var(--text-muted)">${v.icon} ${v.label}</div>
@@ -6572,13 +6573,13 @@ function renderMedia() {
       ${statCards}
       <div class="stat-card-mini" style="border-left:3px solid var(--text)">
         <div style="font-size:11px;color:var(--text-muted)">📚 总计</div>
-        <div style="font-size:20px;font-weight:700;margin-top:2px">${mediaData.length}</div>
+        <div style="font-size:20px;font-weight:700;margin-top:2px">${alive.length}</div>
       </div>
     </div>`;
 
   // ---- Filter bar ----
   const filterBtns = [
-    `<button class="btn ${mediaFilter==='all'?'btn-primary':'btn-ghost'} btn-sm" onclick="setMediaFilter('all')">全部 ${mediaData.length}</button>`,
+    `<button class="btn ${mediaFilter==='all'?'btn-primary':'btn-ghost'} btn-sm" onclick="setMediaFilter('all')">全部 ${alive.length}</button>`,
     ...Object.entries(MEDIA_TYPES).map(([k, v]) =>
       `<button class="btn ${mediaFilter===k?'btn-primary':'btn-ghost'} btn-sm" onclick="setMediaFilter('${k}')">${v.icon} ${v.label} ${counts[k]}</button>`
     )
@@ -6587,7 +6588,7 @@ function renderMedia() {
 
   // ---- Card grid ----
   const wrap = document.getElementById('mediaGridWrap');
-  if (mediaData.length === 0) {
+  if (alive.length === 0) {
     wrap.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">🎬</div>
@@ -6597,7 +6598,7 @@ function renderMedia() {
     return;
   }
 
-  let filtered = mediaFilter === 'all' ? mediaData : mediaData.filter(m => m.type === mediaFilter);
+  let filtered = mediaFilter === 'all' ? alive : alive.filter(m => m.type === mediaFilter);
   // Sort: by completion date (newest first); range types use dateEnd, single types use date
   filtered = filtered.slice().sort((a, b) => {
     const da = a.dateEnd || a.date || a.dateStart || '';
@@ -6716,13 +6717,14 @@ async function saveMedia() {
     date = document.getElementById('mediaDate').value;
   }
 
+  const now = new Date().toISOString();
   if (id) {
     const idx = mediaData.findIndex(m => m.id === id);
     if (idx >= 0) {
-      Object.assign(mediaData[idx], { type, title, date, dateStart, dateEnd, status, notes, cover });
+      Object.assign(mediaData[idx], { type, title, date, dateStart, dateEnd, status, notes, cover, updatedAt: now, _pendingPush: true });
     }
   } else {
-    mediaData.push({ id: uid(), type, title, date, dateStart, dateEnd, status, notes, cover, createdAt: todayStr() });
+    mediaData.push({ id: uid(), type, title, date, dateStart, dateEnd, status, notes, cover, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true });
   }
   saveMediaData();
   closeModal('mediaModal');
@@ -6734,7 +6736,9 @@ function deleteMedia(id) {
   const m = mediaData.find(x => x.id === id);
   if (!m) return;
   if (!confirm(`确定删除「${m.title}」？`)) return;
-  mediaData = mediaData.filter(x => x.id !== id);
+  m._deleted = true;
+  m.updatedAt = new Date().toISOString();
+  m._pendingPush = true;
   saveMediaData();
   renderMedia();
   toast('已删除 🗑️');
@@ -9837,7 +9841,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260828b';
+  b.textContent = 'build 20260828c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
