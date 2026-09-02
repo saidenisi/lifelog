@@ -4335,12 +4335,13 @@ function saveSleep() {
   const notes = document.getElementById('sleepNotes').value;
   const duration = calcSleepDuration(bedtime, wakeTime);
   const quality = 3; // default, no longer user-input
+  const now = new Date().toISOString();
 
   if (id) {
     const idx = sleepData.findIndex(s => s.id === id);
-    if (idx >= 0) sleepData[idx] = {...sleepData[idx], date, bedtime, wakeTime, quality, notes, duration};
+    if (idx >= 0) sleepData[idx] = {...sleepData[idx], date, bedtime, wakeTime, quality, notes, duration, updatedAt: now, _pendingPush: true};
   } else {
-    sleepData.push({id:uid(), date, bedtime, wakeTime, quality, notes, duration});
+    sleepData.push({id:uid(), date, bedtime, wakeTime, quality, notes, duration, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
   }
   saveAll();
   closeModal('sleepModal');
@@ -4350,7 +4351,8 @@ function saveSleep() {
 
 function deleteSleep(id) {
   if (!confirm('确定删除这条记录？')) return;
-  sleepData = sleepData.filter(s => s.id !== id);
+  const r = sleepData.find(s => s.id === id);
+  if (r) { r._deleted = true; r.updatedAt = new Date().toISOString(); r._pendingPush = true; }
   saveAll();
   toast('记录已删除');
   renderSleep();
@@ -4358,8 +4360,9 @@ function deleteSleep(id) {
 
 function renderSleep() {
   // Stats
+  const alive = sleepData.filter(s => !s._deleted);
   const now = new Date();
-  const monthRecords = sleepData.filter(s => {
+  const monthRecords = alive.filter(s => {
     const d = new Date(s.date);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
@@ -4390,10 +4393,10 @@ function renderSleep() {
   const last7 = datesBack(7);
   const last14 = datesBack(14);
   const last21 = datesBack(21);
-  const allDates = [...new Set(sleepData.map(s => s.date))].sort();
+  const allDates = [...new Set(alive.map(s => s.date))].sort();
 
   function avgMetric(dates, metric) {
-    const recs = dates.map(d => sleepData.find(s => s.date === d)).filter(Boolean);
+    const recs = dates.map(d => alive.find(s => s.date === d)).filter(Boolean);
     if (!recs.length) return null;
     return recs.reduce((s, r) => s + metric(r), 0) / recs.length;
   }
@@ -4428,7 +4431,7 @@ function renderSleep() {
 
   // 最近7天每日
   last7.forEach(d => {
-    const rec = sleepData.find(s => s.date === d);
+    const rec = alive.find(s => s.date === d);
     durationData.push(rec ? rec.duration : null);
     bedtimeData.push(rec ? timeToDecimal(rec.bedtime, true) : null);
     wakeData.push(rec ? timeToDecimal(rec.wakeTime, false) : null);
@@ -4587,7 +4590,7 @@ function renderSleep() {
   });
 
   // Table
-  const sorted = [...sleepData].sort((a,b) => b.date.localeCompare(a.date));
+  const sorted = [...alive].sort((a,b) => b.date.localeCompare(a.date));
   if (sorted.length === 0) {
     document.getElementById('sleepTableWrap').innerHTML = `
       <div class="empty-state">
@@ -9871,7 +9874,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260828d';
+  b.textContent = 'build 20260828e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
