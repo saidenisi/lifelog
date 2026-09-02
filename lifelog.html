@@ -2859,8 +2859,36 @@ async function pullAllFromCloud() {
   setSyncStatus('拉取中...', 'syncing');
   var changed = false;
   var errors = 0;
+  var localMeta = getSyncMeta();
 
-  var settled = await Promise.allSettled(SYNC_KEYS.map(function(key) {
+  // 第一步：轻量拉取所有集合的 updated_at（几十字节），判断哪些集合有变化。
+  // 元数据拉取失败时退化为全量拉取（老行为），绝不因优化而漏掉同步。
+  var cloudMeta = {};  // id -> updated_at
+  var metaFailed = false;
+  try {
+    var metaArr = await withTimeout(
+      supabaseFetch('GET', '/rest/v1/lifelog_data?select=id,updated_at')
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
+      8000
+    );
+    (metaArr || []).forEach(function(row) { if (row && row.id) cloudMeta[row.id] = row.updated_at; });
+  } catch(e) {
+    metaFailed = true;
+    console.warn('[Sync] meta pull failed, fallback to full pull', e);
+  }
+
+  // 需要全量拉取的集合：云端存在 且（本地无缓存 或 云端 updated_at 与缓存不同）
+  var keysToPull = metaFailed
+    ? SYNC_KEYS.slice()
+    : SYNC_KEYS.filter(function(key) {
+        var cloudTs = cloudMeta[key];
+        if (cloudTs == null) return false;            // 云端没有该集合 → 无需拉
+        var localTs = localMeta[key];
+        return localTs == null || cloudTs !== localTs; // 首次 或 已变化
+      });
+
+  // 第二步：只对变化的集合做全量拉取 + 合并
+  var settled = await Promise.allSettled(keysToPull.map(function(key) {
     return withTimeout(
       supabaseFetch('GET', '/rest/v1/lifelog_data?id=eq.' + encodeURIComponent(key) + '&select=id,data')
         .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -2870,11 +2898,11 @@ async function pullAllFromCloud() {
   }));
 
   settled.forEach(function(r, i) {
-    var key = SYNC_KEYS[i];
+    var key = keysToPull[i];
     if (r.status === 'rejected') {
       errors++;
       console.warn('[Sync] pull timeout/failed', key, r.reason);
-      return;
+      return; // 不更新 localMeta，下一轮会重试
     }
     var resp = r.value;
     if (resp.error) {
@@ -2882,12 +2910,13 @@ async function pullAllFromCloud() {
       if (resp.error.code !== 'PGRST116') console.warn('[Sync] pull error', key, resp.error);
       return;
     }
-    if (!resp.data) return;
+    if (!resp.data) { if (cloudMeta[key] != null) localMeta[key] = cloudMeta[key]; return; }
 
     // rates is a single object
     if (key === 'rates') {
       exchangeRates = resp.data.data;
       DB.set('rates', exchangeRates);
+      if (cloudMeta[key] != null) localMeta[key] = cloudMeta[key];
       changed = true;
       return;
     }
@@ -2923,8 +2952,12 @@ async function pullAllFromCloud() {
       case 'hlState': hlStateData = merged; break;
     }
     DB.set(key, merged);
+    if (cloudMeta[key] != null) localMeta[key] = cloudMeta[key];
     changed = true;
   });
+
+  // 记录本次看到的云端时间戳（元数据拉取失败时不更新，避免写入伪造时间戳导致误判）
+  if (!metaFailed) setSyncMeta(localMeta);
 
   _pullErrors = errors;
   if (errors) {
@@ -3012,6 +3045,26 @@ function hasPendingRecords() {
   return false;
 }
 
+// 同步元数据缓存：记录每个集合上次从云端看到的 updated_at，用于「增量拉取」——
+// 每次只先拉几十字节的时间戳，判断哪个集合变了才拉全量。全量拉取正是之前烧光 5GB 流量的根因。
+function getSyncMeta() {
+  try { return JSON.parse(localStorage.getItem('lifelog_syncMeta') || '{}'); }
+  catch(e) { return {}; }
+}
+function setSyncMeta(meta) {
+  try { localStorage.setItem('lifelog_syncMeta', JSON.stringify(meta)); }
+  catch(e) { console.warn('[Sync] syncMeta 写入失败', e); }
+}
+
+// 该集合是否有「本地已改、需上传」的记录（用于增量推送：未变的集合不推，避免 bump 其 updated_at，
+// 否则下一轮 pull 会把全部集合误判为"已变化"、退化成全量拉取）
+function keyHasPending(key) {
+  if (key === 'rates') return true; // rates 是单个对象，体积小，始终推送
+  var v = DB.get(key);
+  if (!Array.isArray(v)) return true; // 非数组集合兜底：始终推送
+  return v.some(function(r) { return r && r._pendingPush; });
+}
+
 // Push all local data to cloud
 async function pushAllToCloud() {
   if (__RESCUE_MODE__) return;
@@ -3021,6 +3074,10 @@ async function pushAllToCloud() {
     var key = SYNC_KEYS[i];
     try {
       var localValue = key === 'rates' ? exchangeRates : DB.get(key);
+
+      // 增量推送：该集合没有任何本地改动（无 _pendingPush）时跳过，避免 bump 未变集合的 updated_at
+      //（否则下一轮 pull 会把全部集合误判为"已变化"、退化成全量拉取，重新烧流量）
+      if (!keyHasPending(key)) continue;
 
       // For array keys: pull cloud first, merge, then push (prevents delete-undo)
       if (key !== 'rates') {
@@ -6987,14 +7044,14 @@ async function migrateOldImages() {
   renderMedia();
 }
 
-// Backup reminder: warn if no backup in 14 days (web/desktop only, not mobile)
+// Backup reminder: warn if no backup in 7 days (web/desktop only, not mobile)
 function checkBackupReminder() {
   try {
     // Only show the backup reminder on web/desktop; skip on mobile
     if (window.innerWidth <= 768) return;
     var last = localStorage.getItem('lifelog_lastBackup');
     var now = Date.now();
-    var threshold = 14 * 24 * 3600 * 1000; // 14 days
+    var threshold = 7 * 24 * 3600 * 1000; // 7 days
     var days = 0;
     if (last) {
       days = Math.floor((now - new Date(last).getTime()) / (24 * 3600 * 1000));
@@ -9915,7 +9972,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260828g';
+  b.textContent = 'build 20260828h';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
