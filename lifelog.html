@@ -4200,11 +4200,12 @@ function saveFitness() {
   const notes = document.getElementById('fitNotes').value;
   const intensity = document.querySelector('#fitIntensity .intensity-btn.active')?.dataset.val || '中';
 
+  const now = new Date().toISOString();
   if (id) {
     const idx = fitnessData.findIndex(f => f.id === id);
-    if (idx >= 0) fitnessData[idx] = {...fitnessData[idx], date, type, duration, location, notes, intensity};
+    if (idx >= 0) fitnessData[idx] = {...fitnessData[idx], date, type, duration, location, notes, intensity, updatedAt: now, _pendingPush: true};
   } else {
-    fitnessData.push({id:uid(), date, type, duration, location, notes, intensity});
+    fitnessData.push({id:uid(), date, type, duration, location, notes, intensity, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
   }
   saveAll();
   closeModal('fitnessModal');
@@ -4214,7 +4215,8 @@ function saveFitness() {
 
 function deleteFitness(id) {
   if (!confirm('确定删除这条记录？')) return;
-  fitnessData = fitnessData.filter(f => f.id !== id);
+  const r = fitnessData.find(f => f.id === id);
+  if (r) { r._deleted = true; r.updatedAt = new Date().toISOString(); r._pendingPush = true; }
   saveAll();
   toast('记录已删除');
   renderFitness();
@@ -4222,8 +4224,9 @@ function deleteFitness(id) {
 
 function renderFitness() {
   // Stats
+  const alive = fitnessData.filter(f => !f._deleted);
   const now = new Date();
-  const monthRecords = fitnessData.filter(f => {
+  const monthRecords = alive.filter(f => {
     const d = new Date(f.date);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
@@ -4245,11 +4248,11 @@ function renderFitness() {
       datasets: [{
         label: '运动时长（分钟）',
         data: dates.map(d => {
-          const recs = fitnessData.filter(f => f.date === d);
+          const recs = alive.filter(f => f.date === d);
           return recs.reduce((s,r) => s+r.duration, 0);
         }),
         backgroundColor: dates.map((d,i) => {
-          const hasData = fitnessData.some(f => f.date === d);
+          const hasData = alive.some(f => f.date === d);
           return hasData ? colors.primary : colors.grid;
         }),
         borderRadius: 6,
@@ -4269,7 +4272,7 @@ function renderFitness() {
   });
 
   // Table
-  const sorted = [...fitnessData].sort((a,b) => b.date.localeCompare(a.date));
+  const sorted = [...alive].sort((a,b) => b.date.localeCompare(a.date));
   if (sorted.length === 0) {
     document.getElementById('fitnessTableWrap').innerHTML = `
       <div class="empty-state">
@@ -4740,7 +4743,8 @@ function saveMedication() {
     notes: document.getElementById('medNotes').value.trim(),
     images: currentMedImages.slice(),
     createdAt: prev ? (prev.createdAt || new Date().toISOString()) : new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    _pendingPush: true
   };
   if (id) {
     const idx = medicationsData.findIndex(x => x.id === id);
@@ -4762,26 +4766,27 @@ function deleteMedication(id) {
       supabaseClient.storage.from(STORAGE_BUCKET).remove([url.slice(STORAGE_PUBLIC_PREFIX.length)]).then(function(){});
     }
   });
-  medicationsData = medicationsData.filter(x => x.id !== id);
+  if (m) { m._deleted = true; m.updatedAt = new Date().toISOString(); m._pendingPush = true; }
   saveAll();
   renderMedications();
   toast('已删除');
 }
 
 function renderMedications() {
+  const alive = medicationsData.filter(m => !m._deleted);
   const stats = document.getElementById('medStats');
   if (stats) {
-    const active = medicationsData.filter(m => m.status !== '已停用').length;
-    const stopped = medicationsData.length - active;
-    stats.innerHTML = '<span class="hn-stat-num">'+medicationsData.length+'</span> 种 · 服用中 ' + active + ' · 已停用 ' + stopped;
+    const active = alive.filter(m => m.status !== '已停用').length;
+    const stopped = alive.length - active;
+    stats.innerHTML = '<span class="hn-stat-num">'+alive.length+'</span> 种 · 服用中 ' + active + ' · 已停用 ' + stopped;
   }
   const list = document.getElementById('medicationList');
   if (!list) return;
-  if (medicationsData.length === 0) {
+  if (alive.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">💊</div><p>还没有药品记录，添加你正在服用的药品/保健品吧</p><button class="btn btn-primary" onclick="openMedicationModal()">➕ 添加药品</button></div>';
     return;
   }
-  const sorted = [...medicationsData].sort((a,b) => (b.updatedAt||'').localeCompare(a.updatedAt||''));
+  const sorted = [...alive].sort((a,b) => (b.updatedAt||'').localeCompare(a.updatedAt||''));
   let html = '';
   sorted.forEach(m => {
     const isStopped = m.status === '已停用';
@@ -4869,7 +4874,8 @@ function saveHealthNote() {
     tags: tags,
     content: content,
     createdAt: prev ? (prev.createdAt || new Date().toISOString()) : new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    _pendingPush: true
   };
   if (id) {
     const idx = healthNotesData.findIndex(x => x.id === id);
@@ -4885,7 +4891,8 @@ function saveHealthNote() {
 
 function deleteHealthNote(id) {
   if (!confirm('确定删除这条健康理念？')) return;
-  healthNotesData = healthNotesData.filter(x => x.id !== id);
+  const r = healthNotesData.find(x => x.id === id);
+  if (r) { r._deleted = true; r.updatedAt = new Date().toISOString(); r._pendingPush = true; }
   saveAll();
   renderHealthNotes();
   toast('已删除');
@@ -4897,18 +4904,19 @@ function setHnFilter(key) {
 }
 
 function renderHealthNotes() {
+  const alive = healthNotesData.filter(n => !n._deleted);
   const filters = document.getElementById('healthNoteFilters');
   if (filters) {
-    let fhtml = '<span class="hn-chip'+(hnFilter==='all'?' active':'')+'" onclick="setHnFilter(\'all\')">全部 '+healthNotesData.length+'</span>';
+    let fhtml = '<span class="hn-chip'+(hnFilter==='all'?' active':'')+'" onclick="setHnFilter(\'all\')">全部 '+alive.length+'</span>';
     HN_CATEGORIES.forEach(function(c) {
-      const cnt = healthNotesData.filter(n => n.category === c.key).length;
+      const cnt = alive.filter(n => n.category === c.key).length;
       fhtml += '<span class="hn-chip'+(hnFilter===c.key?' active':'')+'" onclick="setHnFilter(\''+c.key+'\')">'+c.label+' '+cnt+'</span>';
     });
     filters.innerHTML = fhtml;
   }
   const list = document.getElementById('healthNoteList');
   if (!list) return;
-  const filtered = healthNotesData.filter(n => hnFilter === 'all' || n.category === hnFilter);
+  const filtered = alive.filter(n => hnFilter === 'all' || n.category === hnFilter);
   if (filtered.length === 0) {
     list.innerHTML = '<div class="empty-state"><div class="empty-icon">💡</div><p>还没有健康理念，收藏你的健康知识吧</p><button class="btn btn-primary" onclick="openHealthNoteModal()">➕ 添加</button></div>';
     return;
@@ -5622,6 +5630,9 @@ function saveAccount() {
     const acc = id ? accountData.find(a => a.id === id) : accountData[accountData.length - 1];
     if (acc) upsertInvestSnapshot(acc);
   }
+  // 标记刚保存的账户为待同步（编辑/新增都打 updatedAt + _pendingPush，防止 pull 时被云端旧数据覆盖）
+  const savedAcc = id ? accountData.find(a => a.id === id) : accountData[accountData.length - 1];
+  if (savedAcc) { savedAcc.updatedAt = new Date().toISOString(); savedAcc._pendingPush = true; }
   saveAccounts();
   closeModal('accountModal');
   toast('账户已保存 🏦');
@@ -9854,15 +9865,15 @@ function showRescueBanner() {
       var active = document.querySelector('.page.active');
       var pageId = active ? active.id.replace('page-', '') : 'daily';
       if (typeof renderPage === 'function') renderPage(pageId);
-      // After first pull, start realtime subscription（SDK 可用才生效）
-      subscribeRealtime();
+      // 实时订阅已关闭（省流量，避免烧光免费版 egress）；改用定时拉取 + 切回页面拉取
+      // subscribeRealtime();
     });
   }, 300);
 })();
-// 定时自动拉取（每 60s）+ 切回页面时立即拉取：保证打开的设备持续同步到其它端的改动，
-// 不依赖实时订阅（SDK 可能加载失败）。满足"两边必须同步"。
+// 定时自动拉取（每 5 分钟）+ 切回页面时立即拉取：保证打开的设备持续同步到其它端的改动，
+// 不依赖实时订阅（已关闭以省流量）。之前 60s 太频繁，烧光了免费版 5GB egress。
 if (!__RESCUE_MODE__) {
-  setInterval(function() { pullAllFromCloud(); }, 60000);
+  setInterval(function() { pullAllFromCloud(); }, 300000);
   document.addEventListener('visibilitychange', function() {
     if (!document.hidden) pullAllFromCloud();
   });
@@ -9874,7 +9885,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260828e';
+  b.textContent = 'build 20260828f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
