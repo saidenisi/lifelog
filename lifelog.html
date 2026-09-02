@@ -2723,7 +2723,7 @@ stockData = stockData.map(s => {
 });
 let stockQuotes = {}; // runtime cache: {stockId: {price, tp:{daily,m120,m60,m30}, signal, name, error, ts}}
 
-function saveStocks() { DB.set('stock', stockData); }
+function saveStocks() { DB.set('stock', stockData); scheduleCloudPush(); }
 
 // ===== Stock account linkage =====
 let activeStockAccountId = 'all'; // 'all' = show every account's stocks
@@ -2940,6 +2940,12 @@ async function pullAllFromCloud() {
   } else {
     setSyncStatus('在线', 'online');
   }
+
+  // 拉取成功后，若本地仍有「未同步到云端」的改动（如云端此前被限流/离线期间累积的编辑），
+  // 立即自动补推，保证「云端一恢复，本地改动就自动上传」，不依赖用户再编辑一次或手动点同步。
+  if (errors === 0 && hasPendingRecords()) {
+    setTimeout(pushAllToCloud, 0);
+  }
 }
 
 // Merge two record arrays. Strategy:
@@ -2994,6 +3000,17 @@ function mergeRecords(cloudArr, localArr, mode) {
 
 // 标记某条记录为「本地有未同步改动」（在保存点调用，确保即使尚未 push 也不被 pull 丢弃）
 function markPending(rec) { if (rec && !rec._pendingPush) rec._pendingPush = true; }
+
+// 是否还有「本地已改、尚未同步到云端」的记录（存在 _pendingPush 标记）。
+// 用于云端恢复后自动补推：拉取成功后若仍有 pending 记录，立即把它们推上去。
+function hasPendingRecords() {
+  for (var i = 0; i < SYNC_KEYS.length; i++) {
+    if (SYNC_KEYS[i] === 'rates') continue;
+    var v = DB.get(SYNC_KEYS[i]);
+    if (Array.isArray(v) && v.some(function(r) { return r && r._pendingPush; })) return true;
+  }
+  return false;
+}
 
 // Push all local data to cloud
 async function pushAllToCloud() {
@@ -3619,7 +3636,8 @@ function saveNetProject() {
 function deleteNetProject(id) {
   const p = projectsData.find(x=>x.id===id);
   if (!confirm('删除项目「'+(p?p.name:'')+'」？')) return;
-  projectsData = projectsData.filter(x=>x.id!==id);
+  // 墓碑删除（而非 filter 硬删）：硬删会导致 push 时云端旧记录复活
+  if (p) { p._deleted = true; p.updatedAt = new Date().toISOString(); p._pendingPush = true; }
   saveProjects(); closeModal('netDetailModal'); renderNetProjects();
 }
 
@@ -3722,7 +3740,8 @@ function saveNetPerson() {
 function deleteNetPerson(id) {
   const p = personsData.find(x=>x.id===id);
   if (!confirm('删除人脉「'+(p?p.name:'')+'」？')) return;
-  personsData = personsData.filter(x=>x.id!==id);
+  // 墓碑删除（而非 filter 硬删）：硬删会导致 push 时云端旧记录复活
+  if (p) { p._deleted = true; p.updatedAt = new Date().toISOString(); p._pendingPush = true; }
   projectsData.forEach(pr => {
     if (pr.members && pr.members.some(m => m.personId === id)) {
       pr.members = pr.members.filter(m => m.personId !== id);
@@ -5643,6 +5662,8 @@ function deleteAccount(id) {
   const acc = accountData.find(a => a.id === id);
   if (!confirm(`确定删除账户「${acc?.name}」及其所有余额记录？`)) return;
   acc._deleted = true;
+  acc.updatedAt = new Date().toISOString();
+  acc._pendingPush = true;
   saveAccounts();
   toast('账户已删除');
   renderAccounts();
@@ -7283,6 +7304,7 @@ function saveDailyNote() {
     if (existing) {
       existing._deleted = true;
       existing.updatedAt = new Date().toISOString();
+      existing._pendingPush = true;
       saveDailyNotes();
       saveAll();
       if (tip) { tip.textContent = '已清空该日记录'; }
@@ -8466,6 +8488,7 @@ function autoPostponeOverdueTodos() {
       t.date = fmtDateFull(new Date(new Date(t.date + 'T00:00:00').getTime() + weekMs));
     }
     t.updatedAt = new Date().toISOString();
+    t._pendingPush = true;
     count++;
   });
 
@@ -8481,6 +8504,7 @@ function deleteTodo(id) {
   if (!t) return;
   t._deleted = true;
   t.updatedAt = new Date().toISOString();
+  t._pendingPush = true;
   saveTodos();
   saveAll();
   renderTodos();
@@ -8842,6 +8866,7 @@ function confirmSellLot(stockId, periodKey) {
   stock.trades.unshift({ id: uid(), side: 'sell', period: periodKey, label: p.label, qty: qty, price: sellPrice, cost: cost, pnl: pnl, date: todayStr() });
   stock.quantity = lotHeldQty(stock);
   stock.updatedAt = new Date().toISOString();
+  stock._pendingPush = true;
   saveStocks();
   saveAll();
   renderStocks();
@@ -8863,6 +8888,7 @@ function reopenLot(stockId, periodKey) {
   lot.soldDate = null;
   stock.quantity = lotHeldQty(stock);
   stock.updatedAt = new Date().toISOString();
+  stock._pendingPush = true;
   saveStocks();
   saveAll();
   renderStocks();
@@ -8908,6 +8934,7 @@ function confirmBuyLot(stockId, periodKey) {
   stock.trades.unshift({ id: uid(), side: 'buy', period: periodKey, label: p.label, qty: qty, price: buyPrice, cost: buyPrice, pnl: 0, date: todayStr() });
   stock.quantity = lotHeldQty(stock);
   stock.updatedAt = new Date().toISOString();
+  stock._pendingPush = true;
   saveStocks();
   saveAll();
   renderStocks();
@@ -8948,6 +8975,7 @@ function confirmOpenPosition(stockId) {
   stock.buyDate = todayStr();
   stock.trades.unshift({ id: uid(), side: 'buy', period: 'all', label: '建仓', qty: totalQty, price: buyPrice, cost: buyPrice, pnl: 0, date: todayStr() });
   stock.updatedAt = new Date().toISOString();
+  stock._pendingPush = true;
   saveStocks();
   saveAll();
   renderStocks();
@@ -9753,6 +9781,7 @@ function saveStock() {
       stockData[idx].accountId = accountId;
       stockData[idx].note = note;
       stockData[idx].updatedAt = new Date().toISOString();
+      stockData[idx]._pendingPush = true;
     }
   } else {
     const newStock = {
@@ -9764,7 +9793,8 @@ function saveStock() {
       manualPrice: (manualPrice && manualPrice > 0) ? manualPrice : null,
       accountId,
       createdAt: todayStr(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      _pendingPush: true
     };
     stockData.push(newStock);
   }
@@ -9787,7 +9817,7 @@ function saveStock() {
 function deleteStock(id) {
   if (!confirm('确定删除这只股票？')) return;
   const s = stockData.find(x => x.id === id);
-  if (s) s._deleted = true;
+  if (s) { s._deleted = true; s.updatedAt = new Date().toISOString(); s._pendingPush = true; }
   delete stockQuotes[id];
   saveStocks();
   renderStocks();
@@ -9885,7 +9915,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260828f';
+  b.textContent = 'build 20260828g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
