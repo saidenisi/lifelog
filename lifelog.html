@@ -2770,8 +2770,8 @@ function saveAll() {
 }
 
 // ===== Cloud Sync (Supabase) =====
-const SUPABASE_URL = 'https://byxqubrxnwqxgxqvlgey.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_tGMDLTgbWcq0yy4yKOO_Zg_wsgnalLS';
+const SUPABASE_URL = 'https://naazilvdmqsbwtlhlhkk.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_qgdOr6NGtOkYTlCf0X2vZQ_tXfsbFco';
 const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock', 'media', 'dailyNotes', 'todos', 'projects', 'persons', 'memos', 'hlState'];
 let supabaseClient = null;
 let _pullErrors = 0; // 记录最近一次拉取失败条数，供实时订阅状态判断，避免错误状态被覆盖
@@ -7483,7 +7483,7 @@ function renderCalendar() {
 
 // --- Images (stored in Supabase Storage) ---
 const STORAGE_BUCKET = 'saidenisi';
-const STORAGE_PUBLIC_PREFIX = 'https://byxqubrxnwqxgxqvlgey.supabase.co/storage/v1/object/public/saidenisi/';
+const STORAGE_PUBLIC_PREFIX = 'https://naazilvdmqsbwtlhlhkk.supabase.co/storage/v1/object/public/saidenisi/';
 
 function triggerImageUpload() {
   var input = document.getElementById('dailyImageInput');
@@ -9972,7 +9972,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260828h';
+  b.textContent = 'build 20260902a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
