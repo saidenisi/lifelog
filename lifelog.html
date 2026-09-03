@@ -9162,7 +9162,7 @@ function renderTodoBars() {
       var top = sc.offsetTop + 33 + lane * 19;
       var width = ec.offsetLeft + ec.offsetWidth - sc.offsetLeft;
       var style = 'left:'+left+'px;top:'+top+'px;width:'+width+'px;background:'+color+';color:#fff';
-      if (t.done) style += ';opacity:.6;text-decoration:line-through';
+      if (t.done) style += ';background:var(--surface-hover)!important;color:var(--text-muted)!important;text-decoration:line-through';
       html += '<div class="todo-bar" style="'+style+'">'+(t.done?'✓ ':'')+escapeHtml(t.content)+'</div>';
     });
   });
@@ -10831,7 +10831,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260903b';
+  b.textContent = 'build 20260903c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
