@@ -1958,10 +1958,17 @@ tbody tr:hover{background:var(--surface-hover)}
 .net-tag{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--primary-bg);color:var(--primary)}
 .net-tag.gray{background:var(--border-light);color:var(--text-secondary)}
 .net-sub{font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.5}
-.net-person-row{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border-light);cursor:pointer;transition:background .15s}
-.net-person-row:hover{background:var(--surface-hover)}
-.net-person-row .net-name{font-weight:600;font-size:14px}
-.net-person-row .net-sub{font-size:12px;color:var(--text-muted);margin:0}
+.net-person-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.net-person-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.net-person-head .net-name{font-weight:700;font-size:15px}
+.net-person-head .net-sub{font-size:12px;color:var(--text-muted);margin:0}
+.person-proj-list{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border-light)}
+.person-proj-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:3px 0;font-size:12px}
+.pp-name{font-weight:500;cursor:pointer}
+.pp-name:hover{color:var(--primary)}
+.pp-note{color:var(--text-muted);flex-basis:100%;padding-left:10px}
+.pin-btn{background:none;border:none;cursor:pointer;font-size:15px;opacity:.35;padding:2px;line-height:1}
+.pin-btn.pinned{opacity:1}
 .member-contrib{width:100%;margin-top:4px;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;background:var(--surface)}
 .net-match{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:10px}
 .net-match h4{font-size:13px;font-weight:600;margin:0 0 6px}
@@ -4284,21 +4291,49 @@ function renderNetGroupFilters() {
 function setNetGroupFilter(g) { netGroupFilter = g; renderNetGroupFilters(); renderNetPersons(); }
 function renderNetPersons() {
   const list = document.getElementById('netPersonList');
-  const items = personsData.filter(p => !p._deleted).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+  const items = personsData.filter(p => !p._deleted).sort((a,b) => {
+    const pa = a.pinned ? 1 : 0, pb = b.pinned ? 1 : 0;
+    if (pa !== pb) return pb - pa; // 置顶的在前
+    return (b.updatedAt||'').localeCompare(a.updatedAt||'');
+  });
   if (!items.length) { list.innerHTML = netEmptyHtml('👤','还没有人脉，点击「添加人脉」开始', 'openNetPerson()'); return; }
   list.innerHTML = items.map(personCardHtml).join('');
 }
 function personCardHtml(p) {
   const due = dueFollowupCount(p);
-  const projCount = personProjectCount(p.id);
-  return `<div class="net-person-row" onclick="openNetDetail('person','${p.id}')">
-    <span class="net-name">${escapeHtml(p.name)}</span>
-    ${p.identity ? `<span class="net-sub">${escapeHtml(p.identity)}</span>` : ''}
-    <span style="flex:1"></span>
-    ${projCount>0?`<span class="badge badge-info">📁 ${projCount}项目</span>`:''}
-    ${due>0?`<span class="badge badge-danger">🔔 ${due}</span>`:''}
-    <span class="net-score">→</span>
+  const linked = projectsData.filter(pr=>!pr._deleted && (pr.members||[]).some(mm=>mm.personId===p.id)).map(pr => {
+    const mm = (pr.members||[]).find(x=>x.personId===p.id);
+    return {pr, active: !mm || mm.active !== false, note: (mm&&mm.note)||''};
+  });
+  const projHtml = linked.map(l => {
+    const statusBadge = l.pr.status==='进行中' ? 'badge-success' : l.pr.status==='已完成' ? 'badge-muted' : l.pr.status==='已暂停' ? 'badge-warning' : 'badge-info';
+    return `<div class="person-proj-row">
+      <span class="pp-name" onclick="openNetDetail('project','${l.pr.id}')">${escapeHtml(l.pr.name)}${l.active?'':' <span style="color:var(--text-muted);font-size:11px">（已离开）</span>'}</span>
+      ${l.pr.status?`<span class="badge ${statusBadge}">${escapeHtml(l.pr.status)}</span>`:''}
+      ${l.note?`<span class="pp-note">${escapeHtml(l.note)}</span>`:''}
+    </div>`;
+  }).join('');
+  return `<div class="net-person-card">
+    <div class="net-person-head">
+      <span class="net-name">${escapeHtml(p.name)}</span>
+      ${p.identity ? `<span class="net-sub">${escapeHtml(p.identity)}</span>` : ''}
+      <span style="flex:1"></span>
+      ${due>0?`<span class="badge badge-danger">🔔 ${due}</span>`:''}
+      <button class="pin-btn${p.pinned?' pinned':''}" onclick="togglePinPerson('${p.id}')" title="${p.pinned?'取消置顶':'置顶'}">📌</button>
+      <button class="btn-icon" onclick="openNetPerson('${p.id}')" title="编辑">✏️</button>
+    </div>
+    ${projHtml ? `<div class="person-proj-list">${projHtml}</div>` : '<div class="net-empty" style="padding:4px 0">暂无参与项目</div>'}
   </div>`;
+}
+function togglePinPerson(id) {
+  const p = personsData.find(x=>x.id===id);
+  if (!p) return;
+  p.pinned = !p.pinned;
+  p.updatedAt = new Date().toISOString();
+  markPending(p);
+  savePersons();
+  renderNetPersons();
+  toast(p.pinned ? '已置顶' : '已取消置顶');
 }
 
 // ---- 匹配中心 ----
@@ -4800,11 +4835,11 @@ function removeProjectMember(personId) {
   const p = netDetailRecord(); if (!p) return;
   if (!(p.members||[]).some(x => x.personId === personId)) return;
   const per = personsData.find(x=>x.id===personId);
-  if (!confirm('从项目中移除「'+(per?per.name:'')+'」？')) return;
   p.members = p.members.filter(x => x.personId !== personId);
   markPending(p);
   saveProjects();
   openNetDetail('project', p.id);
+  toast('已移除「'+(per?per.name:'')+'」');
 }
 function showProjectMemberAdd() {
   const area = document.getElementById('projectMemberAddArea');
@@ -10931,7 +10966,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260904a';
+  b.textContent = 'build 20260904b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
