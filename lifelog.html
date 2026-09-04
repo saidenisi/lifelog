@@ -9471,6 +9471,7 @@ function collapseTodoExpand() {
 // 点任意空白处（不在展开面板内、也不在日期格子上）→ 收起面板回到月视图
 document.addEventListener('click', function(e) {
   if (!todosExpanded) return;
+  if (todoInputActive || editingTodoId) return; // 正在添加/编辑时，点空白不收起（避免误触）
   var t = e.target;
   if (t && t.closest && (t.closest('.todo-expand-overlay') || t.closest('.todo-cal-cell') || t.closest('.todo-expand'))) return;
   collapseTodoExpand();
@@ -11108,7 +11109,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260904e';
+  b.textContent = 'build 20260904f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
