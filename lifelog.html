@@ -2596,13 +2596,24 @@ tbody tr:hover{background:var(--surface-hover)}
         <input type="text" class="form-input" id="netProjectIntro" placeholder="项目是做什么的">
       </div>
       <div class="form-group">
-        <label class="form-label">参与的人（选人 + 项目备注）</label>
+        <label class="form-label">参与的人</label>
         <div id="netProjectMembers"></div>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="addMemberRow()">➕ 添加成员</button>
+        <div style="position:relative;margin-top:6px">
+          <input type="text" id="netProjectMemberSearch" placeholder="＋ 输入姓名添加（搜索或直接新建）" autocomplete="off" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box" oninput="netProjectMemberSearch(this.value)" onfocus="netProjectMemberSearch(this.value)">
+          <div id="netProjectMemberPick" style="position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:30;display:none;max-height:220px;overflow:auto"></div>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">备注</label>
         <textarea class="form-textarea" id="netProjectNote" placeholder="项目情况、关键信息…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">跟进提醒</label>
+        <div id="netProjectFollowups"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">时间线 / 记录</label>
+        <div id="netProjectTimeline"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -4267,7 +4278,7 @@ function projectCardHtml(p) {
   const statusBadge = p.status === '进行中' ? 'badge-success' : p.status === '已完成' ? 'badge-muted' : p.status === '已暂停' ? 'badge-warning' : 'badge-info';
   const due = dueFollowupCount(p);
   const memCount = projectMemberCount(p);
-  return `<div class="net-card" onclick="openNetDetail('project','${p.id}')">
+  return `<div class="net-card" onclick="openNetProject('${p.id}')">
     <div class="net-head">
       <span class="net-name">${escapeHtml(p.name)}</span>
       ${p.status ? `<span class="badge ${statusBadge}">${p.status}</span>` : ''}
@@ -4308,7 +4319,7 @@ function personCardHtml(p) {
   const projHtml = linked.map(l => {
     const statusBadge = l.pr.status==='进行中' ? 'badge-success' : l.pr.status==='已完成' ? 'badge-muted' : l.pr.status==='已暂停' ? 'badge-warning' : 'badge-info';
     return `<div class="person-proj-row">
-      <span class="pp-name" onclick="openNetDetail('project','${l.pr.id}')">${escapeHtml(l.pr.name)}${l.active?'':' <span style="color:var(--text-muted);font-size:11px">（已离开）</span>'}</span>
+      <span class="pp-name" onclick="openNetProject('${l.pr.id}')">${escapeHtml(l.pr.name)}${l.active?'':' <span style="color:var(--text-muted);font-size:11px">（已离开）</span>'}</span>
       ${l.pr.status?`<span class="badge ${statusBadge}">${escapeHtml(l.pr.status)}</span>`:''}
       ${l.note?`<span class="pp-note">${escapeHtml(l.note)}</span>`:''}
     </div>`;
@@ -4459,6 +4470,8 @@ function openNetProject(id) {
     _tmpMembers = [];
   }
   renderMemberRows();
+  renderEditFollowups();
+  renderEditTimeline();
   renderNetDatalists();
   document.getElementById('netProjectModal').classList.add('active');
 }
@@ -4473,20 +4486,55 @@ function renderMemberRows() {
   if (!c) return;
   c.innerHTML = _tmpMembers.map((m, i) => {
     const per = personsData.find(p => p.id === m.personId);
-    return `<div class="member-row">
-      <div class="member-pick">
-        <input type="text" class="member-name" value="${escapeHtml(per ? per.name : '')}" placeholder="输入姓名或拼音首字母" autocomplete="off"
-          onfocus="openMemberPick(${i}, this)" oninput="memberPickInput(${i}, this)" onblur="memberPickBlur()">
-        <input type="hidden" class="member-id" value="${m.personId||''}">
-      </div>
-      <input type="text" class="member-note" placeholder="贡献/作用（如：资金方、介绍资源…）" value="${escapeHtml(memberNoteText(m))}" style="flex:1;min-width:0">
-      <label style="flex:0 0 auto;display:flex;align-items:center;gap:3px;font-size:12px;white-space:nowrap"><input type="checkbox" class="member-active" ${m.active!==false?'checked':''} style="flex:0 0 auto;width:auto;margin:0"> 活跃</label>
-      <button type="button" class="btn-icon" onclick="removeMemberRow(${i})" style="flex:0 0 auto">✕</button>
+    if (!per) return '';
+    return `<div class="member-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-light)">
+      <span class="member-name" style="flex:0 0 auto;font-size:13px;font-weight:500">${escapeHtml(per.name)}</span>
+      <input type="text" class="member-note" placeholder="贡献/作用" value="${escapeHtml(m.note||'')}" oninput="_tmpMembers[${i}].note=this.value" style="flex:1;min-width:0;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:6px">
+      <button type="button" class="btn-icon" onclick="_tmpMembers.splice(${i},1);renderMemberRows()" style="flex:0 0 auto" title="移除">✕</button>
     </div>`;
   }).join('');
 }
-function addMemberRow() { _tmpMembers.push({personId:'', role:'', active:true, note:''}); renderMemberRows(); }
-function removeMemberRow(i) { _tmpMembers.splice(i,1); renderMemberRows(); }
+function hideNetProjectMemberPick() { const d = document.getElementById('netProjectMemberPick'); if (d) d.style.display = 'none'; }
+function netProjectMemberSearch(q) {
+  const d = document.getElementById('netProjectMemberPick');
+  if (!d) return;
+  const items = filterMembers(q);
+  const trimmed = (q||'').trim();
+  const exactExists = trimmed && personsData.some(p => !p._deleted && p.name === trimmed);
+  let html = items.map(it =>
+    `<div class="opt" onmousedown="pickNetProjectMember('${it.person.id}')"><span>${escapeHtml(it.person.name)}</span><span class="id">${escapeHtml(it.person.identity||'')}</span></div>`
+  ).join('');
+  if (trimmed && !exactExists) {
+    html += `<div class="opt create" onmousedown="createNetProjectMember()"><span style="color:var(--primary);font-weight:600">＋ 新建「${escapeHtml(trimmed)}」</span></div>`;
+  }
+  d.innerHTML = html || '<div class="opt" style="color:var(--text-muted)">无匹配，直接输入新名字可新建</div>';
+  d.style.display = 'block';
+}
+function pickNetProjectMember(pid) {
+  if (_tmpMembers.some(m => m.personId === pid)) { toast('该人已在项目中'); hideNetProjectMemberPick(); return; }
+  _tmpMembers.push({personId: pid, active: true, note: ''});
+  renderMemberRows();
+  const inp = document.getElementById('netProjectMemberSearch');
+  if (inp) inp.value = '';
+  hideNetProjectMemberPick();
+}
+function createNetProjectMember() {
+  const inp = document.getElementById('netProjectMemberSearch');
+  const name = (inp ? inp.value : '').trim();
+  if (!name) return;
+  let per = personsData.find(x => !x._deleted && x.name === name);
+  if (!per) {
+    const now = new Date().toISOString();
+    per = {id: uid(), name, identity: '', groups: [], abilityTags: [], needTags: [], followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true};
+    personsData.push(per);
+    savePersons();
+  }
+  if (_tmpMembers.some(m => m.personId === per.id)) { toast('该人已在项目中'); hideNetProjectMemberPick(); return; }
+  _tmpMembers.push({personId: per.id, active: true, note: ''});
+  renderMemberRows();
+  if (inp) inp.value = '';
+  hideNetProjectMemberPick();
+}
 
 // ---- 成员可搜索下拉 + 拼音首字母 ----
 const PY_GROUPS = {
@@ -4572,18 +4620,9 @@ function saveNetProject() {
   const status = document.getElementById('netProjectStatus').value;
   const intro = document.getElementById('netProjectIntro').value.trim();
   const note = document.getElementById('netProjectNote').value;
-  const members = [];
-  document.querySelectorAll('#netProjectMembers .member-row').forEach(row => {
-    const idInput = row.querySelector('.member-id');
-    const activeInput = row.querySelector('.member-active');
-    const noteInput = row.querySelector('.member-note');
-    const pid = idInput ? idInput.value : '';
-    if (pid) members.push({
-      personId: pid,
-      active: activeInput ? activeInput.checked : true,
-      note: noteInput ? noteInput.value.trim() : ''
-    });
-  });
+  const members = _tmpMembers
+    .filter(m => m.personId)
+    .map(m => ({personId: m.personId, active: m.active !== false, note: (m.note||'').trim()}));
   const now = new Date().toISOString();
   if (id) {
     const idx = projectsData.findIndex(x=>x.id===id);
@@ -4595,7 +4634,87 @@ function saveNetProject() {
   closeModal('netProjectModal');
   collectNetTags(); renderNetDatalists();
   renderNetProjects();
+  renderNetPersons();
   toast('项目已保存');
+}
+// ---- 项目表单内的「跟进提醒」与「时间线」（编辑已有项目时可操作，新建时提示先保存）----
+function _editProjectRecord() {
+  const id = document.getElementById('netProjectId').value;
+  if (!id) return null;
+  return projectsData.find(x => x.id === id);
+}
+function renderEditFollowups() {
+  const c = document.getElementById('netProjectFollowups');
+  if (!c) return;
+  const p = _editProjectRecord();
+  if (!p) { c.innerHTML = '<div class="net-empty" style="font-size:12px">保存项目后可添加跟进提醒</div>'; return; }
+  const list = (p.followUps||[]);
+  const items = list.map(f => {
+    const due = !f.done && f.date && f.date <= todayStr();
+    return `<div class="net-follow ${f.done?'done':''} ${due?'due':''}">
+      <input type="checkbox" ${f.done?'checked':''} onchange="toggleEditFollowup('${f.id}')">
+      <span class="txt">${f.date?f.date+' ':''}${escapeHtml(f.text)}${due?'（到期）':''}</span>
+      <button class="btn-icon" onclick="deleteEditFollowup('${f.id}')">🗑️</button>
+    </div>`;
+  }).join('');
+  c.innerHTML = items || '<div class="net-empty">暂无跟进</div>';
+  c.innerHTML += `<div style="display:flex;gap:6px;margin-top:6px">
+    <input type="date" class="form-input" id="netFollowDateEdit" value="${todayStr()}" style="flex:0 0 132px">
+    <input type="text" class="form-input" id="netFollowTextEdit" placeholder="跟进什么…" style="flex:1">
+    <button class="btn btn-primary btn-sm" onclick="addEditFollowup()">加</button>
+  </div>`;
+}
+function addEditFollowup() {
+  const p = _editProjectRecord(); if (!p) return;
+  const date = document.getElementById('netFollowDateEdit').value;
+  const text = document.getElementById('netFollowTextEdit').value.trim();
+  if (!text) { toast('请输入跟进内容'); return; }
+  if (!p.followUps) p.followUps = [];
+  p.followUps.push({id: uid(), date: date||'', text, done:false});
+  markPending(p); saveProjects();
+  renderEditFollowups();
+}
+function toggleEditFollowup(fid) {
+  const p = _editProjectRecord(); if (!p) return;
+  const f = (p.followUps||[]).find(x=>x.id===fid); if(f) f.done = !f.done;
+  markPending(p); saveProjects();
+  renderEditFollowups();
+}
+function deleteEditFollowup(fid) {
+  const p = _editProjectRecord(); if (!p) return;
+  p.followUps = (p.followUps||[]).filter(x=>x.id!==fid);
+  markPending(p); saveProjects();
+  renderEditFollowups();
+}
+function renderEditTimeline() {
+  const c = document.getElementById('netProjectTimeline');
+  if (!c) return;
+  const p = _editProjectRecord();
+  if (!p) { c.innerHTML = '<div class="net-empty" style="font-size:12px">保存项目后可添加记录</div>'; return; }
+  const list = (p.timeline||[]);
+  const items = list.map((t,i)=>`<div class="net-timeline-item">${t.date} ${escapeHtml(t.text)}<a href="javascript:void(0)" onclick="deleteEditTimeline(${i})" style="float:right;color:var(--text-muted)">✕</a></div>`).join('');
+  c.innerHTML = items || '<div class="net-empty">暂无记录</div>';
+  c.innerHTML += `<div style="display:flex;gap:6px;margin-top:6px">
+    <input type="date" class="form-input" id="netTimelineDateEdit" value="${todayStr()}" style="flex:0 0 132px">
+    <input type="text" class="form-input" id="netTimelineTextEdit" placeholder="记录一件事…" style="flex:1">
+    <button class="btn btn-primary btn-sm" onclick="addEditTimeline()">加</button>
+  </div>`;
+}
+function addEditTimeline() {
+  const p = _editProjectRecord(); if (!p) return;
+  const date = document.getElementById('netTimelineDateEdit').value || todayStr();
+  const text = document.getElementById('netTimelineTextEdit').value.trim();
+  if (!text) { toast('请输入内容'); return; }
+  if (!p.timeline) p.timeline = [];
+  p.timeline.push({date, text});
+  markPending(p); saveProjects();
+  renderEditTimeline();
+}
+function deleteEditTimeline(idx) {
+  const p = _editProjectRecord(); if (!p) return;
+  p.timeline = (p.timeline||[]).filter((_,i)=>i!==idx);
+  markPending(p); saveProjects();
+  renderEditTimeline();
 }
 function deleteNetProject(id) {
   const p = projectsData.find(x=>x.id===id);
@@ -10966,7 +11085,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260904b';
+  b.textContent = 'build 20260904c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
