@@ -9250,12 +9250,15 @@ function showTodoInputMobile(dateStr) {
   el.innerHTML = todoTagChipsHtml() +
     '<div class="todo-input-row">'+
       '<input type="text" id="todoInput" class="todo-add-input todo-input-text" placeholder="输入待办内容" autocomplete="off">'+
-      '<button class="btn btn-primary todo-send-btn" onclick="addTodo()">保存</button>'+
+      '<button class="btn btn-primary todo-send-btn" onclick="addTodo()">保存 ✓</button>'+
     '</div>'+
     '<div class="todo-input-row">'+
       '<input type="date" id="todoDateInput" class="todo-add-input todo-input-date" value="'+todosDate+'" title="待办日期">'+
       '<input type="date" id="todoDateEndInput" class="todo-add-input todo-input-date" title="结束日期（留空=单日事项）">'+
-      '<button class="btn btn-ghost" onclick="cancelTodoInput()" style="flex-shrink:0">取消</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">'+
+      '<button class="btn btn-ghost" onclick="cancelTodoInput()">返回</button>'+
+      '<button class="btn btn-primary" onclick="addTodo()">保存 ✓</button>'+
     '</div>';
   var input = document.getElementById('todoInput');
   if (input) {
@@ -9472,21 +9475,24 @@ function renderTodoRow(t) {
 
 function renderTodoEditRow(t) {
   var html = '<div class="todo-edit-row">';
-  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+  html += '<div class="todo-input-row" style="margin-top:0">';
+  html += '<input type="text" id="todoEditInput" class="todo-add-input todo-input-text" value="'+escapeHtml(t.content)+'" placeholder="输入待办内容" onkeydown="if(event.key===\'Enter\'){event.preventDefault();saveEditTodo();}">';
+  html += '<button class="btn btn-primary todo-send-btn" onclick="saveEditTodo()">保存 ✓</button>';
+  html += '</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
   Object.keys(TODO_TAGS).forEach(function(key) {
     var tt = TODO_TAGS[key];
     var active = currentTodoTag === key;
     html += '<span class="todo-tag-chip'+(active?' active':'')+'" data-key="'+key+'" onclick="selectTodoTag(\''+key+'\')" style="'+(active ? 'background:'+tt.color+';color:#fff;border-color:'+tt.color : '')+'">'+tt.label+'</span>';
   });
   html += '</div>';
-  html += '<div class="todo-input-row" style="margin-top:0">';
-  html += '<input type="text" id="todoEditInput" class="todo-add-input todo-input-text" value="'+escapeHtml(t.content)+'">';
-  html += '<button class="btn btn-primary todo-send-btn" onclick="saveEditTodo()">保存</button>';
-  html += '</div>';
   html += '<div class="todo-input-row">';
   html += '<input type="date" id="todoEditDate" class="todo-add-input todo-input-date" value="'+t.date+'" title="待办日期">';
   html += '<input type="date" id="todoEditDateEnd" class="todo-add-input todo-input-date" value="'+(t.dateEnd||'')+'" title="结束日期（留空=单日）">';
-  html += '<button class="btn btn-ghost" onclick="cancelEditTodo()" style="flex-shrink:0">取消</button>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">';
+  html += '<button class="btn btn-ghost" onclick="cancelEditTodo()">返回</button>';
+  html += '<button class="btn btn-primary" onclick="saveEditTodo()">保存 ✓</button>';
   html += '</div></div>';
   return html;
 }
@@ -9532,11 +9538,14 @@ function showTodoInput() {
   el.innerHTML = todoTagChipsHtml() +
     '<div class="todo-input-row">'+
       '<input type="text" id="todoInput" class="todo-add-input todo-input-text" placeholder="输入待办内容" autocomplete="off">'+
-      '<button class="btn btn-primary todo-send-btn" id="todoSendBtn" onclick="addTodo()">保存</button>'+
+      '<button class="btn btn-primary todo-send-btn" id="todoSendBtn" onclick="addTodo()">保存 ✓</button>'+
     '</div>'+
     '<div class="todo-input-row">'+
       '<input type="date" id="todoDateEndInput" class="todo-add-input todo-input-date" title="结束日期（留空=单日事项）">'+
-      '<button class="btn btn-ghost" onclick="cancelTodoInput()" style="flex-shrink:0">取消</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">'+
+      '<button class="btn btn-ghost" onclick="cancelTodoInput()">返回</button>'+
+      '<button class="btn btn-primary" onclick="addTodo()">保存 ✓</button>'+
     '</div>';
   var input = document.getElementById('todoInput');
   if (input) {
@@ -11085,7 +11094,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260904c';
+  b.textContent = 'build 20260904d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
