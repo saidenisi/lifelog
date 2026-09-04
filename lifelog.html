@@ -9445,7 +9445,7 @@ function renderTodoExpand() {
     return (a.createdAt || '').localeCompare(b.createdAt || '');
   });
 
-  var html = '<div class="todo-expand-title">📋 '+(dt.getMonth()+1)+'月'+dt.getDate()+'日 待办</div>';
+  var html = '<div class="todo-expand-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span>📋 '+(dt.getMonth()+1)+'月'+dt.getDate()+'日 待办</span><button class="btn-icon" onclick="collapseTodoExpand()" title="收起，回到月视图" style="flex-shrink:0">✕</button></div>';
   if (items.length === 0) {
     html += '<div class="todo-empty" style="padding:6px 0">这天还没有待办事项</div>';
   } else {
@@ -9461,6 +9461,20 @@ function renderTodoExpand() {
   html += '</div>';
   return html;
 }
+
+// 收起展开面板，回到月视图
+function collapseTodoExpand() {
+  todosExpanded = false;
+  clearTodoEditing();
+  renderTodosView();
+}
+// 点任意空白处（不在展开面板内、也不在日期格子上）→ 收起面板回到月视图
+document.addEventListener('click', function(e) {
+  if (!todosExpanded) return;
+  var t = e.target;
+  if (t && t.closest && (t.closest('.todo-expand-overlay') || t.closest('.todo-cal-cell') || t.closest('.todo-expand'))) return;
+  collapseTodoExpand();
+});
 
 function renderTodoRow(t) {
   var tag = getTodoTag(t.tag);
@@ -11094,7 +11108,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260904d';
+  b.textContent = 'build 20260904e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
