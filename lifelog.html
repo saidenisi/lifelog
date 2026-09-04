@@ -7926,8 +7926,12 @@ function saveMedia() {
   if (isRange) {
     dateStart = document.getElementById('mediaDateStart').value;
     dateEnd = document.getElementById('mediaDateEnd').value;
+    // 「看完」且没填结束日期 → 自动用今天作为看完日期（看完就不再持续，不显示"至今"）
+    if (status === 'done' && !dateEnd) dateEnd = todayStr();
   } else {
     date = document.getElementById('mediaDate').value;
+    // 单值类型「看完」且没填日期 → 用今天
+    if (status === 'done' && !date) date = todayStr();
   }
 
   const now = new Date().toISOString();
@@ -11109,7 +11113,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260904f';
+  b.textContent = 'build 20260904g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
