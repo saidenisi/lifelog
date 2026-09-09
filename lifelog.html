@@ -5536,9 +5536,20 @@ function renderFitnessCal(alive) {
     const bg = hasWorkout ? 'var(--primary)' : 'var(--surface-hover)';
     const color = hasWorkout ? '#fff' : 'var(--text-muted)';
     const border = isToday ? '2px solid var(--primary)' : '1px solid var(--border)';
-    cells += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:4px 0;border-radius:8px;background:${bg};color:${color};border:${border};min-height:44px;box-sizing:border-box">
+    // 数字下面直接显示运动项目名（多项目分行，过长截断）
+    let contentHtml = '';
+    if (hasWorkout) {
+      contentHtml = recs.map(f => {
+        const name = (f.type || '').trim();
+        const short = name.length > 4 ? name.slice(0, 4) + '…' : name;
+        return `<span style="font-size:10px;line-height:1.25;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(short)}</span>`;
+      }).join('');
+    } else {
+      contentHtml = `<span style="font-size:11px;line-height:1.25;opacity:.5">·</span>`;
+    }
+    cells += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px 2px;border-radius:8px;background:${bg};color:${color};border:${border};min-height:48px;box-sizing:border-box">
       <span style="font-size:13px;font-weight:600;line-height:1">${d}</span>
-      <span style="font-size:14px;line-height:1">${hasWorkout ? '✅' : '·'}</span>
+      ${contentHtml}
     </div>`;
   }
   wrap.innerHTML = `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${weekHead}${cells}</div>`;
@@ -11183,7 +11194,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260909a';
+  b.textContent = 'build 20260909b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
