@@ -2128,23 +2128,18 @@ tbody tr:hover{background:var(--surface-hover)}
             <div class="stat-value" id="fitMonthlyCount">0</div>
           </div>
           <div class="stat-card streak">
-            <div class="stat-icon">⏱️</div>
-            <div class="stat-label">本月总时长</div>
-            <div class="stat-value" id="fitMonthlyDuration">0 分钟</div>
-          </div>
-          <div class="stat-card sleep">
-            <div class="stat-icon">📊</div>
-            <div class="stat-label">本月平均时长</div>
-            <div class="stat-value" id="fitMonthlyAvg">0 分钟</div>
+            <div class="stat-icon">✅</div>
+            <div class="stat-label">本月锻炼天数</div>
+            <div class="stat-value" id="fitMonthlyDays">0 天</div>
           </div>
         </div>
 
         <div class="card mb-16">
           <div class="card-header">
-            <div class="card-title">📊 锻炼时长分布</div>
+            <div class="card-title">📅 本月锻炼标记</div>
           </div>
           <div class="card-body">
-            <div class="chart-container"><canvas id="fitnessChart"></canvas></div>
+            <div id="fitnessCalWrap"></div>
           </div>
         </div>
 
@@ -2772,8 +2767,23 @@ tbody tr:hover{background:var(--surface-hover)}
           </div>
         </div>
         <div class="form-group">
+          <label class="form-label">记录方式</label>
+          <div class="intensity-group" id="fitMode">
+            <div class="intensity-btn active" data-val="duration">⏱️ 时长</div>
+            <div class="intensity-btn" data-val="sets">🔁 组数</div>
+          </div>
+        </div>
+        <div class="form-group" id="fitDurationGroup">
           <label class="form-label">运动时长（分钟）</label>
           <input type="number" class="form-input" id="fitDuration" placeholder="如 60" min="1">
+        </div>
+        <div class="form-group" id="fitSetsGroup" style="display:none">
+          <label class="form-label">组数 × 每组次数</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" class="form-input" id="fitSets" placeholder="组数" min="1" style="flex:1">
+            <span style="color:var(--text-muted);font-weight:600">×</span>
+            <input type="number" class="form-input" id="fitReps" placeholder="每组次数" min="1" style="flex:1">
+          </div>
         </div>
       </div>
       <div class="form-group">
@@ -5333,6 +5343,27 @@ function removeFitLoc(idx) {
   renderFitLocOptions();
 }
 
+// 切换记录方式（时长 / 组数）
+function setFitMode(mode) {
+  document.querySelectorAll('#fitMode .intensity-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === mode);
+  });
+  document.getElementById('fitDurationGroup').style.display = mode === 'duration' ? '' : 'none';
+  document.getElementById('fitSetsGroup').style.display = mode === 'sets' ? '' : 'none';
+}
+
+// 一条记录的"量"文案：时长 → "30 分钟"；组数 → "3 组 × 15 次"
+function fitAmountText(f) {
+  if (f.mode === 'sets') {
+    const s = f.sets || 0, r = f.reps || 0;
+    if (s && r) return s + ' 组 × ' + r + ' 次';
+    if (s) return s + ' 组';
+    if (r) return r + ' 次';
+    return '-';
+  }
+  return (f.duration || 0) + ' 分钟';
+}
+
 function openFitnessModal(id) {
   document.getElementById('fitId').value = id || '';
   document.getElementById('fitnessModalTitle').textContent = id ? '编辑健身记录' : '添加健身记录';
@@ -5342,7 +5373,10 @@ function openFitnessModal(id) {
     if (r) {
       document.getElementById('fitDate').value = r.date;
       renderFitTypeOptions(r.type);
+      setFitMode(r.mode === 'sets' ? 'sets' : 'duration');
       document.getElementById('fitDuration').value = r.duration || '';
+      document.getElementById('fitSets').value = r.sets || '';
+      document.getElementById('fitReps').value = r.reps || '';
       document.getElementById('fitLocation').value = r.location || '';
       document.getElementById('fitNotes').value = r.notes || '';
       document.querySelectorAll('#fitIntensity .intensity-btn').forEach(b => {
@@ -5352,7 +5386,10 @@ function openFitnessModal(id) {
   } else {
     document.getElementById('fitDate').value = todayStr();
     renderFitTypeOptions(fitnessTypes[0]);
+    setFitMode('duration');
     document.getElementById('fitDuration').value = '';
+    document.getElementById('fitSets').value = '';
+    document.getElementById('fitReps').value = '';
     document.getElementById('fitLocation').value = '';
     document.getElementById('fitNotes').value = '';
     document.querySelectorAll('#fitIntensity .intensity-btn').forEach((b,i) => {
@@ -5370,6 +5407,11 @@ document.querySelectorAll('#fitIntensity .intensity-btn').forEach(btn => {
   });
 });
 
+// 记录方式切换按钮
+document.querySelectorAll('#fitMode .intensity-btn').forEach(btn => {
+  btn.addEventListener('click', () => setFitMode(btn.dataset.val));
+});
+
 // Media: toggle date range vs single date based on type
 function onMediaTypeChange() {
   const type = document.getElementById('mediaType').value;
@@ -5383,8 +5425,16 @@ function saveFitness() {
   const date = document.getElementById('fitDate').value;
   if (!date) { toast('请选择日期'); return; }
   const type = document.getElementById('fitType').value;
-  const duration = parseInt(document.getElementById('fitDuration').value) || 0;
-  if (!duration) { toast('请输入运动时长'); return; }
+  const mode = document.querySelector('#fitMode .intensity-btn.active')?.dataset.val || 'duration';
+  let duration = 0, sets = 0, reps = 0;
+  if (mode === 'sets') {
+    sets = parseInt(document.getElementById('fitSets').value) || 0;
+    reps = parseInt(document.getElementById('fitReps').value) || 0;
+    if (!sets && !reps) { toast('请填写组数或每组次数'); return; }
+  } else {
+    duration = parseInt(document.getElementById('fitDuration').value) || 0;
+    if (!duration) { toast('请输入运动时长'); return; }
+  }
   const location = document.getElementById('fitLocation').value.trim();
   const notes = document.getElementById('fitNotes').value;
   const intensity = document.querySelector('#fitIntensity .intensity-btn.active')?.dataset.val || '中';
@@ -5392,9 +5442,9 @@ function saveFitness() {
   const now = new Date().toISOString();
   if (id) {
     const idx = fitnessData.findIndex(f => f.id === id);
-    if (idx >= 0) fitnessData[idx] = {...fitnessData[idx], date, type, duration, location, notes, intensity, updatedAt: now, _pendingPush: true};
+    if (idx >= 0) fitnessData[idx] = {...fitnessData[idx], date, type, mode, duration, sets, reps, location, notes, intensity, updatedAt: now, _pendingPush: true};
   } else {
-    fitnessData.push({id:uid(), date, type, duration, location, notes, intensity, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
+    fitnessData.push({id:uid(), date, type, mode, duration, sets, reps, location, notes, intensity, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
   }
   saveAll();
   closeModal('fitnessModal');
@@ -5419,46 +5469,12 @@ function renderFitness() {
     const d = new Date(f.date);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
-  const monthTotal = monthRecords.reduce((s,f)=>s+(f.duration||0),0);
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
-  const avg = monthTotal / daysInMonth;
+  const monthDays = new Set(monthRecords.map(f => f.date)).size;
   document.getElementById('fitMonthlyCount').textContent = monthRecords.length + ' 次';
-  document.getElementById('fitMonthlyDuration').textContent = monthTotal + ' 分钟';
-  document.getElementById('fitMonthlyAvg').textContent = (avg % 1 === 0 ? avg : avg.toFixed(1)) + ' 分钟';
+  document.getElementById('fitMonthlyDays').textContent = monthDays + ' 天';
 
-  // Chart - last 14 days duration
-  const colors = getChartColors();
-  const dates = getRecentDates(14);
-  destroyChart('fitnessChart');
-  chartInstances.fitnessChart = new Chart(document.getElementById('fitnessChart'), {
-    type: 'bar',
-    data: {
-      labels: dates.map(fmtDate),
-      datasets: [{
-        label: '运动时长（分钟）',
-        data: dates.map(d => {
-          const recs = alive.filter(f => f.date === d);
-          return recs.reduce((s,r) => s+r.duration, 0);
-        }),
-        backgroundColor: dates.map((d,i) => {
-          const hasData = alive.some(f => f.date === d);
-          return hasData ? colors.primary : colors.grid;
-        }),
-        borderRadius: 6,
-        barThickness: 'flex',
-        maxBarThickness: 30
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.text } },
-        x: { grid: { display: false }, ticks: { color: colors.text, maxRotation: 45 } }
-      }
-    }
-  });
+  // 本月锻炼标记日历（有没有锻炼 + 当天锻炼内容）
+  renderFitnessCal(alive);
 
   // Table
   const sorted = [...alive].sort((a,b) => b.date.localeCompare(a.date));
@@ -5472,14 +5488,14 @@ function renderFitness() {
     return;
   }
   let html = `<table><thead><tr>
-    <th>日期</th><th>运动</th><th>时长</th><th>强度</th><th>地点</th><th>备注</th><th></th>
+    <th>日期</th><th>运动</th><th>量</th><th>强度</th><th>地点</th><th>备注</th><th></th>
   </tr></thead><tbody>`;
   sorted.forEach(f => {
     const intensityBadge = f.intensity === '高' ? 'badge-danger' : f.intensity === '中' ? 'badge-warning' : 'badge-success';
     html += `<tr>
       <td>${fmtDate(f.date)}</td>
       <td><span class="chip">${escapeHtml(f.type)}</span></td>
-      <td>${f.duration} 分钟</td>
+      <td>${fitAmountText(f)}</td>
       <td><span class="badge ${intensityBadge}">${f.intensity}</span></td>
       <td>${f.location ? escapeHtml(f.location) : '-'}</td>
       <td class="text-muted text-sm" style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.notes ? escapeHtml(f.notes) : '-'}</td>
@@ -5491,6 +5507,59 @@ function renderFitness() {
   });
   html += '</tbody></table>';
   document.getElementById('fitnessTableWrap').innerHTML = html;
+}
+
+// 渲染本月锻炼标记：日历格子标记"有没有锻炼"，下方列当天锻炼内容
+function renderFitnessCal(alive) {
+  const wrap = document.getElementById('fitnessCalWrap');
+  if (!wrap) return;
+  const now = new Date();
+  const year = now.getFullYear(), month = now.getMonth();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const firstWeekday = new Date(year, month, 1).getDay(); // 0=周日
+  const today = todayStr();
+
+  // 按日期归并当天锻炼内容
+  const byDate = {};
+  alive.forEach(f => { (byDate[f.date] = byDate[f.date] || []).push(f); });
+
+  // 星期头
+  const weekHead = ['日','一','二','三','四','五','六'].map(w => `<div style="text-align:center;font-size:12px;color:var(--text-muted);padding:4px 0">${w}</div>`).join('');
+  // 空格子（月初前）
+  let cells = '';
+  for (let i = 0; i < firstWeekday; i++) cells += '<div></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const recs = byDate[dateStr];
+    const hasWorkout = !!recs && recs.length > 0;
+    const isToday = dateStr === today;
+    const bg = hasWorkout ? 'var(--primary)' : 'var(--surface-hover)';
+    const color = hasWorkout ? '#fff' : 'var(--text-muted)';
+    const border = isToday ? '2px solid var(--primary)' : '1px solid var(--border)';
+    cells += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:4px 0;border-radius:8px;background:${bg};color:${color};border:${border};min-height:44px;box-sizing:border-box">
+      <span style="font-size:13px;font-weight:600;line-height:1">${d}</span>
+      <span style="font-size:14px;line-height:1">${hasWorkout ? '✅' : '·'}</span>
+    </div>`;
+  }
+  wrap.innerHTML = `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${weekHead}${cells}</div>`;
+
+  // 当天锻炼内容列表
+  const monthDates = Object.keys(byDate).filter(d => d.startsWith(`${year}-${String(month+1).padStart(2,'0')}`)).sort((a,b) => b.localeCompare(a));
+  if (!monthDates.length) {
+    wrap.innerHTML += `<div style="margin-top:12px;font-size:13px;color:var(--text-muted)">本月还没有锻炼记录</div>`;
+    return;
+  }
+  let listHtml = `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">`;
+  monthDates.forEach(d => {
+    const recs = byDate[d];
+    const content = recs.map(f => `${escapeHtml(f.type)} ${fitAmountText(f)}`).join('、');
+    listHtml += `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px">
+      <span style="flex-shrink:0;color:var(--text-muted);min-width:64px">${fmtDate(d)}</span>
+      <span style="flex:1">${content}</span>
+    </div>`;
+  });
+  listHtml += `</div>`;
+  wrap.innerHTML += listHtml;
 }
 
 /* ============================================================
@@ -9747,9 +9816,10 @@ function exportCSV(filename, headers, rows) {
 }
 function exportFitnessCSV() {
   if (!fitnessData.length) return toast('没有数据可导出');
+  const alive = fitnessData.filter(f => !f._deleted);
   exportCSV(`fitness_${todayStr()}.csv`,
-    ['日期','运动类型','时长(分钟)','强度','地点','备注'],
-    fitnessData.map(f => [f.date, f.type, f.duration, f.intensity, f.location||'', f.notes||''])
+    ['日期','运动类型','记录方式','时长(分钟)','组数','每组次数','强度','地点','备注'],
+    alive.map(f => [f.date, f.type, f.mode === 'sets' ? '组数' : '时长', f.duration || '', f.sets || '', f.reps || '', f.intensity, f.location || '', f.notes || ''])
   );
 }
 function exportSleepCSV() {
@@ -11113,7 +11183,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260904g';
+  b.textContent = 'build 20260909a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
