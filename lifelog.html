@@ -10835,12 +10835,14 @@ function renderStocks() {
     function tpCell() {
       if (!hasPrice) return '<td class="text-muted">—</td>';
       const tpm = q.tp || {};
-      const mk = (label, point) => {
+      const mk = (key, point) => {
+        const lot = s.lots && s.lots[key];
+        const label = lotDisplayName(key, !!(lot && lot.status === 'sold'));
         if (point == null) return `<span class="text-muted">${label}—</span>`;
         const breached = price < point;
         return `<span>${label} <span class="${breached ? 'ma-down' : 'ma-up'}">${point.toFixed(2)}${breached ? '↓破' : '↑'}</span></span>`;
       };
-      return `<td style="font-size:10px;line-height:1.7;white-space:nowrap">${mk('30分', tpm.m30)} ${mk('60分', tpm.m60)}<br>${mk('120分', tpm.m120)} ${mk('日线', tpm.daily)}</td>`;
+      return `<td style="font-size:10px;line-height:1.7;white-space:nowrap">${mk('m30', tpm.m30)} ${mk('m60', tpm.m60)}<br>${mk('m120', tpm.m120)} ${mk('daily', tpm.daily)}</td>`;
     }
 
     // Signal cell
@@ -11184,7 +11186,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260910d';
+  b.textContent = 'build 20260910e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
