@@ -2183,7 +2183,7 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
         <div class="card-body" style="padding:12px 16px;background:var(--info-bg)">
           <p class="text-sm" style="color:var(--info);line-height:1.6;margin:0">
-            <b>上涨止盈策略：</b>当前K线最高点低于前一根最高点时，往前找「第三个最低点」（前一根 low 为第一个，再往前依次找两个更低的 low）作为止盈点；收盘价跌破止盈点则提示止盈。<span style="color:var(--text-muted)">（东方财富证券：日线 + 120/60/30分；其他持仓仅日线）</span>
+            <b>CK周期策略：</b>当前K线最高点低于前一根最高点时，往前找「第三个最低点」（前一根 low 为第一个，再往前依次找两个更低的 low）作为止盈点；收盘价跌破止盈点则提示止盈。<span style="color:var(--text-muted)">（东方财富证券：日线 + 120/60/30分；其他持仓仅日线）</span>
           </p>
         </div>
         <div class="table-wrap" id="stockTableWrap">
@@ -10019,11 +10019,17 @@ function getStockCurrency(stock) {
 // 作为该份的卖出点，各份独立操作。某份卖出并确认后，该周期卖出点即失效（该份已清仓），
 // 除非之后重新买入该份。
 const LOT_PERIODS = [
-  { key: 'daily', label: '日线', short: '日' },
-  { key: 'm120',  label: '120分', short: '120分' },
-  { key: 'm60',   label: '60分',  short: '60分' },
-  { key: 'm30',   label: '30分',  short: '30分' }
+  { key: 'daily', label: '日线', short: '日', holding: '归墟', sold: '焚墟' },
+  { key: 'm120',  label: '120分', short: '120分', holding: '断隘', sold: '破隘' },
+  { key: 'm60',   label: '60分',  short: '60分', holding: '敛锋', sold: '扬锋' },
+  { key: 'm30',   label: '30分',  short: '30分', holding: '御初', sold: '启芒' }
 ];
+// 交易面板里该份的显示名：有持仓用 holding 名，已卖出（无持仓）用 sold 名
+function lotDisplayName(periodKey, isSold) {
+  const p = LOT_PERIODS.find(x => x.key === periodKey);
+  if (!p) return periodKey;
+  return isSold ? (p.sold || p.label) : (p.holding || p.label);
+}
 
 // 确保 stock 具备 lots（四份）与 trades（交易记录）结构；旧数据自动均分四份。
 // 余数归「日线」份（长周期最重要）。仅在 lots 缺失时初始化，之后不再自动改 qty。
@@ -10343,7 +10349,7 @@ function renderTradeModal(stockId) {
     }
 
     html += '<div class="trade-lot' + (isSold ? ' is-sold' : '') + '">' +
-      '<div class="trade-lot-head"><span class="lot-label">' + p.label + '</span>' +
+      '<div class="trade-lot-head"><span class="lot-label">' + lotDisplayName(p.key, isSold) + '</span>' +
       '<span class="lot-qty">' + (lot.qty || 0) + ' 股</span>' +
       '<span style="margin-left:auto">' + signalHtml + '</span></div>' +
       tpHtml + actionHtml +
@@ -11178,7 +11184,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260910a';
+  b.textContent = 'build 20260910b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
