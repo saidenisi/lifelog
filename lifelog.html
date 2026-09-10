@@ -10497,7 +10497,17 @@ function calcTakeProfitPoint(candles, buyDate, maxLookback) {
   // 从顶点（包含）往前找三个依次递减的 low
   let currentLow = parseFloat(arr[vertexIdx].low);
   let found = 1;
-  for (let j = vertexIdx - 1; j >= 0; j--) {
+  let startJ = vertexIdx - 1;
+  // 顶点前第一根若比顶点 low 略低（相对差 <0.5%，同一波），视为同一波，用较低者作为第 1 个递减，
+  // 避免把「顶点下影线 + 前一根下影线」这种同一顶部区域算成两次递减（密集短周期 K 线会因此止盈点偏高）。
+  if (startJ >= 0) {
+    const prevLow = parseFloat(arr[startJ].low);
+    if (prevLow < currentLow && (currentLow - prevLow) / currentLow < 0.005) {
+      currentLow = prevLow;
+      startJ = vertexIdx - 2;
+    }
+  }
+  for (let j = startJ; j >= 0; j--) {
     const low = parseFloat(arr[j].low);
     if (low < currentLow) {
       currentLow = low;  // 依次更低的 low
@@ -10544,7 +10554,17 @@ function calcBuyPoint(candles, sellDate, maxLookback) {
   // 从谷底（包含）往前找三个依次递增的 high
   let currentHigh = parseFloat(arr[valleyIdx].high);
   let found = 1;
-  for (let j = valleyIdx - 1; j >= 0; j--) {
+  let startJ = valleyIdx - 1;
+  // 谷底前第一根若比谷底 high 略高（相对差 <0.5%，同一波），视为同一波，用较高者作为第 1 个递增，
+  // 避免把「谷底上影线 + 前一根上影线」这种同一底部区域算成两次递增（镜像止盈点的同一波修复）。
+  if (startJ >= 0) {
+    const prevHigh = parseFloat(arr[startJ].high);
+    if (prevHigh > currentHigh && (prevHigh - currentHigh) / currentHigh < 0.005) {
+      currentHigh = prevHigh;
+      startJ = valleyIdx - 2;
+    }
+  }
+  for (let j = startJ; j >= 0; j--) {
     const high = parseFloat(arr[j].high);
     if (high > currentHigh) {
       currentHigh = high;
@@ -11158,7 +11178,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260909c';
+  b.textContent = 'build 20260910a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
