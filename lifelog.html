@@ -10321,10 +10321,11 @@ function renderTradeModal(stockId) {
       } else {
         const buyBreached = price != null && price > buyPoint;
         const buyDist = (price != null) ? ((price - buyPoint) / buyPoint * 100) : null;
-        tpHtml += '<div class="lot-row"><span class="k">买入点</span><span class="v" style="font-weight:700;color:' + (buyBreached ? 'var(--success)' : 'var(--text-muted)') + '">' + buyPoint.toFixed(2) + (buyDist != null ? ' <span style="font-weight:400;opacity:.8">(' + (buyDist >= 0 ? '+' : '') + buyDist.toFixed(2) + '%)</span>' : '') + '</span></div>';
+        // 买入点作为「警示点」直接醒目显示：未突破=橙色警示，突破=绿色
+        tpHtml += '<div class="lot-row"><span class="k">买入点</span><span class="v" style="font-weight:800;color:' + (buyBreached ? 'var(--success,#10b981)' : 'var(--warning,#f59e0b)') + '">' + buyPoint.toFixed(2) + (buyDist != null ? ' <span style="font-weight:400;opacity:.8">(' + (buyDist >= 0 ? '+' : '') + buyDist.toFixed(2) + '%)</span>' : '') + '</span></div>';
         signalHtml = buyBreached
           ? '<span class="signal-buy">🔺 突破买点，可买入</span>'
-          : '<span class="signal-hold">等待突破买点</span>';
+          : '<span class="signal-hold">⏳ 待突破 ' + buyPoint.toFixed(2) + '</span>';
       }
       actionHtml = '<div class="lot-sell">' +
         '<input type="number" id="lotBuyPrice_' + p.key + '" class="form-input" step="0.001" placeholder="买入价" value="' + (price != null ? price.toFixed(2) : '') + '">' +
@@ -11186,7 +11187,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260910e';
+  b.textContent = 'build 20260910f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
