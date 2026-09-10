@@ -6436,8 +6436,15 @@ function stockAccountMarketValueCNY(acc) {
 function holdingMarketValueCNY(h) {
   return convertToCNY((h.quantity || 0) * (h.price || 0), h.currency || 'CNY');
 }
-// Total market value (CNY) of an invest account: cash + holdings + linked stocks
+// Total market value (CNY) of an invest account: cash + holdings + linked stocks.
+// 若账户没有填「现金/持仓」明细（用户只用"余额"记录资产），改用最新余额——
+// 否则系统只算得出关联股票，会把账户的现金部分漏掉，导致趋势图最后一天假暴跌。
 function investAccountMarketValueCNY(acc) {
+  const hasCashDetail = (acc.cash || 0) !== 0 || (acc.holdings || []).length > 0;
+  if (!hasCashDetail) {
+    const latest = getLatestBalance(acc);
+    if (latest != null && latest.amount) return convertToCNY(latest.amount, acc.currency || 'CNY');
+  }
   let total = convertToCNY(acc.cash || 0, acc.currency || 'CNY');
   (acc.holdings || []).forEach(h => { total += holdingMarketValueCNY(h); });
   total += stockAccountMarketValueCNY(acc);
@@ -6547,13 +6554,19 @@ function snapshotValueOnDate(acc, date) {
   }
   return result;
 }
-// Historical value (CNY) of an invest account on a date: snapshot first,
-// then fall back to legacy balance history so old records still show.
+// Historical value (CNY) of an invest account on a date.
+// 账户没有「现金/持仓」明细时，以"余额"（用户录入的总资产）为权威口径；
+// 否则优先用快照（现金+持仓+股票），再退回余额。这样避免"余额口径(含现金)"与
+// "快照口径(仅关联股票)"混用时在切换点出现假的下跌。
 function investValueOnDate(acc, date) {
+  const hasCashDetail = (acc.cash || 0) !== 0 || (acc.holdings || []).length > 0;
+  const bal = getBalanceOnDate(acc, date);
+  if (!hasCashDetail) {
+    return bal != null ? convertToCNY(bal, acc.currency || 'CNY') : null;
+  }
   const snap = snapshotValueOnDate(acc, date);
   if (snap != null) return snap;
-  const bal = getBalanceOnDate(acc, date);
-  return bal != null ? convertToCNY(bal, acc.currency) : null;
+  return bal != null ? convertToCNY(bal, acc.currency || 'CNY') : null;
 }
 // Whole-portfolio market value (CNY) on a date. Today uses live market value
 // (cash + holdings + live quotes) so the chart's latest point matches the
@@ -11202,7 +11215,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260910g';
+  b.textContent = 'build 20260910h';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
