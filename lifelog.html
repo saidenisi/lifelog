@@ -6511,16 +6511,31 @@ function getAccountBalanceCNY(acc) {
 // Upsert today's snapshot for an invest account (drives the daily trend chart)
 function upsertInvestSnapshot(acc) {
   const today = todayStr();
+  const linkedStocks = stocksOfAccount(acc.id).filter(s => !s._deleted);
+  const hasAssets = (acc.holdings || []).length > 0 || linkedStocks.length > 0;
+  // 有股票但行情未就绪 → 不写快照。否则会把「只算了现金/部分资产」的偏小值当成当天市值，
+  // 造成趋势图假的断崖式下跌（2026-08-19 东财账户被写成 121 万就是这个原因）。
+  if (linkedStocks.length > 0) {
+    const quotesReady = linkedStocks.every(s => {
+      const q = stockQuotes[s.id];
+      return q && q.price != null;
+    });
+    if (!quotesReady) return false;
+  }
   const value = investAccountMarketValueCNY(acc);
-  // Skip a 0 snapshot when the account has holdings/stocks but quotes not yet
-  // loaded — otherwise it would erase the inherited historical value.
-  const hasAssets = (acc.holdings || []).length > 0 || stocksOfAccount(acc.id).length > 0;
-  if (value === 0 && hasAssets) return;
+  // 跳过 0 快照（有资产但市值为 0，通常是行情未就绪），否则会抹掉继承的历史值
+  if (value === 0 && hasAssets) return false;
   const snap = acc.snapshots || (acc.snapshots = []);
   const idx = snap.findIndex(s => s.date === today);
-  if (idx >= 0) snap[idx].valueCNY = value;
-  else snap.push({ date: today, valueCNY: value });
+  if (idx >= 0) {
+    // 值几乎没变（<1 元）就不重复写，避免无谓的 updatedAt 变更与同步流量
+    if (Math.abs((snap[idx].valueCNY || 0) - value) < 1) return false;
+    snap[idx].valueCNY = value;
+  } else {
+    snap.push({ date: today, valueCNY: value });
+  }
   snap.sort((a, b) => a.date.localeCompare(b.date));
+  return true;
 }
 // Fill-forward snapshot value on a date (inherit previous day when missing)
 function snapshotValueOnDate(acc, date) {
@@ -11187,7 +11202,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260910f';
+  b.textContent = 'build 20260910g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
