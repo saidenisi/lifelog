@@ -10082,7 +10082,17 @@ function ensureStockLots(stock) {
     lot.soldAt = lot.soldAt || null;
     lot.soldDate = lot.soldDate || null;
     lot.buyDate = lot.buyDate || stock.buyDate || stock.createdAt || null;
+    // ===== 2026-09-17 信号驱动持仓：每周期自成一套成本/出场记录（全部为新增字段，旧数据不动）=====
+    if (lot.cost == null) lot.cost = stock.costPrice || 0;      // 该周期自己的成本价
+    if (lot.buyPrice == null) lot.buyPrice = lot.cost || null;  // 最近一次买入价
+    if (lot.lastExitDate === undefined) lot.lastExitDate = lot.soldDate || null; // 最近一次出场日（买入点锚点）
+    if (lot.lastExitPrice === undefined) lot.lastExitPrice = lot.soldAt != null ? lot.soldAt : null;
+    if (lot.lastExitVirtual === undefined) lot.lastExitVirtual = false;
+    if (lot.virtualPnl == null) lot.virtualPnl = 0;              // 累计虚拟盈亏（每股口径，不计入已实现）
+    if (lot.vrCount == null) lot.vrCount = 0;
+    if (!Array.isArray(lot.vrHistory)) lot.vrHistory = [];
   });
+  if (stock.availableCash == null) stock.availableCash = 0;      // 该股可用资金（用户手填）
   return stock;
 }
 
@@ -10098,6 +10108,16 @@ function lotTotalQty(stock) {
 }
 function lotSoldQty(stock) {
   return lotTotalQty(stock) - lotHeldQty(stock);
+}
+// 持仓周期成本的加权平均（用于列表「成本/盈亏」列；无持仓时退回 stock.costPrice）
+function stockAvgCost(stock) {
+  ensureStockLots(stock);
+  var q = 0, c = 0;
+  LOT_PERIODS.forEach(function(p) {
+    var l = stock.lots[p.key];
+    if (lotIsHolding(l)) { q += (l.qty || 0); c += (l.qty || 0) * (l.cost || 0); }
+  });
+  return q > 0 ? c / q : (stock.costPrice || 0);
 }
 
 // 某份的卖出点（来自 stockQuotes 缓存里的 tp）；已卖出的份返回 null（该周期失效）
@@ -10125,7 +10145,7 @@ function confirmSellLot(stockId, periodKey) {
   const priceInput = document.getElementById('lotSellPrice_' + periodKey);
   const sellPrice = (priceInput && priceInput.value) ? parseFloat(priceInput.value) : curPrice;
   if (!sellPrice || sellPrice <= 0) { toast('请输入有效卖出价'); return; }
-  const cost = stock.costPrice || 0;
+  const cost = (lot.cost != null ? lot.cost : stock.costPrice) || 0;
   const pnl = (sellPrice - cost) * qty;
   const pnlPct = cost > 0 ? (sellPrice - cost) / cost * 100 : 0;
   const sign = pnl >= 0 ? '+' : '';
@@ -10134,12 +10154,18 @@ function confirmSellLot(stockId, periodKey) {
     '数量：' + qty + ' 股\n' +
     '卖出价：' + sellPrice.toFixed(2) + '（成本 ' + (cost ? cost.toFixed(3) : '—') + '）\n' +
     '预计盈亏：' + sign + pnl.toFixed(0) + ' 元（' + sign + pnlPct.toFixed(2) + '%）\n\n' +
-    '卖出后该周期指标点将失效，直到你重新买入。'
+    '卖出后该周期进入空仓，等待新的买入点。'
   )) return;
 
   lot.status = 'sold';
   lot.soldAt = sellPrice;
   lot.soldDate = todayStr();
+  lot.lastExitDate = todayStr();          // 买入点锚点：新买入点只在此日之后形成
+  lot.lastExitPrice = sellPrice;
+  lot.lastExitVirtual = false;
+  lot.virtualPnl = 0;                     // 真实卖出后，重新开始累计该周期的虚拟盈亏
+  lot.vrCount = 0;
+  lot.vrHistory = [];
   stock.trades.unshift({ id: uid(), side: 'sell', period: periodKey, label: p.label, qty: qty, price: sellPrice, cost: cost, pnl: pnl, date: todayStr() });
   stock.quantity = lotHeldQty(stock);
   stock.updatedAt = new Date().toISOString();
@@ -10183,6 +10209,116 @@ function lotBuyPoint(stock, periodKey) {
   return (v == null) ? null : v;
 }
 
+// ===== 2026-09-17 信号驱动持仓：派生逻辑（不持久化中间态，每次刷新行情按 K 线重放）=====
+// 某周期的回看参数：日线 20 根，分钟线不限（与 fetchStockData 保持一致）
+function lotLookback(periodKey) { return periodKey === 'daily' ? 20 : null; }
+function lotIsHolding(lot) { return !!(lot && lot.status === 'holding' && (lot.qty || 0) > 0); }
+function dayKeyOf(s) { return String(s || '').replace(/\D/g, '').slice(0, 8); }
+
+// 【虚拟换手重放】从该周期的买入日起，按 K 线逐根重放：
+//   持仓中 → 收盘跌破卖出预警点则记 alert；已 alert 且收盘重新站上（此时重算的）买入点 → 虚拟换手
+//   虚拟换手：成本改为买回价、买入日改为换手日、累计虚拟盈亏（每股口径），并推进锚点使其必须重新跌破才能再换
+// 返回 { cost, buyDate, alert, vrHistory, virtualPnl }
+function replayLot(candles, buyDate, startCost, ml) {
+  var cost = (startCost != null ? startCost : 0);
+  var bd = buyDate, alert = null, okToRoll = false;
+  var vrHistory = [], virtualPnl = 0;
+  if (!candles || !candles.length || !bd) return { cost: cost, buyDate: bd, alert: null, vrHistory: vrHistory, virtualPnl: 0 };
+  for (var i = 0; i < candles.length; i++) {
+    var c = candles[i];
+    if (dayKeyOf(c.day) < dayKeyOf(bd)) continue;
+    var sub = candles.slice(0, i + 1);
+    var tp = calcTakeProfitPoint(sub, bd, ml);
+    if (tp && parseFloat(c.close) < tp.point) {
+      if (!alert || Math.abs(alert.price - tp.point) > 1e-9) { alert = { price: tp.point, date: c.day }; okToRoll = true; }
+    }
+    if (alert && okToRoll) {
+      var bp = calcBuyPoint(sub, alert.date, ml);
+      if (bp && parseFloat(c.close) > bp.point) {
+        virtualPnl += (alert.price - cost);
+        vrHistory.push({ date: c.day, sellPrice: alert.price, buyPrice: bp.point });
+        cost = bp.point; bd = c.day; alert = null; okToRoll = false;
+      }
+    }
+  }
+  return { cost: cost, buyDate: bd, alert: alert, vrHistory: vrHistory, virtualPnl: virtualPnl };
+}
+
+// 【买入点 + 消费链】空仓周期：不断取买入点；若已被收盘突破则"消费掉"（锚点推进到突破日），
+// 继续找下一个新谷底形成的买入点；返回链末端的那个（broken=true 表示该点已被突破/信号已发出）。
+function resolveBuySignal(candles, anchor, ml) {
+  if (!candles || !candles.length) return null;
+  var a = anchor || null, last = null;
+  for (var guard = 0; guard < 40; guard++) {
+    var r = calcBuyPoint(candles, a, ml);
+    if (!r) return last;
+    var brokeIdx = -1;
+    for (var i = 0; i < candles.length; i++) {
+      if (dayKeyOf(candles[i].day) >= dayKeyOf(r.valleyDay) && parseFloat(candles[i].close) > r.point) { brokeIdx = i; break; }
+    }
+    if (brokeIdx < 0) return { point: r.point, broken: false, breakDate: null, valleyDay: r.valleyDay };
+    last = { point: r.point, broken: true, breakDate: candles[brokeIdx].day, valleyDay: r.valleyDay };
+    a = candles[brokeIdx].day;
+  }
+  return last;
+}
+
+// 取某周期在最新行情下的派生状态（供面板与列表使用）
+function lotDerived(stock, periodKey, klMap) {
+  var kl = klMap && klMap[periodKey];
+  var lot = (stock.lots && stock.lots[periodKey]) || {};
+  ensureStockLots(stock);
+  lot = stock.lots[periodKey];
+  var ml = lotLookback(periodKey);
+  var out = { qty: lot.qty || 0, cost: lot.cost, buyDate: lot.buyDate, tp: null, alert: null, bp: null, bpBroken: false, vrHistory: [], virtualPnl: 0, hasData: !!kl };
+  if (!kl) return out;
+  if (lotIsHolding(lot)) {
+    var r = replayLot(kl, lot.buyDate, lot.cost, ml);
+    out.cost = r.cost; out.buyDate = r.buyDate; out.alert = r.alert;
+    out.vrHistory = r.vrHistory; out.virtualPnl = r.virtualPnl;
+    var tp = calcTakeProfitPoint(kl, r.buyDate, ml);
+    out.tp = tp ? tp.point : null;
+  } else {
+    var anchor = lot.lastExitDate || lot.soldDate || null;
+    // 取「最近出场日」与「上次已消费的突破日」中较晚者（二者都已并入 lastExitDate 语义）
+    var sig = resolveBuySignal(kl, anchor, ml);
+    if (sig) { out.bp = sig.point; out.bpBroken = !!sig.broken; out.bpBreakDate = sig.breakDate || null; }
+  }
+  return out;
+}
+
+// 可用资金（手填，只影响展示与总资金口径）
+function setStockAvailableCash(stockId, val) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  const v = parseFloat(val);
+  stock.availableCash = (isNaN(v) || v < 0) ? 0 : v;
+  stock.updatedAt = new Date().toISOString();
+  stock._pendingPush = true;
+  saveStocks();
+  saveAll();
+  renderStocks();
+  renderTradeModal(stockId);
+  toast('可用资金已保存 ✅');
+}
+
+// 某周期成本价（可手改；虚拟换手后系统也会更新它）
+function setLotCost(stockId, periodKey, val) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  ensureStockLots(stock);
+  const lot = stock.lots[periodKey];
+  const v = parseFloat(val);
+  if (isNaN(v) || v < 0) { toast('请输入有效成本价'); return; }
+  lot.cost = v;
+  stock.updatedAt = new Date().toISOString();
+  stock._pendingPush = true;
+  saveStocks();
+  saveAll();
+  renderTradeModal(stockId);
+  toast('成本价已更新 ✅');
+}
+
 // 买入某一份（恢复持有，更新份级买入日期，该周期卖出点按新买入日重算）
 function confirmBuyLot(stockId, periodKey) {
   const stock = stockData.find(s => s.id === stockId);
@@ -10191,10 +10327,11 @@ function confirmBuyLot(stockId, periodKey) {
   const p = LOT_PERIODS.find(x => x.key === periodKey);
   const lot = stock.lots[periodKey];
   if (!lot || lot.status === 'holding') { toast(p.label + ' 份仍在持有中'); return; }
-  const qty = lot.qty || 0;
-  if (qty <= 0) { toast('该份持仓数量为 0，请先编辑股票总持仓'); return; }
   const q = stockQuotes[stockId];
   const curPrice = (q && q.price != null) ? q.price : null;
+  const qtyInput = document.getElementById('lotBuyQty_' + periodKey);
+  const qty = qtyInput && qtyInput.value ? parseInt(qtyInput.value, 10) : (lot.qty || 0);
+  if (!qty || qty <= 0) { toast('请输入买入数量'); return; }
   const priceInput = document.getElementById('lotBuyPrice_' + periodKey);
   const buyPrice = (priceInput && priceInput.value) ? parseFloat(priceInput.value) : curPrice;
   if (!buyPrice || buyPrice <= 0) { toast('请输入有效买入价'); return; }
@@ -10202,12 +10339,15 @@ function confirmBuyLot(stockId, periodKey) {
     '确认买入「' + stock.name + '」' + p.label + '份？\n' +
     '数量：' + qty + ' 股\n' +
     '买入价：' + buyPrice.toFixed(2) + '\n\n' +
-    '买入后该周期将按新的买入日期重新计算卖出点。'
+    '买入后该周期按新买入日重新计算卖出预警点；成本按此买入价。'
   )) return;
   lot.status = 'holding';
+  lot.qty = qty;
   lot.soldAt = null;
   lot.soldDate = null;
   lot.buyDate = todayStr();
+  lot.buyPrice = buyPrice;
+  lot.cost = buyPrice;
   stock.trades.unshift({ id: uid(), side: 'buy', period: periodKey, label: p.label, qty: qty, price: buyPrice, cost: buyPrice, pnl: 0, date: todayStr() });
   stock.quantity = lotHeldQty(stock);
   stock.updatedAt = new Date().toISOString();
@@ -10289,13 +10429,31 @@ function renderTradeModal(stockId) {
   ensureStockLots(stock);
   const q = stockQuotes[stockId];
   const price = (q && q.price != null) ? q.price : null;
-  const cost = stock.costPrice || 0;
+  const klMap = (q && q.kl) || null;
   const heldQty = lotHeldQty(stock);
-  const totalQty = lotTotalQty(stock);
-  const soldQty = totalQty - heldQty;
-  const unrealPnl = (price != null && cost) ? (price - cost) * heldQty : null;
   const realizedPnl = (stock.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
   const rSign = realizedPnl >= 0 ? '+' : '';
+
+  // 每周期派生状态（买入点消费链 / 虚拟换手重放）
+  const dv = {};
+  LOT_PERIODS.forEach(function(p) {
+    dv[p.key] = (q && q.lots && q.lots[p.key]) ? q.lots[p.key] : lotDerived(stock, p.key, klMap);
+  });
+
+  // 资金汇总：持仓市值 / 浮动盈亏 / 虚拟盈亏（不计入已实现）
+  let mktValue = 0, floatPnl = 0, virtualPnl = 0, vrTotal = 0;
+  LOT_PERIODS.forEach(function(p) {
+    const d = dv[p.key];
+    if (lotIsHolding(stock.lots[p.key]) && price != null) {
+      mktValue += d.qty * price;
+      floatPnl += (price - (d.cost || 0)) * d.qty;
+    }
+    virtualPnl += (d.virtualPnl || 0) * (d.qty || 0);
+    vrTotal += (d.vrHistory || []).length;
+  });
+  const availCash = stock.availableCash || 0;
+  const totalCap = availCash + mktValue;
+  const vm0 = v => (v >= 0 ? '+' : '') + v.toFixed(0);
 
   let html = '<div class="trade-overview">';
   html += '<div class="trade-name">' + (q && q.name ? q.name : stock.name) + ' <span class="badge badge-info">' + stock.code + '</span></div>';
@@ -10307,79 +10465,89 @@ function renderTradeModal(stockId) {
   }
   html += '<div class="trade-price">现价 ' + (price != null ? price.toFixed(2) : '—') + '</div>' + quoteNote;
   html += '<div class="trade-stats">';
-  html += '<div class="trade-stat"><span class="k">成本</span><span class="v">' + (cost ? cost.toFixed(3) : '—') + '</span></div>';
-  html += '<div class="trade-stat"><span class="k">总持仓</span><span class="v">' + totalQty + '</span></div>';
-  html += '<div class="trade-stat"><span class="k">持有/已卖</span><span class="v">' + heldQty + ' / ' + soldQty + '</span></div>';
+  html += '<div class="trade-stat"><span class="k">持仓数量</span><span class="v">' + heldQty + '</span></div>';
+  html += '<div class="trade-stat"><span class="k">持仓市值</span><span class="v">' + (price != null ? mktValue.toFixed(0) : '—') + '</span></div>';
+  html += '<div class="trade-stat"><span class="k">浮动盈亏</span><span class="v ' + (floatPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + (price != null ? vm0(floatPnl) : '—') + '</span></div>';
   html += '<div class="trade-stat"><span class="k">已实现盈亏</span><span class="v ' + (realizedPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + rSign + realizedPnl.toFixed(0) + '</span></div>';
-  if (unrealPnl != null) {
-    const uSign = unrealPnl >= 0 ? '+' : '';
-    html += '<div class="trade-stat"><span class="k">未实现盈亏</span><span class="v ' + (unrealPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + uSign + unrealPnl.toFixed(0) + '</span></div>';
+  if (vrTotal > 0) {
+    html += '<div class="trade-stat"><span class="k">虚拟盈亏<span style="font-size:10px;opacity:.7"> 不计入已实现</span></span><span class="v ' + (virtualPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + vm0(virtualPnl) + '</span></div>';
   }
-  html += '</div></div>';
-
-  // 空仓时显示「建仓买入」入口（填总数量 + 价格，自动均分四份）
-  if (heldQty === 0) {
-    html += '<div class="trade-open">' +
-      '<div class="trade-history-title">📥 建仓买入</div>' +
-      '<div style="display:flex;gap:6px;align-items:center">' +
-      '<input type="number" id="openQty" class="form-input" placeholder="总数量(股)" style="flex:1">' +
-      '<input type="number" id="openPrice" class="form-input" step="0.001" placeholder="买入价" value="' + (price != null ? price.toFixed(2) : '') + '" style="flex:1">' +
-      '<button class="btn btn-primary btn-sm" onclick="confirmOpenPosition(\'' + stock.id + '\')">建仓买入</button>' +
-      '</div></div>';
-  }
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">' +
+    '<span style="font-size:12px;color:var(--text-muted)">可用资金</span>' +
+    '<input type="number" class="form-input" style="width:110px;padding:5px 8px" value="' + (availCash || '') + '" placeholder="手填" onchange="setStockAvailableCash(\'' + stock.id + '\', this.value)">' +
+    '<span style="font-size:12px;color:var(--text-muted)">总资金 ¥' + totalCap.toFixed(0) + '</span>' +
+    '</div>';
+  html += '</div>';
 
   html += '<div class="trade-lots">';
   LOT_PERIODS.forEach(function(p) {
     const lot = stock.lots[p.key];
-    const isSold = lot.status === 'sold';
-    const point = lotTakeProfitPoint(stock, p.key);
+    const d = dv[p.key] || {};
+    const isHolding = lotIsHolding(lot);
+    const isSold = !isHolding;
     let tpHtml = '', signalHtml = '', actionHtml = '';
 
-    if (isSold) {
-      const lotPnl = (lot.soldAt != null && cost) ? (lot.soldAt - cost) * (lot.qty || 0) : 0;
-      const lSign = lotPnl >= 0 ? '+' : '';
-      tpHtml = '<div class="lot-row"><span class="k">卖出价</span><span class="v">' + (lot.soldAt != null ? lot.soldAt.toFixed(2) : '—') + '</span></div>';
-      tpHtml += '<div class="lot-row"><span class="k">卖出日期</span><span class="v">' + (lot.soldDate || '—') + '</span></div>';
-      tpHtml += '<div class="lot-row"><span class="k">该笔盈亏</span><span class="v ' + (lotPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + lSign + lotPnl.toFixed(0) + '</span></div>';
-      // 买入点 + 买入信号（该份已卖出，等待重新买入）
-      const buyPoint = lotBuyPoint(stock, p.key);
-      if (buyPoint == null) {
-        tpHtml += '<div class="lot-row"><span class="k">买入点</span><span class="v text-muted">低点未现 / 数据不足，暂无</span></div>';
-        signalHtml = '<span class="signal-hold">⏳ 等待买入点</span>';
-      } else {
-        const buyBreached = price != null && price > buyPoint;
-        const buyDist = (price != null) ? ((price - buyPoint) / buyPoint * 100) : null;
-        // 买入点作为「警示点」直接醒目显示：未突破=橙色警示，突破=绿色
-        tpHtml += '<div class="lot-row"><span class="k">买入点</span><span class="v" style="font-weight:800;color:' + (buyBreached ? 'var(--success,#10b981)' : 'var(--warning,#f59e0b)') + '">' + buyPoint.toFixed(2) + (buyDist != null ? ' <span style="font-weight:400;opacity:.8">(' + (buyDist >= 0 ? '+' : '') + buyDist.toFixed(2) + '%)</span>' : '') + '</span></div>';
-        signalHtml = buyBreached
-          ? '<span class="signal-buy">🔺 突破买点，可买入</span>'
-          : '<span class="signal-hold">⏳ 待突破 ' + buyPoint.toFixed(2) + '</span>';
+    if (isHolding) {
+      // 持仓：成本 / 买入日 / 卖出预警点 / 虚拟换手
+      const curCost = (d.cost != null ? d.cost : lot.cost) || 0;
+      tpHtml = '<div class="lot-row"><span class="k">成本</span><span class="v">' +
+        '<input type="number" class="form-input" step="0.001" style="width:96px;padding:3px 6px;display:inline-block" value="' + (curCost || '') + '" onchange="setLotCost(\'' + stock.id + '\',\'' + p.key + '\', this.value)">' +
+        '</span></div>';
+      tpHtml += '<div class="lot-row"><span class="k">买入日</span><span class="v">' + String(d.buyDate || lot.buyDate || '—').slice(0, 10) + '</span></div>';
+      if (price != null && curCost) {
+        const lotFloat = (price - curCost) * (d.qty || 0);
+        tpHtml += '<div class="lot-row"><span class="k">浮动盈亏</span><span class="v ' + (lotFloat >= 0 ? 'trade-up' : 'trade-down') + '">' + (lotFloat >= 0 ? '+' : '') + lotFloat.toFixed(0) + '</span></div>';
       }
-      actionHtml = '<div class="lot-sell">' +
-        '<input type="number" id="lotBuyPrice_' + p.key + '" class="form-input" step="0.001" placeholder="买入价" value="' + (price != null ? price.toFixed(2) : '') + '">' +
-        '<button class="btn btn-primary btn-sm" onclick="confirmBuyLot(\'' + stock.id + '\',\'' + p.key + '\')">确认买入</button>' +
-        '</div>';
-    } else {
-      if (point == null) {
-        tpHtml = '<div class="lot-row"><span class="k">卖出点</span><span class="v text-muted">低点不足，暂无</span></div>';
-        signalHtml = '<span class="signal-hold">— 无信号</span>';
+      if (d.tp != null) {
+        const breached = price != null && price < d.tp;
+        const dist = (price != null) ? ((price - d.tp) / d.tp * 100) : null;
+        tpHtml += '<div class="lot-row"><span class="k">卖出预警点</span><span class="v" style="font-weight:700;color:' + (breached ? 'var(--danger)' : 'var(--success)') + '">' + d.tp.toFixed(2) + (dist != null ? ' <span style="font-weight:400;opacity:.8">(' + (dist >= 0 ? '+' : '') + dist.toFixed(2) + '%)</span>' : '') + '</span></div>';
+        signalHtml = breached ? '<span class="signal-sellall">🔻 已跌破卖出预警点</span>' : '<span class="signal-hold">🟢 持有</span>';
       } else {
-        const breached = price != null && price < point;
-        const dist = (price != null) ? ((price - point) / point * 100) : null;
-        tpHtml = '<div class="lot-row"><span class="k">卖出点</span><span class="v" style="font-weight:700;color:' + (breached ? 'var(--danger)' : 'var(--success)') + '">' + point.toFixed(2) + (dist != null ? ' <span style="font-weight:400;opacity:.8">(' + (dist >= 0 ? '+' : '') + dist.toFixed(2) + '%)</span>' : '') + '</span></div>';
-        signalHtml = breached
-          ? '<span class="signal-sellall">🔻 跌破卖出点</span>'
-          : '<span class="signal-hold">🟢 持有</span>';
+        tpHtml += '<div class="lot-row"><span class="k">卖出预警点</span><span class="v text-muted">' + (d.hasData ? '暂无（买入后K线不足 / 顶点是最新一根）' : '行情加载中…') + '</span></div>';
+        signalHtml = '<span class="signal-hold">— 无信号</span>';
+      }
+      if ((d.vrHistory || []).length) {
+        const vp = (d.virtualPnl || 0) * (d.qty || 0);
+        tpHtml += '<div class="lot-row"><span class="k">虚拟换手</span><span class="v">' + d.vrHistory.length + ' 次 · <span class="' + (vp >= 0 ? 'trade-up' : 'trade-down') + '">' + (vp >= 0 ? '+' : '') + vp.toFixed(0) + '</span> <span style="font-size:10px;color:var(--text-muted)">不计入已实现</span></span></div>';
+        const recent = d.vrHistory.slice(-2).map(function(h) { return String(h.date).slice(5, 10) + ' 卖' + h.sellPrice.toFixed(2) + '→买' + h.buyPrice.toFixed(2); }).join('；');
+        tpHtml += '<div class="lot-row"><span class="k" style="font-size:11px">最近换手</span><span class="v" style="font-size:11px;color:var(--text-muted)">' + recent + '</span></div>';
       }
       actionHtml = '<div class="lot-sell">' +
         '<input type="number" id="lotSellPrice_' + p.key + '" class="form-input" step="0.001" placeholder="卖出价" value="' + (price != null ? price.toFixed(2) : '') + '">' +
         '<button class="btn btn-primary btn-sm" onclick="confirmSellLot(\'' + stock.id + '\',\'' + p.key + '\')">确认卖出</button>' +
         '</div>';
+    } else {
+      // 空仓：买入点（含消费状态）+ 买入数量/价格
+      if (d.bp != null) {
+        const dist = (price != null) ? ((price - d.bp) / d.bp * 100) : null;
+        tpHtml = '<div class="lot-row"><span class="k">买入点</span><span class="v" style="font-weight:800;color:' + (d.bpBroken ? 'var(--success,#10b981)' : 'var(--warning,#f59e0b)') + '">' + d.bp.toFixed(2) + (dist != null ? ' <span style="font-weight:400;opacity:.8">(' + (dist >= 0 ? '+' : '') + dist.toFixed(2) + '%)</span>' : '') + '</span></div>';
+        signalHtml = d.bpBroken
+          ? '<span class="signal-buy">🔺 已突破买入点</span>'
+          : '<span class="signal-hold">⏳ 待突破 ' + d.bp.toFixed(2) + '</span>';
+        if (d.bpBroken) {
+          tpHtml += '<div class="lot-row"><span class="k" style="font-size:11px">状态</span><span class="v" style="font-size:11px;color:var(--text-muted)">该买入点已消费，等新谷底</span></div>';
+        }
+      } else {
+        tpHtml = '<div class="lot-row"><span class="k">买入点</span><span class="v text-muted">' + (d.hasData ? '暂无（等新谷底）' : '行情加载中…') + '</span></div>';
+        signalHtml = '<span class="signal-hold">⏳ 等待买入点</span>';
+      }
+      if (lot.soldDate) {
+        tpHtml += '<div class="lot-row"><span class="k" style="font-size:11px">上次卖出</span><span class="v" style="font-size:11px;color:var(--text-muted)">' + String(lot.soldDate).slice(0, 10) + (lot.soldAt != null ? ' @' + lot.soldAt.toFixed(2) : '') + '</span></div>';
+      }
+      actionHtml = '<div class="lot-sell">' +
+        '<input type="number" id="lotBuyQty_' + p.key + '" class="form-input" placeholder="数量(股)" value="' + (lot.qty || '') + '">' +
+        '<input type="number" id="lotBuyPrice_' + p.key + '" class="form-input" step="0.001" placeholder="买入价" value="' + (price != null ? price.toFixed(2) : '') + '">' +
+        '<button class="btn btn-primary btn-sm" onclick="confirmBuyLot(\'' + stock.id + '\',\'' + p.key + '\')">确认买入</button>' +
+        '</div>';
     }
 
     html += '<div class="trade-lot' + (isSold ? ' is-sold' : '') + '">' +
       '<div class="trade-lot-head"><span class="lot-label">' + lotDisplayName(p.key, isSold) + '</span>' +
-      '<span class="lot-qty">' + (lot.qty || 0) + ' 股</span>' +
+      (isHolding
+        ? '<span class="lot-qty">' + (d.qty || 0) + ' 股</span>'
+        : '<span class="lot-qty">空仓</span>') +
       '<span style="margin-left:auto">' + signalHtml + '</span></div>' +
       tpHtml + actionHtml +
       '</div>';
@@ -10506,6 +10674,18 @@ function calcMA25(candles) {
 // 参数：
 //   buyDate（YYYY-MM-DD，可空）：只在买入日之后的K线里找（不回到买入前）。
 //   maxLookback（可空）：只取最近 N 根K线，避免回退太久。
+// 买入点「谷底」的搜索窗口（根）。只在最近这么多根 K 线里找阶段底部，
+// 避免把几个月前的远古最低点当成当前谷底（2026-09-17 加入）。
+const BP_VALLEY_LOOKBACK = 20;
+
+// 判断两根 K 线是否属于「同一交易日」（时间戳前 8 位相同）。
+// 用途：同一波合并只在同一天内的相邻 K 线间生效（日线每根各占一天 → 永不合并）。
+function sameTradingDay(a, b) {
+  const ka = String(a || '').replace(/\D/g, '').slice(0, 8);
+  const kb = String(b || '').replace(/\D/g, '').slice(0, 8);
+  return !!ka && ka === kb;
+}
+
 // 返回 { point, triggered }；还在涨未回落、或低点不足返回 null。
 function calcTakeProfitPoint(candles, buyDate, maxLookback) {
   if (!candles || candles.length < 4) return null;
@@ -10535,9 +10715,11 @@ function calcTakeProfitPoint(candles, buyDate, maxLookback) {
   let startJ = vertexIdx - 1;
   // 顶点前第一根若比顶点 low 略低（相对差 <0.5%，同一波），视为同一波，用较低者作为第 1 个递减，
   // 避免把「顶点下影线 + 前一根下影线」这种同一顶部区域算成两次递减（密集短周期 K 线会因此止盈点偏高）。
+  // 2026-09-17 修正：仅当两根属于「同一交易日」才合并——日线跨日不算同一波。
   if (startJ >= 0) {
     const prevLow = parseFloat(arr[startJ].low);
-    if (prevLow < currentLow && (currentLow - prevLow) / currentLow < 0.005) {
+    if (prevLow < currentLow && (currentLow - prevLow) / currentLow < 0.005
+        && sameTradingDay(arr[startJ].day, arr[vertexIdx].day)) {
       currentLow = prevLow;
       startJ = vertexIdx - 2;
     }
@@ -10575,9 +10757,12 @@ function calcBuyPoint(candles, sellDate, maxLookback) {
     if (valleyStart < 0) return null;  // 卖出日之后暂无K线
   }
   const n = candles.length;
-  // 谷底 = [valleyStart, end] 里 low 最低那根（用 <= 取最后一个达到最低值的，即"开始涨之前的最后一根"）
-  let valleyIdx = valleyStart;
-  for (let i = valleyStart + 1; i < n; i++) {
+  // 谷底 = 只在「最近 BP_VALLEY_LOOKBACK 根」里找 low 最低那根（用 <= 取最后一个达到最低值的）。
+  // 2026-09-17 修正：不限制范围会取到几个月前的远古最低点，导致买入点严重偏低
+  //（江钨装备日线曾算成 14.82，用户手算 17.83；30分算成 13.20，用户手算 17.09）。
+  const vFrom = Math.max(valleyStart, n - BP_VALLEY_LOOKBACK);
+  let valleyIdx = vFrom;
+  for (let i = vFrom + 1; i < n; i++) {
     if (parseFloat(candles[i].low) <= parseFloat(candles[valleyIdx].low)) {
       valleyIdx = i;
     }
@@ -10590,15 +10775,18 @@ function calcBuyPoint(candles, sellDate, maxLookback) {
   let startJ = valleyIdx - 1;
   // 谷底前第一根若比谷底 high 略高（相对差 <0.5%，同一波），视为同一波，用较高者作为第 1 个递增，
   // 避免把「谷底上影线 + 前一根上影线」这种同一底部区域算成两次递增（镜像止盈点的同一波修复）。
+  // 2026-09-17 修正：仅当两根属于「同一交易日」才合并——日线跨日不算同一波。
   if (startJ >= 0) {
     const prevHigh = parseFloat(candles[startJ].high);
-    if (prevHigh > currentHigh && (prevHigh - currentHigh) / currentHigh < 0.005) {
+    if (prevHigh > currentHigh && (prevHigh - currentHigh) / currentHigh < 0.005
+        && sameTradingDay(candles[startJ].day, candles[valleyIdx].day)) {
       currentHigh = prevHigh;
       startJ = valleyIdx - 2;
     }
   }
-  // maxLookback：往前找 high 时最多回看 N 根
-  const floorJ = (maxLookback && valleyIdx - maxLookback + 1 > 0) ? (valleyIdx - maxLookback + 1) : 0;
+  // 往前找 high 时最多回看 N 根（未指定则用与谷底相同的窗口）
+  const backWin = maxLookback || BP_VALLEY_LOOKBACK;
+  const floorJ = (valleyIdx - backWin + 1 > 0) ? (valleyIdx - backWin + 1) : 0;
   for (let j = startJ; j >= floorJ; j--) {
     const high = parseFloat(candles[j].high);
     if (high > currentHigh) {
@@ -10608,7 +10796,7 @@ function calcBuyPoint(candles, sellDate, maxLookback) {
     }
   }
   if (found < 3) return null;
-  return { point: currentHigh, triggered: true };
+  return { point: currentHigh, triggered: true, valleyDay: candles[valleyIdx].day, valleyIdx: valleyIdx };
 }
 
 // --- 综合止盈信号：判断当前价是否跌破各周期止盈点 ---
@@ -10694,6 +10882,7 @@ async function fetchStockData(stock) {
   const isAShare = /^(sh|sz)/.test(normCode);
   let price = null, name = stock.name;
   const tp = { daily: null, m120: null, m60: null, m30: null };
+  const kl = { daily: null, m120: null, m60: null, m30: null };  // 缓存 K 线，供交易面板派生（买入点消费链 / 虚拟换手重放）
   const bp = { daily: null, m120: null, m60: null, m30: null };
   const buyDate = stock.buyDate || stock.createdAt || null;
   let errors = [];
@@ -10726,7 +10915,8 @@ async function fetchStockData(stock) {
 
   // 2) Daily K-line → daily take-profit point + buy point
   try {
-    const klDaily = await fetchKLine(klineCode, 'day', 40);
+    const klDaily = await fetchKLine(klineCode, 'day', 60);
+    kl.daily = klDaily;
     const dailyBuyDate = stock.lots.daily.buyDate || buyDate;
     const tpd = calcTakeProfitPoint(klDaily, dailyBuyDate, 20);
     if (tpd) tp.daily = tpd.point;
@@ -10763,10 +10953,11 @@ async function fetchStockData(stock) {
   } else {
     try {
       const [kl30, kl60, kl120] = await Promise.all([
-        fetchKLine(klineCode, 30, 40),
-        fetchKLine(klineCode, 60, 40),
-        fetchKLine(klineCode, 120, 40)
+        fetchKLine(klineCode, 30, 60),
+        fetchKLine(klineCode, 60, 60),
+        fetchKLine(klineCode, 120, 60)
       ]);
+      kl.m30 = kl30; kl.m60 = kl60; kl.m120 = kl120;
       const tp30 = calcTakeProfitPoint(kl30, stock.lots.m30.buyDate || buyDate); if (tp30) tp.m30 = tp30.point;
       const tp60 = calcTakeProfitPoint(kl60, stock.lots.m60.buyDate || buyDate); if (tp60) tp.m60 = tp60.point;
       const tp120 = calcTakeProfitPoint(kl120, stock.lots.m120.buyDate || buyDate); if (tp120) tp.m120 = tp120.point;
@@ -10785,8 +10976,10 @@ async function fetchStockData(stock) {
     stockQuotes[stock.id] = { error: errors.join(' / ') || '无行情数据', ts: Date.now() };
   } else {
     const signal = calcTakeProfitSignal(price, tp);
+    const deriv = {};
+    try { LOT_PERIODS.forEach(function(pp) { deriv[pp.key] = lotDerived(stock, pp.key, kl); }); } catch(e) { console.warn('[lot derived failed]', e); }
     stockQuotes[stock.id] = {
-      price, tp, bp, signal, name, ts: Date.now(),
+      price, tp, bp, signal, name, ts: Date.now(), kl: kl, lots: deriv,
       error: errors.length ? errors.join(' / ') : null
     };
     // Persist corrected name back to stockData (fixes old dirty name from search bug)
@@ -10856,44 +11049,53 @@ function renderStocks() {
     const q = stockQuotes[s.id];
     const hasPrice = q && q.price != null;  // price available (API, manual, or K-line fallback)
     const price = hasPrice ? q.price : null;
-    const pnl = (price != null && s.costPrice) ? ((price - s.costPrice) / s.costPrice * 100) : null;
-    const pnlVal = (price != null && s.costPrice) ? ((price - s.costPrice) * s.quantity) : null;
+    const avgCost = stockAvgCost(s);   // 各持仓周期成本的加权平均（不再用旧的 stock.costPrice）
+    const pnl = (price != null && avgCost) ? ((price - avgCost) / avgCost * 100) : null;
+    const pnlVal = (price != null && avgCost) ? ((price - avgCost) * s.quantity) : null;
     const isManual = q && q.error && q.error.includes('手动现价');
 
-    // Take-profit cells (merged into a single "止盈点" column, two per line)
+    // Take-profit / buy-point cells: 持仓显示卖出预警点，空仓显示买入点
     function tpCell() {
       if (!hasPrice) return '<td class="text-muted">—</td>';
-      const tpm = q.tp || {};
-      const mk = (key, point) => {
-        const lot = s.lots && s.lots[key];
-        const label = lotDisplayName(key, !!(lot && lot.status === 'sold'));
-        if (point == null) return `<span class="text-muted">${label}—</span>`;
-        const breached = price < point;
-        return `<span>${label} <span class="${breached ? 'ma-down' : 'ma-up'}">${point.toFixed(2)}${breached ? '↓破' : '↑'}</span></span>`;
+      const mk = (key) => {
+        const d = (q && q.lots && q.lots[key]) || {};
+        const holding = lotIsHolding(s.lots ? s.lots[key] : null);
+        const label = lotDisplayName(key, !holding);
+        if (holding) {
+          if (d.tp == null) return `<span class="text-muted">${label}—</span>`;
+          const breached = price < d.tp;
+          return `<span>${label} <span class="${breached ? 'ma-down' : 'ma-up'}">${d.tp.toFixed(2)}${breached ? '↓破' : '↑'}</span></span>`;
+        }
+        if (d.bp == null) return `<span class="text-muted">${label}—</span>`;
+        return `<span>${label} <span class="${d.bpBroken ? 'ma-up' : 'text-muted'}">${d.bp.toFixed(2)}${d.bpBroken ? '↑破' : ''}</span></span>`;
       };
-      return `<td style="font-size:10px;line-height:1.7;white-space:nowrap">${mk('m30', tpm.m30)} ${mk('m60', tpm.m60)}<br>${mk('m120', tpm.m120)} ${mk('daily', tpm.daily)}</td>`;
+      return `<td style="font-size:10px;line-height:1.7;white-space:nowrap">${mk('m30')} ${mk('m60')}<br>${mk('m120')} ${mk('daily')}</td>`;
     }
 
-    // Signal cell
+    // Signal cell：按四周期派生状态汇总（跌破优先 > 买入信号 > 持有/等待）
     let signalHtml = '<td class="text-muted">—</td>';
-    const emptyPosition = lotHeldQty(s) === 0;  // 空仓（可建仓）
-    if (hasPrice && emptyPosition) {
-      const buyPoint = (q.bp && q.bp.daily != null) ? q.bp.daily : null;
-      if (buyPoint != null) {
-        const buyBreached = price > buyPoint;
-        signalHtml = buyBreached
-          ? `<td><span class="signal-buy">🔺 突破买点 ${buyPoint.toFixed(2)}，可建仓</span></td>`
-          : `<td><span class="signal-hold">⏳ 等待买点 ${buyPoint.toFixed(2)}</span></td>`;
-      } else {
-        signalHtml = `<td><span class="signal-hold">⏳ 空仓，等待买入点</span></td>`;
-      }
-    } else if (hasPrice && q.signal) {
-      const sig = q.signal;
-      const detail = sig.breached.length
-        ? sig.breached.join('<br>')
-        : sig.holding.join('<br>');
-      const errNote = q.error ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${q.error}</div>` : '';
-      signalHtml = `<td><span class="${sig.cls}">${sig.label}</span>${detail ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${detail}</div>` : ''}${errNote}</td>`;
+    if (hasPrice && q && q.lots) {
+      const breachTxt = [], firedTxt = [], waitTxt = [];
+      LOT_PERIODS.forEach(p => {
+        const d = q.lots[p.key]; if (!d) return;
+        const holding = lotIsHolding(s.lots ? s.lots[p.key] : null);
+        const nm = lotDisplayName(p.key, !holding);
+        if (holding) {
+          if (d.tp != null) {
+            if (price < d.tp) breachTxt.push(nm + ' 跌破 ' + d.tp.toFixed(2));
+            else waitTxt.push(nm + ' 预警 ' + d.tp.toFixed(2));
+          }
+        } else if (d.bp != null) {
+          if (d.bpBroken) firedTxt.push(nm + ' 突破 ' + d.bp.toFixed(2));
+          else waitTxt.push(nm + ' 待破 ' + d.bp.toFixed(2));
+        }
+      });
+      const sub = arr => `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${arr.join('<br>')}</div>`;
+      if (breachTxt.length) signalHtml = `<td><span class="signal-sellall">🔻 止盈提示</span>${sub(breachTxt)}</td>`;
+      else if (firedTxt.length) signalHtml = `<td><span class="signal-buy">🔺 买入信号</span>${sub(firedTxt)}</td>`;
+      else if (waitTxt.length) signalHtml = `<td><span class="signal-hold">🟢 持有 / 等待</span>${sub(waitTxt)}</td>`;
+      else if (!lotHeldQty(s)) signalHtml = `<td><span class="signal-hold">⏳ 空仓，等待买入点</span></td>`;
+      if (q.error) signalHtml = signalHtml.replace('</td>', `<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${q.error}</div></td>`);
     } else if (q && q.error) {
       signalHtml = `<td class="text-muted text-sm" style="font-size:11px">${q.error}</td>`;
     }
@@ -10923,7 +11125,7 @@ function renderStocks() {
         ${s.note ? `<span class="text-muted" style="font-size:11px;margin-left:4px">${s.note}</span>` : ''}
       </td>
       <td>${s.quantity}</td>
-      <td>${s.costPrice ? s.costPrice.toFixed(2) : '—'}</td>
+      <td>${avgCost ? avgCost.toFixed(2) : '—'}</td>
       <td style="font-weight:600">${price != null ? price.toFixed(2) + (isManual ? ' <span class="badge badge-warning" style="font-size:9px;padding:1px 4px">手动</span>' : '') : '<span class="text-muted">—</span>'}</td>
       ${pnlHtml}
       ${tpCell()}
@@ -11215,7 +11417,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260910h';
+  b.textContent = 'build 20260917a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
