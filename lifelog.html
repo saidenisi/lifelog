@@ -10689,43 +10689,44 @@ function sameTradingDay(a, b) {
 // 返回 { point, triggered }；还在涨未回落、或低点不足返回 null。
 function calcTakeProfitPoint(candles, buyDate, maxLookback) {
   if (!candles || candles.length < 4) return null;
-  let arr = candles;
+  // 2026-09-17 改用绝对下标：顶点取自「买入日之后（或最近 maxLookback 根）」，
+  // 但往前找递减 low 时允许回看到买入日之前——否则若买入那根本身就是区间最高点，
+  // 会因「顶点前面没有 K 线」而永远算不出卖出预警点（江钨装备 60分 即为此例）。
+  let startIdx = 0;
   if (buyDate) {
-    const b = buyDate.replace(/-/g, '');
-    arr = candles.filter(c => {
-      const d = String(c.day || '').replace(/-/g, '').slice(0, 8);
-      return d >= b;
-    });
+    const b = String(buyDate).replace(/\D/g, '').slice(0, 8);
+    startIdx = candles.findIndex(c => String(c.day || '').replace(/\D/g, '').slice(0, 8) >= b);
+    if (startIdx < 0) return null;
   }
-  if (maxLookback && arr.length > maxLookback) arr = arr.slice(-maxLookback);
-  if (arr.length < 4) return null;
-  const n = arr.length;
+  let vStart = startIdx;
+  if (maxLookback && candles.length - vStart > maxLookback) vStart = candles.length - maxLookback;
+  if (candles.length - vStart < 4) return null;
   // 顶点 = high 最高那根（用 >= 取最后一个达到最高值的，即"开始跌之前的最后一根"）
-  let vertexIdx = 0;
-  for (let i = 1; i < n; i++) {
-    if (parseFloat(arr[i].high) >= parseFloat(arr[vertexIdx].high)) {
+  let vertexIdx = vStart;
+  for (let i = vStart + 1; i < candles.length; i++) {
+    if (parseFloat(candles[i].high) >= parseFloat(candles[vertexIdx].high)) {
       vertexIdx = i;
     }
   }
   // 顶点是最新一根 => 还在涨，尚未回落
-  if (vertexIdx >= n - 1) return null;
+  if (vertexIdx >= candles.length - 1) return null;
   // 从顶点（包含）往前找三个依次递减的 low
-  let currentLow = parseFloat(arr[vertexIdx].low);
+  let currentLow = parseFloat(candles[vertexIdx].low);
   let found = 1;
   let startJ = vertexIdx - 1;
   // 顶点前第一根若比顶点 low 略低（相对差 <0.5%，同一波），视为同一波，用较低者作为第 1 个递减，
   // 避免把「顶点下影线 + 前一根下影线」这种同一顶部区域算成两次递减（密集短周期 K 线会因此止盈点偏高）。
   // 2026-09-17 修正：仅当两根属于「同一交易日」才合并——日线跨日不算同一波。
   if (startJ >= 0) {
-    const prevLow = parseFloat(arr[startJ].low);
+    const prevLow = parseFloat(candles[startJ].low);
     if (prevLow < currentLow && (currentLow - prevLow) / currentLow < 0.005
-        && sameTradingDay(arr[startJ].day, arr[vertexIdx].day)) {
+        && sameTradingDay(candles[startJ].day, candles[vertexIdx].day)) {
       currentLow = prevLow;
       startJ = vertexIdx - 2;
     }
   }
   for (let j = startJ; j >= 0; j--) {
-    const low = parseFloat(arr[j].low);
+    const low = parseFloat(candles[j].low);
     if (low < currentLow) {
       currentLow = low;  // 依次更低的 low
       found++;
