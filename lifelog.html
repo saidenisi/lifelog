@@ -3368,6 +3368,36 @@ const DB = {
   }
 };
 
+// ===== 强制以云端为准：?resync=stock 或 ?resync=stock,todos =====
+// ⚠️ 必须放在**所有 DB.get() 之前**：先把点名的集合本地缓存改名备份（不删除）+清空，
+//    并让本次会话【完全禁止推送】，即使内存里残留旧数据也绝不会覆盖云端。
+//    随后自动重载一次，页面在"本地为空"的状态下从云端重建。
+var __RESYNC_KEYS__ = (function () {
+  try {
+    var m = location.search.match(/[?&]resync=([A-Za-z0-9_,]+)/);
+    return m ? m[1].split(',').filter(Boolean) : [];
+  } catch (e) { return []; }
+})();
+(function forceResync() {
+  if (!__RESYNC_KEYS__.length) return;
+  try {
+    var stamp = Date.now(), removed = 0;
+    __RESYNC_KEYS__.forEach(function (k) {
+      var kk = 'lifelog_' + k;
+      var v = localStorage.getItem(kk);
+      if (v != null) {
+        try { localStorage.setItem(kk + '_backup_' + stamp, v); } catch (e) {}
+        localStorage.removeItem(kk);
+        removed++;
+      }
+    });
+    console.log('[resync] 已备份并清空本地: ' + __RESYNC_KEYS__.join(', ') + '（清 ' + removed + ' 项）；本次会话禁止推送');
+    if (!/[?&]resynced=1\b/.test(location.search)) {
+      location.replace(location.href + (location.href.indexOf('?') >= 0 ? '&' : '?') + 'resynced=1');
+    }
+  } catch (e) { console.warn('[resync] failed', e); }
+})();
+
 let fitnessData = DB.get('fitness');
 let fitnessTypes = DB.get('fitnessTypes');
 if (!Array.isArray(fitnessTypes) || fitnessTypes.length === 0) {
@@ -3760,35 +3790,6 @@ var __RESCUE_MODE__ = (function(){ try { return /[?&]rescue=1\b/.test(location.s
 // 强制以云端为准（URL 带 ?resync=stock 或 ?resync=stock,todos）：把这几个集合的本地数据
 // 改名备份后清空，随后正常拉取会用云端数据重建本地 —— 用于「某台设备带着旧数据反复覆盖云端」。
 // 只影响参数点名的集合，其余集合完全不动；旧本地数据会以 lifelog_<key>_backup_<时间> 保留。
-// ⚠️ 关键：数据变量（stockData 等）在本脚本更早处已用 DB.get() 读进内存，仅清 localStorage 无效，
-//    必须在清空后立刻重载一次，让页面在"本地为空"的状态重新初始化并从云端重建。
-(function forceResync() {
-  try {
-    var m = location.search.match(/[?&]resync=([A-Za-z0-9_,]+)/);
-    if (!m) return;
-    var keys = m[1].split(',').filter(Boolean);
-    var stamp = Date.now();
-    var removed = 0, done = [];
-    keys.forEach(function(k) {
-      var kk = 'lifelog_' + k;
-      var v = localStorage.getItem(kk);
-      if (v != null) {
-        try { localStorage.setItem(kk + '_backup_' + stamp, v); } catch (e) {}
-        localStorage.removeItem(kk);
-        removed++;
-      }
-      done.push(k);
-    });
-    if (!/[?&]resynced=1\b/.test(location.search)) {
-      var u = location.href + (location.href.indexOf('?') >= 0 ? '&' : '?') + 'resynced=1';
-      console.log('[resync] 已备份并清空: ' + done.join(', ') + '（清 ' + removed + ' 项），重新加载以从云端重建…');
-      location.replace(u);
-      return;
-    }
-    console.log('[resync] 本地为空，将从云端重建: ' + done.join(', '));
-  } catch (e) { console.warn('[resync] failed', e); }
-})();
-
 async function pullAllFromCloud() {
   if (__RESCUE_MODE__) { setSyncStatus('抢救模式（仅本地，未联网）', 'online'); return; }
   setSyncStatus('拉取中...', 'syncing');
@@ -4003,6 +4004,7 @@ function keyHasPending(key) {
 // Push all local data to cloud
 async function pushAllToCloud() {
   if (__RESCUE_MODE__) return;
+  if (__RESYNC_KEYS__.length) { setSyncStatus('强制同步模式：只拉不推 ✅', 'online'); return; }
   setSyncStatus('上传中...', 'syncing');
   var errors = 0;
   for (var i = 0; i < SYNC_KEYS.length; i++) {
@@ -11451,7 +11453,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260917c';
+  b.textContent = 'build 20260917d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
