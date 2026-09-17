@@ -3756,6 +3756,30 @@ function withTimeout(promise, ms) {
 // Pull all data from cloud (in parallel, each with timeout), merge into local
 // 抢救模式：URL 带 ?rescue=1 时只读本地 localStorage、绝不联网拉取/推送（用于数据恢复，防止云端假数据覆盖本地真实数据）
 var __RESCUE_MODE__ = (function(){ try { return /[?&]rescue=1\b/.test(location.search); } catch(e){ return false; } })();
+
+// 强制以云端为准（URL 带 ?resync=stock 或 ?resync=stock,todos）：把这几个集合的本地数据
+// 改名备份后清空，随后正常拉取会用云端数据重建本地 —— 用于「某台设备带着旧数据反复覆盖云端」。
+// 只影响参数点名的集合，其余集合完全不动；旧本地数据会以 lifelog_<key>_backup_<时间> 保留。
+(function forceResync() {
+  try {
+    var m = location.search.match(/[?&]resync=([A-Za-z0-9_,]+)/);
+    if (!m) return;
+    var keys = m[1].split(',').filter(Boolean);
+    var stamp = Date.now();
+    var done = [];
+    keys.forEach(function(k) {
+      var kk = 'lifelog_' + k;
+      var v = localStorage.getItem(kk);
+      if (v != null) {
+        try { localStorage.setItem(kk + '_backup_' + stamp, v); } catch (e) {}
+        localStorage.removeItem(kk);
+      }
+      done.push(k);
+    });
+    console.log('[resync] 本地已清空并将从云端重建: ' + done.join(', ') + '（旧数据已备份为 lifelog_<key>_backup_' + stamp + '）');
+  } catch (e) { console.warn('[resync] failed', e); }
+})();
+
 async function pullAllFromCloud() {
   if (__RESCUE_MODE__) { setSyncStatus('抢救模式（仅本地，未联网）', 'online'); return; }
   setSyncStatus('拉取中...', 'syncing');
@@ -11418,7 +11442,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260917a';
+  b.textContent = 'build 20260917b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
