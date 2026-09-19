@@ -2859,11 +2859,19 @@ tbody tr:hover{background:var(--surface-hover)}
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">入睡时间</label>
-          <input type="time" class="form-input" id="sleepBedtime" value="23:00">
+          <div style="display:flex;align-items:center;gap:4px">
+            <select class="form-input" id="sleepBedtimeH" style="flex:1;min-width:0"></select>
+            <span style="color:var(--text-muted);font-weight:600">:</span>
+            <select class="form-input" id="sleepBedtimeM" style="flex:1;min-width:0"></select>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">起床时间</label>
-          <input type="time" class="form-input" id="sleepWakeTime" value="07:00">
+          <div style="display:flex;align-items:center;gap:4px">
+            <select class="form-input" id="sleepWakeTimeH" style="flex:1;min-width:0"></select>
+            <span style="color:var(--text-muted);font-weight:600">:</span>
+            <select class="form-input" id="sleepWakeTimeM" style="flex:1;min-width:0"></select>
+          </div>
         </div>
       </div>
       <div class="form-group">
@@ -5606,21 +5614,75 @@ function renderFitnessCal(alive) {
    SLEEP MODULE
    ============================================================ */
 
+// 睡眠时间：小时 00-23 + 分钟固定「00/10/20/30/40/50/60」共 7 档（10 分钟粒度）
+// 选 60 自动进位到下一小时的 00；存库仍是标准 'HH:MM'
+const SLEEP_MIN_STEPS = ['00', '10', '20', '30', '40', '50', '60'];
+function initSleepTimeSelects() {
+  [['sleepBedtimeH', 'sleepBedtimeM'], ['sleepWakeTimeH', 'sleepWakeTimeM']].forEach(function(pair) {
+    var hs = document.getElementById(pair[0]);
+    var ms = document.getElementById(pair[1]);
+    if (!hs || !ms) return;
+    if (!hs.options.length) {
+      for (var h = 0; h < 24; h++) {
+        var hv = String(h).padStart(2, '0');
+        hs.appendChild(new Option(hv, hv));
+      }
+    }
+    if (!ms.options.length) {
+      SLEEP_MIN_STEPS.forEach(function(m) {
+        ms.appendChild(new Option(m === '60' ? '60（下一小时）' : m, m));
+      });
+    }
+  });
+}
+// 把 'HH:MM' 写进两个下拉；若分钟不在档位里（旧数据），临时补一个选项，避免改动用户原值
+function setSleepTime(prefix, hhmm) {
+  initSleepTimeSelects();
+  var hs = document.getElementById(prefix + 'H');
+  var ms = document.getElementById(prefix + 'M');
+  if (!hs || !ms) return;
+  var parts = String(hhmm || '00:00').split(':');
+  var h = String((parseInt(parts[0], 10) || 0) % 24).padStart(2, '0');
+  var m = String(parseInt(parts[1], 10) || 0).padStart(2, '0');
+  hs.value = h;
+  var exists = false;
+  for (var i = 0; i < ms.options.length; i++) { if (ms.options[i].value === m) { exists = true; break; } }
+  if (!exists) {
+    var inserted = false;
+    for (var j = 0; j < ms.options.length; j++) {
+      if (parseInt(ms.options[j].value, 10) > parseInt(m, 10)) { ms.insertBefore(new Option(m, m), ms.options[j]); inserted = true; break; }
+    }
+    if (!inserted) ms.appendChild(new Option(m, m));
+  }
+  ms.value = m;
+}
+// 读回 'HH:MM'；分钟选 60 时进位到下一小时 00
+function getSleepTime(prefix) {
+  var hs = document.getElementById(prefix + 'H');
+  var ms = document.getElementById(prefix + 'M');
+  if (!hs || !ms) return '';
+  var h = parseInt(hs.value, 10) || 0;
+  var m = parseInt(ms.value, 10) || 0;
+  if (m >= 60) { h = (h + 1) % 24; m = 0; }
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
 function openSleepModal(id) {
   document.getElementById('sleepId').value = id || '';
   document.getElementById('sleepModalTitle').textContent = id ? '编辑睡眠记录' : '添加睡眠记录';
+  initSleepTimeSelects();
   if (id) {
     const r = sleepData.find(s => s.id === id);
     if (r) {
       document.getElementById('sleepDate').value = r.date;
-      document.getElementById('sleepBedtime').value = r.bedtime;
-      document.getElementById('sleepWakeTime').value = r.wakeTime;
+      setSleepTime('sleepBedtime', r.bedtime);
+      setSleepTime('sleepWakeTime', r.wakeTime);
       document.getElementById('sleepNotes').value = r.notes || '';
     }
   } else {
     document.getElementById('sleepDate').value = yesterdayStr();
-    document.getElementById('sleepBedtime').value = '23:00';
-    document.getElementById('sleepWakeTime').value = '07:00';
+    setSleepTime('sleepBedtime', '23:00');
+    setSleepTime('sleepWakeTime', '07:00');
     document.getElementById('sleepNotes').value = '';
   }
   document.getElementById('sleepModal').classList.add('active');
@@ -5630,8 +5692,8 @@ function saveSleep() {
   const id = document.getElementById('sleepId').value;
   const date = document.getElementById('sleepDate').value;
   if (!date) { toast('请选择日期'); return; }
-  const bedtime = document.getElementById('sleepBedtime').value;
-  const wakeTime = document.getElementById('sleepWakeTime').value;
+  const bedtime = getSleepTime('sleepBedtime');
+  const wakeTime = getSleepTime('sleepWakeTime');
   if (!bedtime || !wakeTime) { toast('请填写入睡和起床时间'); return; }
   const notes = document.getElementById('sleepNotes').value;
   const duration = calcSleepDuration(bedtime, wakeTime);
@@ -11459,7 +11521,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260919b';
+  b.textContent = 'build 20260919c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
