@@ -3355,36 +3355,24 @@ function loadHighlights(callback) {
   document.head.appendChild(s);
 }
 
-// 2026-09-19：本地 stock 缓存键改为 stock_v2。
-// 起因：部分设备（手机）长期缓存着很旧的 stock 数据，每次打开都把它全量推上云、反复覆盖云端正确持仓。
-// 换键后旧键 lifelog_stock 被彻底忽略，设备会以云端为准重建（旧键保留作备份，不删除）。
-const DB_ALIAS = { stock: 'stock_v2' };
+// 2026-09-19：股票集合整体「换键」——本地键与云端键同时从 stock 迁移到 stock2。
+// 起因：部分设备长期缓存着几个月前的旧股票数据，每次打开页面就把旧数据全量推上云，
+//       反复覆盖云端正确持仓。之前只换本地键（stock_v2）无效：只要设备还在跑旧代码/旧缓存页，
+//       它仍然会往【云端的 stock 键】推旧数据。
+// 因此本次连【云端键】一起换掉：新版只读写 stock2，旧设备只读写 stock，物理隔离、互不影响。
+// 云端 stock 里残留的旧数据从此无人读取（保留作备份，可随时查阅）。
 const DB = {
   get(key, def=[]) {
-    const k = DB_ALIAS[key] || key;
-    try { return JSON.parse(localStorage.getItem('lifelog_'+k)) || def; }
+    try { return JSON.parse(localStorage.getItem('lifelog_'+key)) || def; }
     catch { return def; }
   },
   set(key, val) {
-    const k = DB_ALIAS[key] || key;
     // 无痕/隐私模式下 localStorage 可能抛异常（配额0或禁用），吞掉以免中断同步流程；
     // 数据仍在内存中，云端同步不受影响。
-    try { localStorage.setItem('lifelog_'+k, JSON.stringify(val)); }
+    try { localStorage.setItem('lifelog_'+key, JSON.stringify(val)); }
     catch (e) { console.warn('[DB] localStorage 写入失败('+key+')，继续使用内存数据:', e.message); }
   }
 };
-// 首次切到新键时，清掉增量同步缓存里 stock 的时间戳，确保本次一定重新从云端拉取
-// （否则若本地 syncMeta 认为 stock 未变化，会跳过拉取，导致换键后显示为空）
-(function stockKeyMigration() {
-  try {
-    if (localStorage.getItem('lifelog_stock_v2') == null) {
-      var meta = {};
-      try { meta = JSON.parse(localStorage.getItem('lifelog_syncMeta') || '{}'); } catch (e) {}
-      if (meta && meta.stock) { delete meta.stock; localStorage.setItem('lifelog_syncMeta', JSON.stringify(meta)); }
-      console.log('[stock key] 已切换到 stock_v2，本次将从云端重新拉取 stock');
-    }
-  } catch (e) {}
-})();
 
 // ===== 强制以云端为准：?resync=stock 或 ?resync=stock,todos =====
 // ⚠️ 必须放在**所有 DB.get() 之前**：先把点名的集合本地缓存改名备份（不删除）+清空，
@@ -3656,7 +3644,7 @@ let todosData = DB.get('todos') || [];
 function saveTodos() { DB.set('todos', todosData); }
 
 // ===== Stock Investment Data =====
-let stockData = DB.get('stock') || [];
+let stockData = DB.get('stock2') || [];
 // Migration: fix stock codes corrupted by an earlier search-parsing bug (code="11", name="sz300382")
 stockData = stockData.map(s => {
   const fixed = normalizeStockCode(s.code, s.name);
@@ -3668,7 +3656,7 @@ stockData = stockData.map(s => {
 });
 let stockQuotes = {}; // runtime cache: {stockId: {price, tp:{daily,m120,m60,m30}, signal, name, error, ts}}
 
-function saveStocks() { DB.set('stock', stockData); scheduleCloudPush(); }
+function saveStocks() { DB.set('stock2', stockData); scheduleCloudPush(); }
 
 // ===== Stock account linkage =====
 let activeStockAccountId = 'all'; // 'all' = show every account's stocks
@@ -3702,7 +3690,7 @@ function saveAll() {
   DB.set('healthNotes', healthNotesData);
   DB.set('accounts', accountData);
   DB.set('rates', exchangeRates);
-  DB.set('stock', stockData);
+  DB.set('stock2', stockData);
   DB.set('media', mediaData);
   DB.set('dailyNotes', dailyNotes);
   DB.set('todos', todosData);
@@ -3717,7 +3705,7 @@ function saveAll() {
 // ===== Cloud Sync (Supabase) =====
 const SUPABASE_URL = 'https://naazilvdmqsbwtlhlhkk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_qgdOr6NGtOkYTlCf0X2vZQ_tXfsbFco';
-const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock', 'media', 'dailyNotes', 'todos', 'projects', 'persons', 'memos', 'hlState'];
+const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock2', 'media', 'dailyNotes', 'todos', 'projects', 'persons', 'memos', 'hlState'];
 let _pullErrors = 0; // 记录最近一次拉取失败条数，供实时订阅状态判断，避免错误状态被覆盖
 
 // 原生 fetch 直接调 Supabase REST API，不依赖 supabase-js SDK（SDK 从外部 CDN 加载，
@@ -3896,7 +3884,7 @@ async function pullAllFromCloud() {
       case 'medications': medicationsData = merged; break;
       case 'healthNotes': healthNotesData = merged; break;
       case 'accounts': accountData = merged; break;
-      case 'stock': stockData = merged; break;
+      case 'stock2': stockData = merged; break;
       case 'media': mediaData = merged; break;
       case 'dailyNotes': dailyNotes = merged; break;
       case 'todos': todosData = merged; break;
@@ -4050,7 +4038,7 @@ async function pushAllToCloud() {
                 case 'medications': medicationsData = localValue; break;
                 case 'healthNotes': healthNotesData = localValue; break;
                 case 'accounts': accountData = localValue; break;
-                case 'stock': stockData = localValue; break;
+                case 'stock2': stockData = localValue; break;
                 case 'media': mediaData = localValue; break;
                 case 'dailyNotes': dailyNotes = localValue; break;
                 case 'todos': todosData = localValue; break;
@@ -6285,7 +6273,7 @@ function migrateStocksToAccounts() {
   // Link each stock to the default account
   stockData.forEach(s => { if (!s.accountId) s.accountId = targetAcc.id; });
   DB.set('accounts', accountData);
-  DB.set('stock', stockData);
+  DB.set('stock2', stockData);
   DB.set('stockLinked', true);
 }
 migrateStocksToAccounts();
@@ -6365,7 +6353,7 @@ function migrateAssetCategories() {
     return true;
   });
   DB.set('accounts', accountData);
-  DB.set('stock', stockData);
+  DB.set('stock2', stockData);
   DB.set('assetCatMigrated', true);
 }
 migrateAssetCategories();
@@ -11039,7 +11027,7 @@ async function fetchStockData(stock) {
     // Persist corrected name back to stockData (fixes old dirty name from search bug)
     if (name && name !== stock.name) {
       stock.name = name;
-      DB.set('stock', stockData);
+      DB.set('stock2', stockData);
     }
   }
 }
@@ -11471,7 +11459,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260919a';
+  b.textContent = 'build 20260919b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
