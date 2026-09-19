@@ -5614,28 +5614,57 @@ function renderFitnessCal(alive) {
    SLEEP MODULE
    ============================================================ */
 
-// 睡眠时间：小时 00-23 + 分钟固定「00/10/20/30/40/50/60」共 7 档（10 分钟粒度）
-// 选 60 自动进位到下一小时的 00；存库仍是标准 'HH:MM'
+// 睡眠时间：小时只列「合理时段」，分钟固定「00/10/20/30/40/50/60」共 7 档（10 分钟粒度）
+//   入睡：20:00–05:00 → 20/21/22/23/00/01/02/03/04/05
+//   起床：04:00–11:00 → 04/05/06/07/08/09/10/11
+// 选 60 自动进位到下一小时的 00；存库仍是标准 'HH:MM'。
+// 旧数据若落在时段之外，会临时补一个选项，保证编辑时不改动用户原值。
 const SLEEP_MIN_STEPS = ['00', '10', '20', '30', '40', '50', '60'];
+const SLEEP_HOURS_BED = ['20', '21', '22', '23', '00', '01', '02', '03', '04', '05'];
+const SLEEP_HOURS_WAKE = ['04', '05', '06', '07', '08', '09', '10', '11'];
+function sleepHourPrimary(kind) { return kind === 'wake' ? SLEEP_HOURS_WAKE : SLEEP_HOURS_BED; }
+// 完整顺序 = 常规档位在前，其余小时按数字序排后（仅旧数据需要时才插入到下拉里）
+function sleepHourFullOrder(kind) {
+  var primary = sleepHourPrimary(kind), rest = [];
+  for (var h = 0; h < 24; h++) {
+    var v = String(h).padStart(2, '0');
+    if (primary.indexOf(v) < 0) rest.push(v);
+  }
+  return primary.concat(rest);
+}
 function initSleepTimeSelects() {
-  [['sleepBedtimeH', 'sleepBedtimeM'], ['sleepWakeTimeH', 'sleepWakeTimeM']].forEach(function(pair) {
-    var hs = document.getElementById(pair[0]);
-    var ms = document.getElementById(pair[1]);
+  [{ h: 'sleepBedtimeH', m: 'sleepBedtimeM', kind: 'bed' },
+   { h: 'sleepWakeTimeH', m: 'sleepWakeTimeM', kind: 'wake' }].forEach(function(d) {
+    var hs = document.getElementById(d.h), ms = document.getElementById(d.m);
     if (!hs || !ms) return;
+    hs.dataset.kind = d.kind;
     if (!hs.options.length) {
-      for (var h = 0; h < 24; h++) {
-        var hv = String(h).padStart(2, '0');
-        hs.appendChild(new Option(hv, hv));
-      }
+      sleepHourPrimary(d.kind).forEach(function(v) { hs.appendChild(new Option(v, v)); });
     }
     if (!ms.options.length) {
-      SLEEP_MIN_STEPS.forEach(function(m) {
-        ms.appendChild(new Option(m === '60' ? '60（下一小时）' : m, m));
-      });
+      SLEEP_MIN_STEPS.forEach(function(m) { ms.appendChild(new Option(m === '60' ? '60（下一小时）' : m, m)); });
     }
   });
 }
-// 把 'HH:MM' 写进两个下拉；若分钟不在档位里（旧数据），临时补一个选项，避免改动用户原值
+// 按顺序补一个缺失的小时选项（已存在则不动）
+function sleepInsertHour(hs, val, order) {
+  for (var i = 0; i < hs.options.length; i++) if (hs.options[i].value === val) return;
+  var rank = order.indexOf(val); if (rank < 0) rank = order.length;
+  for (var j = 0; j < hs.options.length; j++) {
+    var r2 = order.indexOf(hs.options[j].value); if (r2 < 0) r2 = order.length;
+    if (r2 > rank) { hs.insertBefore(new Option(val, val), hs.options[j]); return; }
+  }
+  hs.appendChild(new Option(val, val));
+}
+// 按数值序补一个缺失的分钟选项（已存在则不动）
+function sleepInsertMinute(ms, m) {
+  for (var i = 0; i < ms.options.length; i++) if (ms.options[i].value === m) return;
+  for (var j = 0; j < ms.options.length; j++) {
+    if (parseInt(ms.options[j].value, 10) > parseInt(m, 10)) { ms.insertBefore(new Option(m, m), ms.options[j]); return; }
+  }
+  ms.appendChild(new Option(m, m));
+}
+// 把 'HH:MM' 写进两个下拉；小时/分钟不在档位（旧数据）时临时补选项，避免改动用户原值
 function setSleepTime(prefix, hhmm) {
   initSleepTimeSelects();
   var hs = document.getElementById(prefix + 'H');
@@ -5644,16 +5673,9 @@ function setSleepTime(prefix, hhmm) {
   var parts = String(hhmm || '00:00').split(':');
   var h = String((parseInt(parts[0], 10) || 0) % 24).padStart(2, '0');
   var m = String(parseInt(parts[1], 10) || 0).padStart(2, '0');
+  sleepInsertHour(hs, h, sleepHourFullOrder(hs.dataset.kind || 'bed'));
+  sleepInsertMinute(ms, m);
   hs.value = h;
-  var exists = false;
-  for (var i = 0; i < ms.options.length; i++) { if (ms.options[i].value === m) { exists = true; break; } }
-  if (!exists) {
-    var inserted = false;
-    for (var j = 0; j < ms.options.length; j++) {
-      if (parseInt(ms.options[j].value, 10) > parseInt(m, 10)) { ms.insertBefore(new Option(m, m), ms.options[j]); inserted = true; break; }
-    }
-    if (!inserted) ms.appendChild(new Option(m, m));
-  }
   ms.value = m;
 }
 // 读回 'HH:MM'；分钟选 60 时进位到下一小时 00
@@ -11521,7 +11543,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260919c';
+  b.textContent = 'build 20260919d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
