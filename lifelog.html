@@ -3355,18 +3355,36 @@ function loadHighlights(callback) {
   document.head.appendChild(s);
 }
 
+// 2026-09-19：本地 stock 缓存键改为 stock_v2。
+// 起因：部分设备（手机）长期缓存着很旧的 stock 数据，每次打开都把它全量推上云、反复覆盖云端正确持仓。
+// 换键后旧键 lifelog_stock 被彻底忽略，设备会以云端为准重建（旧键保留作备份，不删除）。
+const DB_ALIAS = { stock: 'stock_v2' };
 const DB = {
   get(key, def=[]) {
-    try { return JSON.parse(localStorage.getItem('lifelog_'+key)) || def; }
+    const k = DB_ALIAS[key] || key;
+    try { return JSON.parse(localStorage.getItem('lifelog_'+k)) || def; }
     catch { return def; }
   },
   set(key, val) {
+    const k = DB_ALIAS[key] || key;
     // 无痕/隐私模式下 localStorage 可能抛异常（配额0或禁用），吞掉以免中断同步流程；
     // 数据仍在内存中，云端同步不受影响。
-    try { localStorage.setItem('lifelog_'+key, JSON.stringify(val)); }
+    try { localStorage.setItem('lifelog_'+k, JSON.stringify(val)); }
     catch (e) { console.warn('[DB] localStorage 写入失败('+key+')，继续使用内存数据:', e.message); }
   }
 };
+// 首次切到新键时，清掉增量同步缓存里 stock 的时间戳，确保本次一定重新从云端拉取
+// （否则若本地 syncMeta 认为 stock 未变化，会跳过拉取，导致换键后显示为空）
+(function stockKeyMigration() {
+  try {
+    if (localStorage.getItem('lifelog_stock_v2') == null) {
+      var meta = {};
+      try { meta = JSON.parse(localStorage.getItem('lifelog_syncMeta') || '{}'); } catch (e) {}
+      if (meta && meta.stock) { delete meta.stock; localStorage.setItem('lifelog_syncMeta', JSON.stringify(meta)); }
+      console.log('[stock key] 已切换到 stock_v2，本次将从云端重新拉取 stock');
+    }
+  } catch (e) {}
+})();
 
 // ===== 强制以云端为准：?resync=stock 或 ?resync=stock,todos =====
 // ⚠️ 必须放在**所有 DB.get() 之前**：先把点名的集合本地缓存改名备份（不删除）+清空，
@@ -11453,7 +11471,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260917d';
+  b.textContent = 'build 20260919a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
