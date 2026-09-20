@@ -3110,7 +3110,7 @@ tbody tr:hover{background:var(--surface-hover)}
       </div>
       <div class="form-group" id="accFormulaGroup" style="display:none">
         <label class="form-label">持仓明细 <span class="text-muted" style="font-size:11px;font-weight:400">（可选）</span></label>
-        <p class="text-sm text-muted" style="margin-bottom:8px">基金 / 理财 / 虚拟币等在这里加一行（市值 = 数量 × 市价）。<b>股票不用填</b>——在「股票交易」里维护，自动计入</p>
+        <p class="text-sm text-muted" style="margin-bottom:8px">基金 / 理财 / 虚拟币等在这里加一行。<b>只填「数量」就当作金额</b>；填了「市价」则按 数量 × 市价 算。<b>股票不用填</b>——在「股票交易」里维护，自动计入</p>
         <div id="accHoldingsList"></div>
         <button class="btn btn-ghost btn-sm" onclick="addHoldingRow()" style="margin-top:8px">➕ 添加一项</button>
       </div>
@@ -6952,8 +6952,13 @@ function stockAccountMarketValueCNY(acc) {
   return total;
 }
 // Market value (CNY) of one manual holding (fund / wealth / crypto)
+// ⚠️ 没填「市价」时把数量本身当作金额（市价视为 1）：
+//    旧数据里「现金 1277391」「基金 2022234」这类只填了数量没填市价，
+//    若按 数量×0 算会整项变成 0（招商银行曾因此显示 0 元）。
 function holdingMarketValueCNY(h) {
-  return convertToCNY((h.quantity || 0) * (h.price || 0), h.currency || 'CNY');
+  const hasPrice = h.price != null && h.price !== '' && !isNaN(Number(h.price));
+  const price = hasPrice ? Number(h.price) : 1;
+  return convertToCNY((Number(h.quantity) || 0) * price, h.currency || 'CNY');
 }
 // Total market value (CNY) of an invest account: cash + holdings + linked stocks.
 // 判据：只要账户「填了现金 / 有持仓项 / 关联了股票」三者任一，就按加法口径算；
@@ -7300,7 +7305,7 @@ function addHoldingRow(existing) {
     <input type="text" class="form-input holding-name" placeholder="名称" value="${h.name || ''}" style="flex:1;min-width:90px">
     <input type="number" class="form-input holding-qty" placeholder="数量" step="0.0001" value="${h.quantity || ''}" style="width:80px">
     <input type="number" class="form-input holding-cost" placeholder="成本价" step="0.0001" value="${h.costPrice != null ? h.costPrice : ''}" style="width:90px">
-    <input type="number" class="form-input holding-price" placeholder="市价" step="0.0001" value="${h.price != null ? h.price : ''}" style="width:90px">
+    <input type="number" class="form-input holding-price" placeholder="市价(可不填)" step="0.0001" value="${h.price != null ? h.price : ''}" style="width:100px">
     <select class="form-input holding-cur" style="width:80px">${curOptions}</select>
     <button class="btn-icon" onclick="this.parentElement.remove()" title="删除">🗑️</button>
   `;
@@ -7351,7 +7356,8 @@ function saveAccount() {
       const hCost = parseFloat(row.querySelector('.holding-cost')?.value);
       const hCur = row.querySelector('.holding-cur')?.value || currency;
       if (hName && hQty > 0) {
-        holdings.push({ id: uid(), name: hName, quantity: hQty, price: isNaN(hPrice) ? 0 : hPrice, costPrice: isNaN(hCost) ? 0 : hCost, currency: hCur, type: 'wealth' });
+        // 市价留空 → 存 null（表示"数量本身就是金额"），不要存 0，否则整项会被算成 0
+        holdings.push({ id: uid(), name: hName, quantity: hQty, price: isNaN(hPrice) ? null : hPrice, costPrice: isNaN(hCost) ? 0 : hCost, currency: hCur, type: 'wealth' });
       }
     });
   }
@@ -8045,7 +8051,7 @@ function renderPassiveInvestment(passiveAccounts, passiveTotalCNY) {
     wrap.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-icon">🏦</div><p>暂无被动投资账户</p></div>';
     return;
   }
-  let html = '<table style="min-width:0"><thead><tr><th>账户</th><th>明细</th><th style="text-align:right">折合人民币</th></tr></thead><tbody>';
+  let html = '<table style="min-width:0"><thead><tr><th>账户</th><th>明细</th><th style="text-align:right">折合人民币</th><th style="text-align:right">操作</th></tr></thead><tbody>';
   passiveAccounts.forEach(a => {
     const cny = getAccountBalanceCNY(a);
     let detail = '';
@@ -8060,12 +8066,17 @@ function renderPassiveInvestment(passiveAccounts, passiveTotalCNY) {
       <td style="white-space:nowrap"><span style="font-weight:600">${a.name}</span><span class="badge ${curBadge}" style="margin-left:4px">${a.currency}</span></td>
       <td style="font-size:12px;color:var(--text-muted)">${detail}</td>
       <td style="text-align:right;font-weight:700;white-space:nowrap">${fmtMoney(cny)}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn btn-primary btn-sm" onclick="openAccountModal('${a.id}')">✏️ 编辑</button>
+        <button class="btn-icon" onclick="deleteAccount('${a.id}')" title="删除">🗑️</button>
+      </td>
     </tr>`;
   });
   html += `<tr style="border-top:2px solid var(--border)">
     <td style="font-weight:700">被动投资总余额</td>
     <td></td>
     <td style="text-align:right;font-weight:700;color:var(--success);white-space:nowrap">${fmtMoney(passiveTotalCNY)}</td>
+    <td></td>
   </tr></tbody></table>`;
   wrap.innerHTML = html;
 }
@@ -12061,7 +12072,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920n';
+  b.textContent = 'build 20260920o';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
