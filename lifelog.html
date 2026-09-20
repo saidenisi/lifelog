@@ -7084,6 +7084,10 @@ function snapshotValueOnDate(acc, date) {
 // 否则优先用快照（现金+持仓+股票），再退回余额。这样避免"余额口径(含现金)"与
 // "快照口径(仅关联股票)"混用时在切换点出现假的下跌。
 function investValueOnDate(acc, date) {
+  // 「今天」一律用实时口径（账户价值/现金 + 资产明细 + 关联股票实时行情）。
+  // 否则会去读旧的余额记录/旧快照，导致趋势图上的「今天」和「资产情况」里显示的市值对不上
+  // （2026-09-20 用户报的「东财 497万 vs 趋势里 631万」就是这个原因）。
+  if (date === todayStr()) return investAccountMarketValueCNY(acc);
   const hasCashDetail = (acc.cash || 0) !== 0 || (acc.holdings || []).length > 0;
   const bal = getBalanceOnDate(acc, date);
   if (!hasCashDetail) {
@@ -7091,6 +7095,17 @@ function investValueOnDate(acc, date) {
   }
   const snap = snapshotValueOnDate(acc, date);
   if (snap != null) return snap;
+  return bal != null ? convertToCNY(bal, acc.currency || 'CNY') : null;
+}
+// 某账户在某天的市值（CNY）—— 趋势图统一走这里。
+// 规则：「今天」一律实时口径（与「资产情况」表格完全一致）；
+//       历史：投资类走快照→余额；其他类有明细优先快照，否则回退旧余额。
+function accountValueOnDate(acc, date) {
+  if (date === todayStr()) return getAccountBalanceCNY(acc);
+  if (acc.category === 'invest') return investValueOnDate(acc, date);
+  const snap = snapshotValueOnDate(acc, date);
+  if (snap != null) return snap;
+  const bal = getBalanceOnDate(acc, date);
   return bal != null ? convertToCNY(bal, acc.currency || 'CNY') : null;
 }
 // Whole-portfolio market value (CNY) on a date. Today uses live market value
@@ -7772,14 +7787,9 @@ function renderAccounts() {
 
   const datasets = sortedAccounts.map((acc, idx) => {
     const color = chartColors[idx % chartColors.length];
-    const isInv = acc.category === 'invest';
     return {
       label: acc.name,
-      data: sortedDates.map(d => {
-        if (isInv) return investValueOnDate(acc, d);
-        const bal = getBalanceOnDate(acc, d);
-        return bal != null ? convertToCNY(bal, acc.currency) : null;
-      }),
+      data: sortedDates.map(d => accountValueOnDate(acc, d)),
       backgroundColor: color + '40',
       borderColor: color,
       borderWidth: 1.5,
@@ -8152,11 +8162,7 @@ function renderSingleAccountChart() {
   const sortedDates = [...allDates].sort();
 
   const isStock = acc.category === 'invest';
-  const data = sortedDates.map(d => {
-    if (isStock) return investValueOnDate(acc, d);
-    const bal = getBalanceOnDate(acc, d);
-    return bal != null ? bal : null;
-  });
+  const data = sortedDates.map(d => accountValueOnDate(acc, d));
 
   destroyChart('singleAccountChart');
   chartInstances.singleAccountChart = new Chart(canvas, {
@@ -12071,7 +12077,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920p';
+  b.textContent = 'build 20260920q';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
