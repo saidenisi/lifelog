@@ -10805,6 +10805,116 @@ function setStockAvailableCash(stockId, val) {
   toast('可用资金已保存 ✅');
 }
 
+// ===== 低频账户 vs 策略账户 =====
+// 「东方财富证券」是唯一的短线策略账户（四周期预警/买入点/虚拟换手）。
+// 其他主动投资产品（凯基、欧易、香港招银…）都是低频：只关心「持有多少股、值多少钱、卖了多少」，
+// 不做分钟级预警，也不走那套交易逻辑。
+// 市值 = 账户金额 + Σ(持股数量 × 市价)；卖出所得自动加进账户金额，然后扣减股数。
+const STRATEGY_ACCOUNT_NAMES = ['东方财富证券'];
+function isSimpleTradeAccount(acc) {
+  return !acc || STRATEGY_ACCOUNT_NAMES.indexOf(acc.name) < 0;
+}
+// 该股票「持有多少股」：低频账户直接看 stock.quantity，不碰四周期
+function stockHeldQty(stock) {
+  const acc = accountData.find(a => a.id === stock.accountId && !a._deleted);
+  if (isSimpleTradeAccount(acc)) return Number(stock.quantity) || 0;
+  return lotHeldQty(stock);
+}
+// 低频账户：直接改持有数量
+function setStockQuantity(stockId, val) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  const v = Math.max(0, Math.floor(parseFloat(val) || 0));
+  stock.quantity = v;
+  stock.updatedAt = new Date().toISOString();
+  stock._pendingPush = true;
+  saveStocks();
+  renderStocks();
+  renderTradeModal(stockId);
+  toast('持有数量已保存 ✅');
+}
+// 低频账户：卖出 → 所得计入账户金额，扣减股数；卖完即移除该持仓
+function simpleSellStock(stockId, qtyVal, priceVal) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  const acc = accountData.find(a => a.id === stock.accountId && !a._deleted);
+  const held = Number(stock.quantity) || 0;
+  const qty = Math.min(Math.max(0, Math.floor(parseFloat(qtyVal) || 0)), held);
+  const price = parseFloat(priceVal) || 0;
+  if (!qty) { toast('请输入卖出数量'); return; }
+  if (!price) { toast('请输入卖出价'); return; }
+  const cur = getStockCurrency(stock);
+  const accCur = acc ? (acc.currency || 'CNY') : 'CNY';
+  const proceeds = convertToCNY(qty * price, cur) / (getRate(accCur) || 1);
+  if (acc) {
+    acc.cash = (Number(acc.cash) || 0) + proceeds;
+    acc.cashUpdatedAt = new Date().toISOString();
+    markPending(acc);
+    saveAccounts();
+  }
+  stock.quantity = held - qty;
+  stock.updatedAt = new Date().toISOString();
+  stock._pendingPush = true;
+  const closed = stock.quantity <= 0;
+  if (closed) { stock._deleted = true; stock.deletedAt = stock.updatedAt; }
+  saveStocks();
+  renderStocks();
+  if (closed) closeTradeModal(); else renderTradeModal(stockId);
+  toast('已卖出 ' + qty + ' 股，所得 ' + proceeds.toFixed(0) + ' ' + accCur + ' 已计入账户金额');
+}
+// 低频账户的交易面板：只有数量 / 现价 / 市值 / 卖出
+function renderSimpleTradeModal(stock, q, price, acc) {
+  const body = document.getElementById('tradeModalBody');
+  if (!body) return;
+  const cur = getStockCurrency(stock);
+  const qty = Number(stock.quantity) || 0;
+  const priceNow = (price != null) ? price : (stock.manualPrice > 0 ? stock.manualPrice : null);
+  const mkt = (priceNow != null) ? qty * priceNow : null;
+  const cash = acc ? (Number(acc.cash) || 0) : 0;
+  const accCur = acc ? (acc.currency || 'CNY') : 'CNY';
+  const rateNote = (cur !== accCur) ? '（' + cur + ' 按汇率折成 ' + accCur + '）' : '';
+
+  let html = '<div class="trade-overview">';
+  html += '<div class="trade-name">' + escapeHtml((q && q.name) ? q.name : stock.name) +
+    ' <span class="badge badge-info">' + escapeHtml(stock.code || '') + '</span>' +
+    ' <span class="badge badge-success">简化持仓</span></div>';
+  html += '<div class="trade-price">现价 ' + (priceNow != null ? priceNow.toFixed(2) + ' ' + cur : '—') + '</div>';
+  if (!q || q.price == null) html += '<div style="color:var(--text-muted);font-size:12px;margin-top:4px">行情加载中…</div>';
+  else if (q.error) html += '<div style="color:#f59e0b;font-size:12px;margin-top:4px">⚠ ' + escapeHtml(q.error) + '</div>';
+  html += '<div style="font-size:12px;color:var(--text-muted);margin-top:6px">低频账户：只记「持有多少股」和「账户金额」，不做分钟级预警</div>';
+  html += '<div class="trade-stats">';
+  html += '<div class="trade-stat"><span class="k">持有数量</span><span class="v">' + qty + '</span></div>';
+  html += '<div class="trade-stat"><span class="k">持仓市值</span><span class="v">' + (mkt != null ? mkt.toFixed(0) + ' ' + cur : '—') + '</span></div>';
+  html += '</div></div>';
+
+  html += '<div class="card" style="padding:12px;margin-top:10px">';
+  html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+    '<span style="font-size:12px;color:var(--text-muted)">持有数量</span>' +
+    '<input type="number" id="simpleQtyInput" class="form-input" style="width:120px;padding:5px 8px" value="' + qty + '" min="0" step="1">' +
+    '<button class="btn btn-primary btn-sm" onclick="setStockQuantity(\'' + stock.id + '\', document.getElementById(\'simpleQtyInput\').value)">保存数量</button>' +
+    '<span style="font-size:12px;color:var(--text-muted)">0 股 = 取消这个持仓</span>' +
+    '</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">' +
+    '<span style="font-size:12px;color:var(--text-muted)">' + (acc ? escapeHtml(acc.name) + ' 账户金额' : '账户金额') + '</span>' +
+    '<input type="number" id="simpleCashInput" class="form-input" style="width:140px;padding:5px 8px" value="' + (cash || '') + '" placeholder="券商的精确金额" onchange="setAccountCashFromStock(\'' + stock.id + '\', this.value)">' +
+    '<span style="font-size:12px;color:var(--text-muted)">账户合计 ' + (cash + (mkt != null ? convertToCNY(mkt, cur) / (getRate(accCur) || 1) : 0)).toFixed(0) + ' ' + accCur + '</span>' +
+    '</div>';
+  html += '</div>';
+
+  html += '<div class="card" style="padding:12px;margin-top:10px">';
+  html += '<div style="font-size:13px;font-weight:500;margin-bottom:8px">卖出</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+    '<input type="number" id="simpleSellQty" class="form-input" style="width:110px;padding:5px 8px" placeholder="卖出数量" min="0" step="1">' +
+    '<span style="font-size:12px;color:var(--text-muted)">×</span>' +
+    '<input type="number" id="simpleSellPrice" class="form-input" style="width:110px;padding:5px 8px" placeholder="卖出价" step="0.0001" value="' + (priceNow != null ? priceNow : '') + '">' +
+    '<button class="btn btn-primary btn-sm" onclick="simpleSellStock(\'' + stock.id + '\', document.getElementById(\'simpleSellQty\').value, document.getElementById(\'simpleSellPrice\').value)">确认卖出</button>' +
+    '</div>';
+  html += '<div style="font-size:11px;color:var(--text-muted);margin-top:6px">卖出所得会按 ' + cur + ' 折成 ' + accCur + ' 加到账户金额里' + rateNote + '；卖完这只股票会自动从持仓里移除。</div>';
+  html += '</div>';
+
+  body.innerHTML = html;
+}
+
 // 账户现金（账户级的一个数）：在任意一只股票的面板里填，写的都是同一个账户字段。
 // 后填的覆盖先填的 → 计算时天然"取最近一次填写的金额"，不会每只股票各算一遍。
 function setAccountCashFromStock(stockId, val) {
@@ -10947,9 +11057,12 @@ function renderTradeModal(stockId) {
   const stock = stockData.find(s => s.id === stockId);
   const body = document.getElementById('tradeModalBody');
   if (!stock || !body) return;
-  ensureStockLots(stock);
   const q = stockQuotes[stockId];
   const price = (q && q.price != null) ? q.price : null;
+  const accOfStock = accountData.find(a => a.id === stock.accountId && !a._deleted);
+  // 低频账户（除东方财富证券外）→ 简化面板：只有 数量 / 现价 / 市值 / 卖出
+  if (isSimpleTradeAccount(accOfStock)) { renderSimpleTradeModal(stock, q, price, accOfStock); return; }
+  ensureStockLots(stock);
   const klMap = (q && q.kl) || null;
   const heldQty = lotHeldQty(stock);
   const realizedPnl = (stock.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
@@ -10974,7 +11087,6 @@ function renderTradeModal(stockId) {
   });
   // 账户现金是「账户级的一个数」：不管从这只股票的哪个面板进来，读写都是同一个账户字段，
   // 后填的覆盖先填的 → 等于"取最近一次填写的金额"，绝不会每只股票各算一遍。
-  const accOfStock = accountData.find(a => a.id === stock.accountId && !a._deleted);
   const availCash = accOfStock ? (accOfStock.cash || 0) : (stock.availableCash || 0);
   const totalCap = availCash + mktValue;
   const vm0 = v => (v >= 0 ? '+' : '') + v.toFixed(0);
@@ -11578,13 +11690,16 @@ function renderStocks() {
     const q = stockQuotes[s.id];
     const hasPrice = q && q.price != null;  // price available (API, manual, or K-line fallback)
     const price = hasPrice ? q.price : null;
-    const avgCost = stockAvgCost(s);   // 各持仓周期成本的加权平均（不再用旧的 stock.costPrice）
+    // 低频账户（除东财外）：不做四周期，成本用填写的成本价，止盈点/信号列留空
+    const simpleMode = isSimpleTradeAccount(accountData.find(a => a.id === s.accountId && !a._deleted));
+    const avgCost = simpleMode ? (Number(s.costPrice) || 0) : stockAvgCost(s);
     const pnl = (price != null && avgCost) ? ((price - avgCost) / avgCost * 100) : null;
     const pnlVal = (price != null && avgCost) ? ((price - avgCost) * s.quantity) : null;
     const isManual = q && q.error && q.error.includes('手动现价');
 
     // Take-profit / buy-point cells: 持仓显示卖出预警点，空仓显示买入点
     function tpCell() {
+      if (simpleMode) return '<td class="text-muted" title="低频账户不做分钟级预警">—</td>';
       if (!hasPrice) return '<td class="text-muted">—</td>';
       const mk = (key) => {
         const d = (q && q.lots && q.lots[key]) || {};
@@ -11603,7 +11718,7 @@ function renderStocks() {
 
     // Signal cell：按四周期派生状态汇总（跌破优先 > 买入信号 > 持有/等待）
     let signalHtml = '<td class="text-muted">—</td>';
-    if (hasPrice && q && q.lots) {
+    if (!simpleMode && hasPrice && q && q.lots) {
       const breachTxt = [], firedTxt = [], waitTxt = [];
       LOT_PERIODS.forEach(p => {
         const d = q.lots[p.key]; if (!d) return;
@@ -11946,7 +12061,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920m';
+  b.textContent = 'build 20260920n';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
