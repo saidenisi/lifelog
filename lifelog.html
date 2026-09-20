@@ -1998,6 +1998,9 @@ tbody tr:hover{background:var(--surface-hover)}
 /* 「→ 待办」：把一条跟进提醒手动转成待办事项（转过去后两者互不影响） */
 .follow-todo-btn{flex:0 0 auto;font-size:11px;line-height:1;padding:4px 7px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;white-space:nowrap;text-decoration:none}
 .follow-todo-btn:hover{border-color:var(--primary);color:var(--primary)}
+/* 跟进/时间线的「编辑中」行：日期 + 文本 + 保存/取消（窄屏自动换行） */
+.net-inline-edit{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;padding:6px 6px 6px 8px;border-radius:8px;background:var(--surface-hover);border-left:3px solid var(--primary)}
+.net-inline-edit .form-input{min-width:0}
 .net-detail-section{margin-bottom:16px}
 .net-detail-section h4{position:relative;font-size:13px;font-weight:700;margin:0 0 8px;padding-left:9px;letter-spacing:.2px}
 .net-detail-section h4::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:13px;border-radius:2px;background:var(--primary)}
@@ -4619,8 +4622,13 @@ function personProjectCount(personId) {
 
 // ---- 项目 CRUD ----
 let _tmpMembers = [];
+// 跟进 / 时间线「正在编辑哪一条」的状态（详情弹窗 net / 项目编辑弹窗 proj 各一套，互不干扰）
+// 声明放在这里（早于 openNetProject / openNetDetail 的调用点），避免 let 的临时死区问题
+let _netEditFollowId = '', _netEditTimelineIdx = -1;
+let _projEditFollowId = '', _projEditTimelineIdx = -1;
 function openNetProject(id) {
   closeModal('netDetailModal');
+  _projEditFollowId = ''; _projEditTimelineIdx = -1;   // 打开弹窗时退出编辑态
   document.getElementById('netProjectId').value = id || '';
   document.getElementById('netProjectModalTitle').textContent = id ? '编辑项目' : '添加项目';
   _tmpMembers = [];
@@ -4874,10 +4882,14 @@ function renderEditFollowups() {
   if (!p) { c.innerHTML = '<div class="net-empty" style="font-size:12px">保存项目后可添加跟进提醒</div>'; return; }
   const list = (p.followUps||[]);
   const items = sortFollowups(list).map(f => {
+    if (f.id === _projEditFollowId) {
+      return inlineEditRowHtml('projFollowEditDate', 'projFollowEditText', 'saveEditFollowupEdit()', 'cancelEditFollowupEdit()', f.date, f.text, '跟进什么…');
+    }
     const due = !f.done && f.date && f.date <= todayStr();
     return `<div class="net-follow ${f.done?'done':''} ${due?'due':''}">
       <input type="checkbox" ${f.done?'checked':''} onchange="toggleEditFollowup('${f.id}')">
       <span class="txt">${f.date?f.date+' ':''}${escapeHtml(f.text)}${due?'（到期）':''}</span>
+      <button class="btn-icon" title="编辑这条跟进" onclick="startEditFollowupEdit('${f.id}')">✏️</button>
       <button class="follow-todo-btn" title="把这条跟进转成待办事项" onclick="todoFromEditFollowup('${f.id}')">→ 待办</button>
       <button class="btn-icon" onclick="deleteEditFollowup('${f.id}')">🗑️</button>
     </div>`;
@@ -4911,16 +4923,44 @@ function deleteEditFollowup(fid) {
   markPending(p); saveProjects();
   renderEditFollowups();
 }
+// ---- 项目编辑弹窗：修改已有「跟进提醒」 ----
+function startEditFollowupEdit(fid) {
+  _projEditFollowId = fid; _projEditTimelineIdx = -1;
+  renderEditFollowups();
+  focusInlineEdit('projFollowEditText');
+}
+function cancelEditFollowupEdit() {
+  _projEditFollowId = '';
+  renderEditFollowups();
+}
+function saveEditFollowupEdit() {
+  const p = _editProjectRecord(); if (!p) return;
+  const f = (p.followUps||[]).find(x => x.id === _projEditFollowId);
+  if (!f) { _projEditFollowId = ''; renderEditFollowups(); return; }
+  const textEl = document.getElementById('projFollowEditText');
+  const text = textEl ? textEl.value.trim() : '';
+  if (!text) { toast('跟进内容不能为空'); if (textEl) textEl.focus(); return; }
+  const dateEl = document.getElementById('projFollowEditDate');
+  f.text = text;
+  f.date = (dateEl && dateEl.value) || '';
+  _projEditFollowId = '';
+  markPending(p); saveProjects();
+  renderEditFollowups();
+  toast('已保存');
+}
 function renderEditTimeline() {
   const c = document.getElementById('netProjectTimeline');
   if (!c) return;
   const p = _editProjectRecord();
   if (!p) { c.innerHTML = '<div class="net-empty" style="font-size:12px">保存项目后可添加记录</div>'; return; }
   const list = (p.timeline||[]);
-  // 展示时按日期倒序；删除用的仍是原始数组下标，避免删错
+  // 展示时按日期倒序；编辑/删除用的仍是原始数组下标，避免改错
   const items = sortTimeline(list).map(t => {
     const oi = list.indexOf(t);
-    return `<div class="net-timeline-item">${t.date} ${escapeHtml(t.text)}<a href="javascript:void(0)" onclick="deleteEditTimeline(${oi})" style="float:right;color:var(--text-muted)">✕</a></div>`;
+    if (oi === _projEditTimelineIdx) {
+      return inlineEditRowHtml('projTimelineEditDate', 'projTimelineEditText', 'saveEditTimelineEdit()', 'cancelEditTimelineEdit()', t.date, t.text, '记录一件事…');
+    }
+    return `<div class="net-timeline-item">${t.date} ${escapeHtml(t.text)}<span style="float:right;white-space:nowrap"><a href="javascript:void(0)" title="编辑这条记录" onclick="startEditTimelineEdit(${oi})">✏️</a> <a href="javascript:void(0)" onclick="deleteEditTimeline(${oi})" style="color:var(--text-muted)">✕</a></span></div>`;
   }).join('');
   c.innerHTML = items || '<div class="net-empty">暂无记录</div>';
   c.innerHTML += `<div style="display:flex;gap:6px;margin-top:6px">
@@ -4943,6 +4983,31 @@ function deleteEditTimeline(idx) {
   const p = _editProjectRecord(); if (!p) return;
   p.timeline = (p.timeline||[]).filter((_,i)=>i!==idx);  markPending(p); saveProjects();
   renderEditTimeline();
+}
+// ---- 项目编辑弹窗：修改已有「时间线 / 记录」 ----
+function startEditTimelineEdit(idx) {
+  _projEditTimelineIdx = idx; _projEditFollowId = '';
+  renderEditTimeline();
+  focusInlineEdit('projTimelineEditText');
+}
+function cancelEditTimelineEdit() {
+  _projEditTimelineIdx = -1;
+  renderEditTimeline();
+}
+function saveEditTimelineEdit() {
+  const p = _editProjectRecord(); if (!p) return;
+  const t = (p.timeline||[])[_projEditTimelineIdx];
+  if (!t) { _projEditTimelineIdx = -1; renderEditTimeline(); return; }
+  const textEl = document.getElementById('projTimelineEditText');
+  const text = textEl ? textEl.value.trim() : '';
+  if (!text) { toast('内容不能为空'); if (textEl) textEl.focus(); return; }
+  const dateEl = document.getElementById('projTimelineEditDate');
+  t.text = text;
+  t.date = (dateEl && dateEl.value) || todayStr();
+  _projEditTimelineIdx = -1;
+  markPending(p); saveProjects();
+  renderEditTimeline();
+  toast('已保存');
 }
 function deleteNetProject(id) {
   const p = projectsData.find(x=>x.id===id);
@@ -5113,6 +5178,7 @@ function autoGrowAllMembers(retry) {
 }
 function openNetDetail(kind, id) {
   _netDetailKind = kind; _netDetailId = id;
+  _netEditFollowId = ''; _netEditTimelineIdx = -1;   // 换条目时退出编辑态
   let body = '';
   if (kind === 'project') {
     const p = projectsData.find(x=>x.id===id); if(!p) return;
@@ -5266,18 +5332,48 @@ function createProjectMember() {
   openNetDetail('project', p.id);
   renderNetPersons();
 }
+// ---- 跟进 / 时间线：修改已有条目（行内编辑）----
+// 编辑态用「id / 原始下标」记录，两处界面（详情弹窗 net、项目编辑弹窗 proj）各用一套，互不干扰
+// 生成一个「编辑中」行：日期 + 文本 + 保存/取消；Enter 保存、Esc 取消（Esc 要挡住全局「关闭弹窗」）
+function inlineEditRowHtml(dateId, textId, saveFn, cancelFn, dateVal, textVal, placeholder) {
+  return `<div class="net-inline-edit">
+    <input type="date" class="form-input" id="${dateId}" value="${dateVal||''}" style="flex:0 0 132px">
+    <input type="text" class="form-input" id="${textId}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" value="${escapeHtml(textVal)}" placeholder="${placeholder||''}" style="flex:1 1 140px" onkeydown="if(event.key==='Enter'){event.preventDefault();${saveFn}}else if(event.key==='Escape'){event.preventDefault();event.stopPropagation();${cancelFn}}">
+    <button class="btn btn-primary btn-sm" onclick="${saveFn}">保存</button>
+    <button class="btn btn-ghost btn-sm" onclick="${cancelFn}">取消</button>
+  </div>`;
+}
+// 渲染后异步聚焦（弹窗是异步 display，元素可能还没可点/还没完成布局）
+// 顺便把整行滚到视口中间：否则当这条在列表底部时，「保存/取消」会被弹窗底部页脚压住
+function focusInlineEdit(textId) {
+  let n = 0;
+  (function go() {
+    const el = document.getElementById(textId);
+    if (el) {
+      try { const row = el.closest('.net-inline-edit'); if (row) row.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+      try { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } catch (e) { el.focus(); }
+      return;
+    }
+    if (n++ < 8) setTimeout(go, 60);
+  })();
+}
+
 function followupsHtml(rec) {
   const list = (rec.followUps||[]);
   const items = sortFollowups(list).map(f => {
+    if (f.id === _netEditFollowId) {
+      return inlineEditRowHtml('netFollowEditDate', 'netFollowEditText', 'saveNetFollowupEdit()', 'cancelNetFollowupEdit()', f.date, f.text, '跟进什么…');
+    }
     const due = !f.done && f.date && f.date <= todayStr();
     return `<div class="net-follow ${f.done?'done':''} ${due?'due':''}">
       <input type="checkbox" ${f.done?'checked':''} onchange="toggleNetFollowup('${f.id}')">
       <span class="txt">${f.date?f.date+' ':''}${escapeHtml(f.text)}${due?'（到期）':''}</span>
+      <button class="btn-icon" title="编辑这条跟进" onclick="startNetFollowupEdit('${f.id}')">✏️</button>
       <button class="follow-todo-btn" title="把这条跟进转成待办事项" onclick="todoFromFollowup('${f.id}')">→ 待办</button>
       <button class="btn-icon" onclick="deleteNetFollowup('${f.id}')">🗑️</button>
     </div>`;
   }).join('');
-  return `<div class="net-detail-section"><h4>🔔 跟进提醒</h4>${items || '<div class="net-empty">暂无跟进</div>'}
+  return `<div class="net-detail-section" id="netFollowupsSection"><h4>🔔 跟进提醒</h4>${items || '<div class="net-empty">暂无跟进</div>'}
     <div style="display:flex;gap:6px;margin-top:6px">
       <input type="date" class="form-input" id="netFollowDate" value="${todayStr()}" style="flex:0 0 132px">
       <input type="text" class="form-input" id="netFollowText" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="跟进什么…（回车即可添加）" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addNetFollowup();}">
@@ -5286,9 +5382,15 @@ function followupsHtml(rec) {
 }
 function timelineHtml(rec) {
   const list = (rec.timeline||[]);
-  // 展示按日期倒序；删除用原始下标
-  const items = sortTimeline(list).map(t=>`<div class="net-timeline-item">${t.date} ${escapeHtml(t.text)}<a href="javascript:void(0)" onclick="deleteNetTimeline(${list.indexOf(t)})" style="float:right;color:var(--text-muted)">✕</a></div>`).join('');
-  return `<div class="net-detail-section"><h4>🕒 时间线 / 记录</h4>${items || '<div class="net-empty">暂无记录</div>'}
+  // 展示按日期倒序；编辑/删除都用原始下标
+  const items = sortTimeline(list).map(t => {
+    const oi = list.indexOf(t);
+    if (oi === _netEditTimelineIdx) {
+      return inlineEditRowHtml('netTimelineEditDate', 'netTimelineEditText', 'saveNetTimelineEdit()', 'cancelNetTimelineEdit()', t.date, t.text, '记录一件事…');
+    }
+    return `<div class="net-timeline-item">${t.date} ${escapeHtml(t.text)}<span style="float:right;white-space:nowrap"><a href="javascript:void(0)" title="编辑这条记录" onclick="startNetTimelineEdit(${oi})">✏️</a> <a href="javascript:void(0)" onclick="deleteNetTimeline(${oi})" style="color:var(--text-muted)">✕</a></span></div>`;
+  }).join('');
+  return `<div class="net-detail-section" id="netTimelineSection"><h4>🕒 时间线 / 记录</h4>${items || '<div class="net-empty">暂无记录</div>'}
     <div style="display:flex;gap:6px;margin-top:6px">
       <input type="date" class="form-input" id="netTimelineDate" value="${todayStr()}" style="flex:0 0 132px">
       <input type="text" class="form-input" id="netTimelineText" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="记录一件事…（回车即可添加）" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addNetTimeline();}">
@@ -5318,6 +5420,40 @@ function deleteNetFollowup(fid) {
   const rec = netDetailRecord(); if(!rec) return;
   rec.followUps = (rec.followUps||[]).filter(x=>x.id!==fid);
   _netSaveAndRefresh();
+}
+// ---- 详情弹窗：修改已有「跟进提醒」 ----
+function refreshNetFollowups() {
+  const rec = netDetailRecord(); if (!rec) return;
+  const el = document.getElementById('netFollowupsSection');
+  if (el) el.outerHTML = followupsHtml(rec);
+}
+function _netSaveDetailRecord(rec) {
+  markPending(rec);
+  if (_netDetailKind === 'project') saveProjects(); else savePersons();
+}
+function startNetFollowupEdit(fid) {
+  _netEditFollowId = fid; _netEditTimelineIdx = -1;
+  refreshNetFollowups();
+  focusInlineEdit('netFollowEditText');
+}
+function cancelNetFollowupEdit() {
+  _netEditFollowId = '';
+  refreshNetFollowups();
+}
+function saveNetFollowupEdit() {
+  const rec = netDetailRecord(); if (!rec) return;
+  const f = (rec.followUps||[]).find(x => x.id === _netEditFollowId);
+  if (!f) { _netEditFollowId = ''; refreshNetFollowups(); return; }
+  const textEl = document.getElementById('netFollowEditText');
+  const text = textEl ? textEl.value.trim() : '';
+  if (!text) { toast('跟进内容不能为空'); if (textEl) textEl.focus(); return; }
+  const dateEl = document.getElementById('netFollowEditDate');
+  f.text = text;
+  f.date = (dateEl && dateEl.value) || '';
+  _netEditFollowId = '';
+  _netSaveDetailRecord(rec);
+  refreshNetFollowups();
+  toast('已保存');
 }
 // ---- 跟进提醒 → 待办事项（手动转换；转过去后两者互不影响，各自独立勾选/删除）----
 // 项目类跟进自动带「相关项目」标签，人脉类带「朋友同学」标签，之后可在待办里改
@@ -5365,6 +5501,36 @@ function deleteNetTimeline(idx) {
   const rec = netDetailRecord(); if(!rec) return;
   rec.timeline = (rec.timeline||[]).filter((_,i)=>i!==idx);
   _netSaveAndRefresh();
+}
+// ---- 详情弹窗：修改已有「时间线 / 记录」 ----
+function refreshNetTimeline() {
+  const rec = netDetailRecord(); if (!rec) return;
+  const el = document.getElementById('netTimelineSection');
+  if (el) el.outerHTML = timelineHtml(rec);
+}
+function startNetTimelineEdit(idx) {
+  _netEditTimelineIdx = idx; _netEditFollowId = '';
+  refreshNetTimeline();
+  focusInlineEdit('netTimelineEditText');
+}
+function cancelNetTimelineEdit() {
+  _netEditTimelineIdx = -1;
+  refreshNetTimeline();
+}
+function saveNetTimelineEdit() {
+  const rec = netDetailRecord(); if (!rec) return;
+  const t = (rec.timeline||[])[_netEditTimelineIdx];
+  if (!t) { _netEditTimelineIdx = -1; refreshNetTimeline(); return; }
+  const textEl = document.getElementById('netTimelineEditText');
+  const text = textEl ? textEl.value.trim() : '';
+  if (!text) { toast('内容不能为空'); if (textEl) textEl.focus(); return; }
+  const dateEl = document.getElementById('netTimelineEditDate');
+  t.text = text;
+  t.date = (dateEl && dateEl.value) || todayStr();
+  _netEditTimelineIdx = -1;
+  _netSaveDetailRecord(rec);
+  refreshNetTimeline();
+  toast('已保存');
 }
 
 // ---- 导出匹配清单 ----
@@ -11783,7 +11949,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920j';
+  b.textContent = 'build 20260920k';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
