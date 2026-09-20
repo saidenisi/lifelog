@@ -3074,6 +3074,9 @@ tbody tr:hover{background:var(--surface-hover)}
           <input type="number" class="form-input" id="accAvailableCash" placeholder="如 50000" step="0.01" min="0">
         </div>
       </div>
+      <div class="form-group" id="accStockCashHint" style="display:none">
+        <p class="text-sm text-muted" style="margin:0">这个账户的市值 = <b>现金</b> + 持仓项 + 关联股票的实时市值（自动）。现金也可以直接在「股票交易 → 这只股票」的面板里填，两处是同一个数，不用重复填。</p>
+      </div>
       <div class="form-row" id="accPrincipalGroup" style="display:none">
         <div class="form-group">
           <label class="form-label">投入本金 <span class="text-muted" style="font-size:11px;font-weight:400">（可选，留空按持仓成本 + 现金自动估算）</span></label>
@@ -6950,7 +6953,7 @@ dedupeAccounts();
 
 // Stocks belonging to a given account
 function stocksOfAccount(accId) {
-  return stockData.filter(s => s.accountId === accId);
+  return stockData.filter(s => s.accountId === accId && !s._deleted);
 }
 // Market value (CNY) of all stocks in a stock account
 function stockAccountMarketValueCNY(acc) {
@@ -6968,10 +6971,12 @@ function holdingMarketValueCNY(h) {
   return convertToCNY((h.quantity || 0) * (h.price || 0), h.currency || 'CNY');
 }
 // Total market value (CNY) of an invest account: cash + holdings + linked stocks.
-// 若账户没有填「现金/持仓」明细（用户只用"余额"记录资产），改用最新余额——
-// 否则系统只算得出关联股票，会把账户的现金部分漏掉，导致趋势图最后一天假暴跌。
+// 判据：只要账户「填了现金 / 有持仓项 / 关联了股票」三者任一，就按加法口径算；
+// 否则（完全没有明细，只记过余额）才用最新余额兜底。
+// ⚠️ 关联股票也必须进判据：否则「只填了股票、现金还没填」的账户会被当成"只记余额"，
+//    股票市值整个被忽略（2026-09-20 东财市值不对就是这个原因）。
 function investAccountMarketValueCNY(acc) {
-  const hasCashDetail = (acc.cash || 0) !== 0 || (acc.holdings || []).length > 0;
+  const hasCashDetail = (acc.cash || 0) !== 0 || (acc.holdings || []).length > 0 || stocksOfAccount(acc.id).length > 0;
   if (!hasCashDetail) {
     const latest = getLatestBalance(acc);
     if (latest != null && latest.amount) return convertToCNY(latest.amount, acc.currency || 'CNY');
@@ -7282,12 +7287,21 @@ function toggleAccCalcMode() {
 function toggleAccType() {
   const cat = document.getElementById('accType').value;
   const isInvest = cat === 'invest';
+  const calcMode = document.getElementById('accCalcMode').value;
+  // 已关联股票的账户：市值 = 现金 + 关联股票实时市值（自动），
+  // 所以「持仓明细」和「余额」都不需要再填，界面上直接隐藏，避免重复录入。
+  const editingId = document.getElementById('accId').value;
+  const accHasStocks = !!(editingId && stockData.some(s => s.accountId === editingId && !s._deleted));
   document.getElementById('accCalcModeGroup').style.display = isInvest ? 'none' : '';
-  document.getElementById('accInitBalanceGroup').style.display = isInvest ? 'none' : (document.getElementById('accCalcMode').value === 'direct' ? '' : 'none');
-  document.getElementById('accFormulaGroup').style.display = isInvest ? '' : (document.getElementById('accCalcMode').value === 'formula' ? '' : 'none');
+  document.getElementById('accInitBalanceGroup').style.display = (isInvest || accHasStocks) ? 'none' : (calcMode === 'direct' ? '' : 'none');
+  document.getElementById('accFormulaGroup').style.display =
+    accHasStocks ? 'none'
+    : (isInvest ? '' : (calcMode === 'formula' ? '' : 'none'));
   const baseGroup = document.getElementById('accBaseAmountGroup');
   if (baseGroup) baseGroup.style.display = isInvest ? 'none' : '';
   document.getElementById('accAvailableCashGroup').style.display = isInvest ? '' : 'none';
+  const stockHint = document.getElementById('accStockCashHint');
+  if (stockHint) stockHint.style.display = (isInvest && accHasStocks) ? '' : 'none';
   const principalGroup = document.getElementById('accPrincipalGroup');
   if (principalGroup) principalGroup.style.display = isInvest ? '' : 'none';
   const txGroup = document.getElementById('accTransactionsGroup');
@@ -10818,7 +10832,7 @@ function lotDerived(stock, periodKey, klMap) {
   return out;
 }
 
-// 可用资金（手填，只影响展示与总资金口径）
+// 可用资金（手填，只影响展示与总资金口径）—— 已被「账户现金」取代，保留以兼容旧数据
 function setStockAvailableCash(stockId, val) {
   const stock = stockData.find(s => s.id === stockId);
   if (!stock) return;
@@ -10831,6 +10845,24 @@ function setStockAvailableCash(stockId, val) {
   renderStocks();
   renderTradeModal(stockId);
   toast('可用资金已保存 ✅');
+}
+
+// 账户现金（账户级的一个数）：在任意一只股票的面板里填，写的都是同一个账户字段。
+// 后填的覆盖先填的 → 计算时天然"取最近一次填写的金额"，不会每只股票各算一遍。
+function setAccountCashFromStock(stockId, val) {
+  const stock = stockData.find(s => s.id === stockId);
+  if (!stock) return;
+  const acc = accountData.find(a => a.id === stock.accountId && !a._deleted);
+  if (!acc) { toast('这只股票还没关联账户，请先在股票编辑里选好账户'); return; }
+  const v = parseFloat(val);
+  acc.cash = (isNaN(v) || v < 0) ? 0 : v;
+  acc.cashUpdatedAt = new Date().toISOString();
+  markPending(acc);
+  saveAccounts();
+  renderStocks();
+  renderTradeModal(stockId);
+  renderAccounts();
+  toast(acc.name + ' 现金已保存 ✅');
 }
 
 // 某周期成本价（可手改；虚拟换手后系统也会更新它）
@@ -10982,7 +11014,10 @@ function renderTradeModal(stockId) {
     virtualPnl += (d.virtualPnl || 0) * (d.qty || 0);
     vrTotal += (d.vrHistory || []).length;
   });
-  const availCash = stock.availableCash || 0;
+  // 账户现金是「账户级的一个数」：不管从这只股票的哪个面板进来，读写都是同一个账户字段，
+  // 后填的覆盖先填的 → 等于"取最近一次填写的金额"，绝不会每只股票各算一遍。
+  const accOfStock = accountData.find(a => a.id === stock.accountId && !a._deleted);
+  const availCash = accOfStock ? (accOfStock.cash || 0) : (stock.availableCash || 0);
   const totalCap = availCash + mktValue;
   const vm0 = v => (v >= 0 ? '+' : '') + v.toFixed(0);
 
@@ -11004,11 +11039,15 @@ function renderTradeModal(stockId) {
     html += '<div class="trade-stat"><span class="k">虚拟盈亏<span style="font-size:10px;opacity:.7"> 不计入已实现</span></span><span class="v ' + (virtualPnl >= 0 ? 'trade-up' : 'trade-down') + '">' + vm0(virtualPnl) + '</span></div>';
   }
   html += '</div>';
+  const cashHint = accOfStock
+    ? ('更新于 ' + String(accOfStock.cashUpdatedAt || accOfStock.updatedAt || '').slice(0, 10) + '｜该账户全部股票共用这个数')
+    : '（这只股票还没关联账户）';
   html += '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">' +
-    '<span style="font-size:12px;color:var(--text-muted)">可用资金</span>' +
-    '<input type="number" class="form-input" style="width:110px;padding:5px 8px" value="' + (availCash || '') + '" placeholder="手填" onchange="setStockAvailableCash(\'' + stock.id + '\', this.value)">' +
+    '<span style="font-size:12px;color:var(--text-muted)">' + (accOfStock ? escapeHtml(accOfStock.name) + ' 现金' : '可用资金') + '</span>' +
+    '<input type="number" class="form-input" style="width:120px;padding:5px 8px" value="' + (availCash || '') + '" placeholder="账户现金" onchange="setAccountCashFromStock(\'' + stock.id + '\', this.value)">' +
     '<span style="font-size:12px;color:var(--text-muted)">总资金 ¥' + totalCap.toFixed(0) + '</span>' +
     '</div>';
+  html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + cashHint + '</div>';
   html += '</div>';
 
   html += '<div class="trade-lots">';
@@ -11554,7 +11593,7 @@ function updateStockAccountCashHint() {
   const hint = document.getElementById('stockAccountCashHint');
   if (!hint) return;
   const accs = (activeStockAccountId === 'all') ? stockAccounts() : stockAccounts().filter(a => a.id === activeStockAccountId);
-  const cash = accs.reduce((s, a) => s + convertToCNY(a.availableCash || 0, a.currency || 'CNY'), 0);
+  const cash = accs.reduce((s, a) => s + convertToCNY(a.cash != null ? a.cash : (a.availableCash || 0), a.currency || 'CNY'), 0);
   hint.textContent = '可用资金 ¥' + cash.toFixed(0);
 }
 function onStockAccountFilter() {
@@ -11679,11 +11718,11 @@ function renderStocks() {
     if (q && q.price) totalValue += convertToCNY(q.price * s.quantity, cur);
     if (s.costPrice) totalCost += convertToCNY(s.costPrice * s.quantity, cur);
   });
-  // Available cash is account-level (each stock account has one shared cash pool)
+  // 可用资金 = 账户级现金（account.cash），同一账户下所有股票共用一份
   const cashAccs = (activeStockAccountId === 'all')
     ? stockAccounts()
     : stockAccounts().filter(a => a.id === activeStockAccountId);
-  const totalCash = cashAccs.reduce((sum, a) => sum + convertToCNY(a.availableCash || 0, a.currency || 'CNY'), 0);
+  const totalCash = cashAccs.reduce((sum, a) => sum + convertToCNY(a.cash != null ? a.cash : (a.availableCash || 0), a.currency || 'CNY'), 0);
   const totalPnl = totalValue - totalCost;
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost * 100) : 0;
   const totalCapital = totalValue + totalCash;
@@ -11949,7 +11988,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920k';
+  b.textContent = 'build 20260920l';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
