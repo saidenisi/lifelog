@@ -4777,7 +4777,33 @@ function pickMember(pid) {
   if (_tmpMembers[_memberPickIdx]) _tmpMembers[_memberPickIdx].personId = pid;
   hideMemberPick();
 }
+// 把编辑弹窗里「已输入但未点『加』」的跟进/记录补进数据（保存项目时自动调用）
+function flushEditFollowupInput() {
+  const p = _editProjectRecord(); if (!p) return;
+  const el = document.getElementById('netFollowTextEdit');
+  const text = el ? el.value.trim() : '';
+  if (!text) return;
+  const dEl = document.getElementById('netFollowDateEdit');
+  if (!p.followUps) p.followUps = [];
+  p.followUps.push({ id: uid(), date: (dEl && dEl.value) || '', text, done: false });
+  el.value = '';
+}
+function flushEditTimelineInput() {
+  const p = _editProjectRecord(); if (!p) return;
+  const el = document.getElementById('netTimelineTextEdit');
+  const text = el ? el.value.trim() : '';
+  if (!text) return;
+  const dEl = document.getElementById('netTimelineDateEdit');
+  if (!p.timeline) p.timeline = [];
+  p.timeline.push({ date: (dEl && dEl.value) || todayStr(), text });
+  el.value = '';
+}
+
 function saveNetProject() {
+  // 先把「已在输入框里打好字、但没点『加』」的跟进/记录补进去，
+  // 避免用户以为点「保存」会连这些一起存上（曾因此丢过内容）
+  flushEditFollowupInput();
+  flushEditTimelineInput();
   const id = document.getElementById('netProjectId').value;
   const name = document.getElementById('netProjectName').value.trim();
   if (!name) { toast('请输入项目名称'); return; }
@@ -4829,7 +4855,7 @@ function renderEditFollowups() {
   c.innerHTML = items || '<div class="net-empty">暂无跟进</div>';
   c.innerHTML += `<div style="display:flex;gap:6px;margin-top:6px">
     <input type="date" class="form-input" id="netFollowDateEdit" value="${todayStr()}" style="flex:0 0 132px">
-    <input type="text" class="form-input" id="netFollowTextEdit" placeholder="跟进什么…" style="flex:1">
+    <input type="text" class="form-input" id="netFollowTextEdit" placeholder="跟进什么…（回车即可添加）" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addEditFollowup();}">
     <button class="btn btn-primary btn-sm" onclick="addEditFollowup()">加</button>
   </div>`;
 }
@@ -4869,7 +4895,7 @@ function renderEditTimeline() {
   c.innerHTML = items || '<div class="net-empty">暂无记录</div>';
   c.innerHTML += `<div style="display:flex;gap:6px;margin-top:6px">
     <input type="date" class="form-input" id="netTimelineDateEdit" value="${todayStr()}" style="flex:0 0 132px">
-    <input type="text" class="form-input" id="netTimelineTextEdit" placeholder="记录一件事…" style="flex:1">
+    <input type="text" class="form-input" id="netTimelineTextEdit" placeholder="记录一件事…（回车即可添加）" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addEditTimeline();}">
     <button class="btn btn-primary btn-sm" onclick="addEditTimeline()">加</button>
   </div>`;
 }
@@ -4885,8 +4911,7 @@ function addEditTimeline() {
 }
 function deleteEditTimeline(idx) {
   const p = _editProjectRecord(); if (!p) return;
-  p.timeline = (p.timeline||[]).filter((_,i)=>i!==idx);
-  markPending(p); saveProjects();
+  p.timeline = (p.timeline||[]).filter((_,i)=>i!==idx);  markPending(p); saveProjects();
   renderEditTimeline();
 }
 function deleteNetProject(id) {
@@ -5224,7 +5249,7 @@ function followupsHtml(rec) {
   return `<div class="net-detail-section"><h4>🔔 跟进提醒</h4>${items || '<div class="net-empty">暂无跟进</div>'}
     <div style="display:flex;gap:6px;margin-top:6px">
       <input type="date" class="form-input" id="netFollowDate" value="${todayStr()}" style="flex:0 0 132px">
-      <input type="text" class="form-input" id="netFollowText" placeholder="跟进什么…" style="flex:1">
+      <input type="text" class="form-input" id="netFollowText" placeholder="跟进什么…（回车即可添加）" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addNetFollowup();}">
       <button class="btn btn-primary btn-sm" onclick="addNetFollowup()">加</button>
     </div></div>`;
 }
@@ -5235,7 +5260,7 @@ function timelineHtml(rec) {
   return `<div class="net-detail-section"><h4>🕒 时间线 / 记录</h4>${items || '<div class="net-empty">暂无记录</div>'}
     <div style="display:flex;gap:6px;margin-top:6px">
       <input type="date" class="form-input" id="netTimelineDate" value="${todayStr()}" style="flex:0 0 132px">
-      <input type="text" class="form-input" id="netTimelineText" placeholder="记录一件事…" style="flex:1">
+      <input type="text" class="form-input" id="netTimelineText" placeholder="记录一件事…（回车即可添加）" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();addNetTimeline();}">
       <button class="btn btn-primary btn-sm" onclick="addNetTimeline()">加</button>
     </div></div>`;
 }
@@ -11694,7 +11719,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920f';
+  b.textContent = 'build 20260920g';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
