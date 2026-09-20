@@ -1995,6 +1995,9 @@ tbody tr:hover{background:var(--surface-hover)}
 .net-follow .txt{flex:1;min-width:0}
 .net-follow.due{color:var(--danger)}
 .net-follow.done{opacity:.55;text-decoration:line-through}
+/* 「→ 待办」：把一条跟进提醒手动转成待办事项（转过去后两者互不影响） */
+.follow-todo-btn{flex:0 0 auto;font-size:11px;line-height:1;padding:4px 7px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);cursor:pointer;white-space:nowrap;text-decoration:none}
+.follow-todo-btn:hover{border-color:var(--primary);color:var(--primary)}
 .net-detail-section{margin-bottom:16px}
 .net-detail-section h4{position:relative;font-size:13px;font-weight:700;margin:0 0 8px;padding-left:9px;letter-spacing:.2px}
 .net-detail-section h4::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:13px;border-radius:2px;background:var(--primary)}
@@ -4856,6 +4859,7 @@ function renderEditFollowups() {
     return `<div class="net-follow ${f.done?'done':''} ${due?'due':''}">
       <input type="checkbox" ${f.done?'checked':''} onchange="toggleEditFollowup('${f.id}')">
       <span class="txt">${f.date?f.date+' ':''}${escapeHtml(f.text)}${due?'（到期）':''}</span>
+      <button class="follow-todo-btn" title="把这条跟进转成待办事项" onclick="todoFromEditFollowup('${f.id}')">→ 待办</button>
       <button class="btn-icon" onclick="deleteEditFollowup('${f.id}')">🗑️</button>
     </div>`;
   }).join('');
@@ -5250,6 +5254,7 @@ function followupsHtml(rec) {
     return `<div class="net-follow ${f.done?'done':''} ${due?'due':''}">
       <input type="checkbox" ${f.done?'checked':''} onchange="toggleNetFollowup('${f.id}')">
       <span class="txt">${f.date?f.date+' ':''}${escapeHtml(f.text)}${due?'（到期）':''}</span>
+      <button class="follow-todo-btn" title="把这条跟进转成待办事项" onclick="todoFromFollowup('${f.id}')">→ 待办</button>
       <button class="btn-icon" onclick="deleteNetFollowup('${f.id}')">🗑️</button>
     </div>`;
   }).join('');
@@ -5294,6 +5299,39 @@ function deleteNetFollowup(fid) {
   const rec = netDetailRecord(); if(!rec) return;
   rec.followUps = (rec.followUps||[]).filter(x=>x.id!==fid);
   _netSaveAndRefresh();
+}
+// ---- 跟进提醒 → 待办事项（手动转换；转过去后两者互不影响，各自独立勾选/删除）----
+// 项目类跟进自动带「相关项目」标签，人脉类带「朋友同学」标签，之后可在待办里改
+const FOLLOWUP_TODO_TAG = { project: 'project', person: 'friends' };
+function pushFollowupToTodo(rec, kind, f) {
+  if (!rec || !f) return;
+  // 同一条跟进不重复转（已删掉的待办不算，允许再次转换）
+  var dup = todosData.find(function(t){ return !t._deleted && t.ref && t.ref.itemId === f.id; });
+  if (dup) { toast('这条跟进已经在待办里了'); return; }
+  var now = new Date().toISOString();
+  todosData.push({
+    id: uid(),
+    date: f.date || todayStr(),
+    content: '🔔 ' + (rec.name ? rec.name + '：' : '') + f.text,
+    done: false,
+    tag: FOLLOWUP_TODO_TAG[kind] || '',
+    ref: { kind: kind, recId: rec.id, itemId: f.id },
+    createdAt: now, updatedAt: now, _pendingPush: true
+  });
+  saveTodos();
+  saveAll();
+  if (typeof renderTodos === 'function') renderTodos();
+  toast('已转为待办' + (f.date ? '（' + f.date + '）' : ''));
+}
+function todoFromFollowup(fid) {
+  var rec = netDetailRecord(); if (!rec) return;
+  var f = (rec.followUps||[]).find(function(x){ return x.id === fid; });
+  pushFollowupToTodo(rec, _netDetailKind, f);
+}
+function todoFromEditFollowup(fid) {
+  var p = _editProjectRecord(); if (!p) return;
+  var f = (p.followUps||[]).find(function(x){ return x.id === fid; });
+  pushFollowupToTodo(p, 'project', f);
 }
 function addNetTimeline() {
   const rec = netDetailRecord(); if(!rec) return;
@@ -11726,7 +11764,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920h';
+  b.textContent = 'build 20260920i';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
