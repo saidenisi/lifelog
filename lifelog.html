@@ -7040,9 +7040,12 @@ function getAccountBalanceCNY(acc) {
   return investAccountMarketValueCNY(acc);
 }
 
-// Upsert today's snapshot for an invest account (drives the daily trend chart)
-function upsertInvestSnapshot(acc) {
+// Upsert today's snapshot (drives the daily trend chart). 所有账户通用（不只投资类）。
+// fillMissingOnly=true 时只补"今天还没有记录"的账户，用于页面渲染时自动留痕，避免反复改 updatedAt。
+function upsertInvestSnapshot(acc, fillMissingOnly) {
   const today = todayStr();
+  const snap = acc.snapshots || (acc.snapshots = []);
+  if (fillMissingOnly && snap.some(s => s.date === today)) return false;
   const linkedStocks = stocksOfAccount(acc.id).filter(s => !s._deleted);
   const hasAssets = (acc.holdings || []).length > 0 || linkedStocks.length > 0;
   // 有股票但行情未就绪 → 不写快照。否则会把「只算了现金/部分资产」的偏小值当成当天市值，
@@ -7057,7 +7060,6 @@ function upsertInvestSnapshot(acc) {
   const value = investAccountMarketValueCNY(acc);
   // 跳过 0 快照（有资产但市值为 0，通常是行情未就绪），否则会抹掉继承的历史值
   if (value === 0 && hasAssets) return false;
-  const snap = acc.snapshots || (acc.snapshots = []);
   const idx = snap.findIndex(s => s.date === today);
   if (idx >= 0) {
     // 值几乎没变（<1 元）就不重复写，避免无谓的 updatedAt 变更与同步流量
@@ -7068,6 +7070,17 @@ function upsertInvestSnapshot(acc) {
   }
   snap.sort((a, b) => a.date.localeCompare(b.date));
   return true;
+}
+// 页面渲染时给所有账户补一条"今天"的快照（缺失才写）。
+// 没有这一步，清空历史后曲线会没有起点；有这一步，之后每天都会自动留痕、
+// 没有变化的日期由 fill-forward 继承前一天。
+function seedTodaySnapshots() {
+  let changed = false;
+  accountData.forEach(a => {
+    if (!a || a._deleted) return;
+    if (upsertInvestSnapshot(a, true)) { markPending(a); changed = true; }
+  });
+  if (changed) saveAccounts();
 }
 // Fill-forward snapshot value on a date (inherit previous day when missing)
 function snapshotValueOnDate(acc, date) {
@@ -7435,9 +7448,9 @@ function saveAccount() {
     }
     accountData.push(newAcc);
   }
-  // Record today's snapshot for invest accounts (explicit user input advances the
-  // daily trend; days without input carry forward the previous value)
-  if (isInvest) {
+  // 记录今天的快照（所有账户通用）：用户显式保存就是"这一天有变化"，
+  // 没变化的日期靠 fill-forward 继承前一天的值。
+  {
     const acc = id ? accountData.find(a => a.id === id) : accountData[accountData.length - 1];
     if (acc) upsertInvestSnapshot(acc);
   }
@@ -7749,10 +7762,9 @@ function getBalanceOnDate(acc, date) {
 
 // ===== Render Account Section =====
 function renderAccounts() {
-  // NOTE: daily snapshots are written ONLY on explicit user edits (saveAccount /
-  // saveStock), never on render. This implements the "沿用上一天" rule — a day
-  // without new input simply carries forward the previous day's value instead of
-  // being overwritten by a freshly-recomputed (possibly stale/partial) value.
+  // 每天第一次打开资产页时，给还没有今天快照的账户补一条（写一次即止，不会反复改 updatedAt）。
+  // 之后没变化的日期由 fill-forward 继承，实现"沿用上一天"。
+  seedTodaySnapshots();
   const colors = getChartColors();
   const chartColors = [colors.primary, colors.success, colors.warning, colors.info, colors.purple, colors.danger, '#fb923c','#22d3ee','#a78bfa','#f472b6','#34d399','#fbbf24'];
 
@@ -11964,11 +11976,11 @@ function saveStock() {
   closeModal('stockModal');
   toast('股票已保存 📈');
   renderStocks();
-  // Record today's snapshot for the affected invest account(s) — explicit user
+  // Record today's snapshot for the affected account(s) — explicit user
   // input advances the daily trend; days without input carry forward yesterday.
   const affectedIds = (prevAccountId && prevAccountId !== accountId) ? [accountId, prevAccountId] : [accountId];
   accountData.forEach(a => {
-    if (a.category === 'invest' && affectedIds.indexOf(a.id) >= 0) upsertInvestSnapshot(a);
+    if (affectedIds.indexOf(a.id) >= 0) upsertInvestSnapshot(a);
   });
   saveAccounts();
   // Auto-fetch data for the new/edited stock
@@ -12077,7 +12089,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920q';
+  b.textContent = 'build 20260920r';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
