@@ -4199,8 +4199,14 @@ function subscribeRealtime() {}
 
 // ===== Utility Functions =====
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-function todayStr() { return new Date().toISOString().slice(0,10); }
-function yesterdayStr() { return new Date(Date.now() - 86400000).toISOString().slice(0,10); }
+// 按【本地时区】取日期（原来用 toISOString 取的是 UTC 日期，东八区凌晨 0-8 点会算成昨天，
+// 会让"跟进到期"、表单默认日期、快照日期等偏一天）
+function localDateStr(d) {
+  const dt = d || new Date();
+  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+}
+function todayStr() { return localDateStr(); }
+function yesterdayStr() { const d = new Date(); d.setDate(d.getDate() - 1); return localDateStr(d); }
 function fmtMoney(n) {
   const sign = n < 0 ? '-' : '';
   return sign + '¥' + Math.abs(n).toLocaleString('zh-CN', {minimumFractionDigits:0, maximumFractionDigits:0});
@@ -4345,6 +4351,26 @@ function netEmptyHtml(icon, text, onclick) {
 }
 function dueFollowupCount(rec) {
   return (rec.followUps||[]).filter(f => !f.done && f.date && f.date <= todayStr()).length;
+}
+// 跟进提醒排序：未完成在前（按日期升序，越早越靠前＝越紧急）；已完成的沉底（新的在前）
+function sortFollowups(list) {
+  return (list || []).slice().sort(function(a, b) {
+    if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+    var da = a.date || '', db = b.date || '';
+    if (a.done) return db.localeCompare(da);
+    if (da && db && da !== db) return da.localeCompare(db);
+    if (da && !db) return -1;
+    if (!da && db) return 1;
+    return 0;
+  });
+}
+// 时间线排序：日期倒序（新的在最上面）；同一天则后添加的在前
+function sortTimeline(list) {
+  return (list || []).map(function(t, i) { return { t: t, i: i }; }).sort(function(a, b) {
+    var da = a.t.date || '', db = b.t.date || '';
+    if (da !== db) return db.localeCompare(da);
+    return b.i - a.i;
+  }).map(function(x) { return x.t; });
 }
 function infoRow(label, val) {
   if (!val) return '';
@@ -4792,7 +4818,7 @@ function renderEditFollowups() {
   const p = _editProjectRecord();
   if (!p) { c.innerHTML = '<div class="net-empty" style="font-size:12px">保存项目后可添加跟进提醒</div>'; return; }
   const list = (p.followUps||[]);
-  const items = list.map(f => {
+  const items = sortFollowups(list).map(f => {
     const due = !f.done && f.date && f.date <= todayStr();
     return `<div class="net-follow ${f.done?'done':''} ${due?'due':''}">
       <input type="checkbox" ${f.done?'checked':''} onchange="toggleEditFollowup('${f.id}')">
@@ -4835,7 +4861,11 @@ function renderEditTimeline() {
   const p = _editProjectRecord();
   if (!p) { c.innerHTML = '<div class="net-empty" style="font-size:12px">保存项目后可添加记录</div>'; return; }
   const list = (p.timeline||[]);
-  const items = list.map((t,i)=>`<div class="net-timeline-item">${t.date} ${escapeHtml(t.text)}<a href="javascript:void(0)" onclick="deleteEditTimeline(${i})" style="float:right;color:var(--text-muted)">✕</a></div>`).join('');
+  // 展示时按日期倒序；删除用的仍是原始数组下标，避免删错
+  const items = sortTimeline(list).map(t => {
+    const oi = list.indexOf(t);
+    return `<div class="net-timeline-item">${t.date} ${escapeHtml(t.text)}<a href="javascript:void(0)" onclick="deleteEditTimeline(${oi})" style="float:right;color:var(--text-muted)">✕</a></div>`;
+  }).join('');
   c.innerHTML = items || '<div class="net-empty">暂无记录</div>';
   c.innerHTML += `<div style="display:flex;gap:6px;margin-top:6px">
     <input type="date" class="form-input" id="netTimelineDateEdit" value="${todayStr()}" style="flex:0 0 132px">
@@ -5183,7 +5213,7 @@ function createProjectMember() {
 }
 function followupsHtml(rec) {
   const list = (rec.followUps||[]);
-  const items = list.map(f => {
+  const items = sortFollowups(list).map(f => {
     const due = !f.done && f.date && f.date <= todayStr();
     return `<div class="net-follow ${f.done?'done':''} ${due?'due':''}">
       <input type="checkbox" ${f.done?'checked':''} onchange="toggleNetFollowup('${f.id}')">
@@ -5200,7 +5230,8 @@ function followupsHtml(rec) {
 }
 function timelineHtml(rec) {
   const list = (rec.timeline||[]);
-  const items = list.map(t=>`<div class="net-timeline-item">${t.date} ${escapeHtml(t.text)}<a href="javascript:void(0)" onclick="deleteNetTimeline(${list.indexOf(t)})" style="float:right;color:var(--text-muted)">✕</a></div>`).join('');
+  // 展示按日期倒序；删除用原始下标
+  const items = sortTimeline(list).map(t=>`<div class="net-timeline-item">${t.date} ${escapeHtml(t.text)}<a href="javascript:void(0)" onclick="deleteNetTimeline(${list.indexOf(t)})" style="float:right;color:var(--text-muted)">✕</a></div>`).join('');
   return `<div class="net-detail-section"><h4>🕒 时间线 / 记录</h4>${items || '<div class="net-empty">暂无记录</div>'}
     <div style="display:flex;gap:6px;margin-top:6px">
       <input type="date" class="form-input" id="netTimelineDate" value="${todayStr()}" style="flex:0 0 132px">
@@ -11663,7 +11694,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920e';
+  b.textContent = 'build 20260920f';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
@@ -11693,6 +11724,24 @@ checkBackupReminder();
       }
     }).observe(document.body, { subtree:true, attributes:true, attributeFilter:['class'] });
   }
+})();
+</script>
+
+<script>
+// ===== 跨天自动刷新：让「跟进到期」红点、待办过期等在跨天后自动更新（不用手动刷新） =====
+(function(){
+  var lastDay = (typeof todayStr === 'function') ? todayStr() : '';
+  function refreshIfDayChanged() {
+    var d = todayStr();
+    if (d === lastDay) return;
+    lastDay = d;
+    try { if (typeof renderNetProjects === 'function') renderNetProjects(); } catch(e) {}
+    try { if (typeof renderNetPersons === 'function') renderNetPersons(); } catch(e) {}
+    try { if (typeof renderTodos === 'function') renderTodos(); } catch(e) {}
+  }
+  setInterval(refreshIfDayChanged, 60000);                                          // 每分钟检查是否跨天
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) refreshIfDayChanged(); });
+  window.addEventListener('focus', refreshIfDayChanged);
 })();
 </script>
 
