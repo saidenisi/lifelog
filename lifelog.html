@@ -1961,6 +1961,11 @@ tbody tr:hover{background:var(--surface-hover)}
 .member-contrib{display:block;width:100%;padding:8px 10px;font-size:13px;line-height:1.6;font-family:inherit;color:var(--text);border:1px solid var(--border);border-radius:8px;box-sizing:border-box;background:var(--surface);resize:none;overflow:hidden;min-height:34px;transition:border-color .15s,box-shadow .15s}
 .member-contrib:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-bg)}
 .member-contrib::placeholder{color:var(--text-muted)}
+/* 项目编辑弹窗：成员卡片（姓名独占一行 + 贡献多行，长短名字都整齐） */
+.member-edit-card{background:var(--surface-hover);border:1px solid var(--border-light);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.member-edit-card .mem-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.member-edit-card .mem-name{font-size:14px;font-weight:600;line-height:1.45;word-break:break-word}
+.member-edit-card .mem-name .mem-from{font-size:12px;font-weight:400;color:var(--text-muted)}
 /* 详情：信息行 */
 .net-info{display:flex;gap:10px;font-size:13px;padding:7px 0;border-bottom:1px dashed var(--border-light);line-height:1.6}
 .net-info:last-child{border-bottom:none}
@@ -4546,6 +4551,7 @@ function openNetProject(id) {
   renderEditTimeline();
   renderNetDatalists();
   document.getElementById('netProjectModal').classList.add('active');
+  autoGrowAllMembers();
 }
 // 项目备注 = 角色 + 关系备注 合并后的单一字段（旧数据里两者都存时合并展示，分开存时各取其一）
 function memberNoteText(m) {
@@ -4559,12 +4565,16 @@ function renderMemberRows() {
   c.innerHTML = _tmpMembers.map((m, i) => {
     const per = personsData.find(p => p.id === m.personId);
     if (!per) return '';
-    return `<div class="member-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-light)">
-      <span class="member-name" style="flex:0 0 auto;font-size:13px;font-weight:500">${escapeHtml(per.name)}</span>
-      <input type="text" class="member-note" placeholder="贡献/作用" value="${escapeHtml(m.note||'')}" oninput="_tmpMembers[${i}].note=this.value" style="flex:1;min-width:0;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:6px">
-      <button type="button" class="btn-icon" onclick="_tmpMembers.splice(${i},1);renderMemberRows()" style="flex:0 0 auto" title="移除">✕</button>
+    return `<div class="member-edit-card">
+      <div class="mem-top">
+        <span class="mem-name">${escapeHtml(per.name)}${per.identity?`<span class="mem-from">（${escapeHtml(per.identity)}）</span>`:''}</span>
+        <button type="button" class="btn-icon" onclick="_tmpMembers.splice(${i},1);renderMemberRows()" title="移除成员">✕</button>
+      </div>
+      <label class="member-label">贡献 / 作用</label>
+      <textarea class="member-note member-contrib" rows="1" placeholder="如：资金方、介绍资源、对接渠道…" oninput="_tmpMembers[${i}].note=this.value;autoGrowTextarea(this)">${escapeHtml(m.note||'')}</textarea>
     </div>`;
   }).join('');
+  autoGrowAllMembers();
 }
 function hideNetProjectMemberPick() { const d = document.getElementById('netProjectMemberPick'); if (d) d.style.display = 'none'; }
 function netProjectMemberSearch(q) {
@@ -4945,7 +4955,7 @@ function autoGrowTextarea(el) {
   return true;
 }
 function autoGrowAllMembers(retry) {
-  var nodes = document.querySelectorAll('#netDetailBody .member-contrib');
+  var nodes = document.querySelectorAll('#netDetailBody .member-contrib, #netProjectMembers .member-contrib');
   if (!nodes.length) return;
   var okAny = false;
   for (var i = 0; i < nodes.length; i++) { if (autoGrowTextarea(nodes[i])) okAny = true; }
@@ -11589,7 +11599,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920b';
+  b.textContent = 'build 20260920c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
