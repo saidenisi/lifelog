@@ -1957,7 +1957,8 @@ tbody tr:hover{background:var(--surface-hover)}
 .member-name{font-size:14px;font-weight:600;cursor:pointer;color:var(--text);line-height:1.45}
 .member-name:hover{color:var(--primary)}
 .member-name .mem-from{font-size:12px;font-weight:400;color:var(--text-muted)}
-.member-label{display:block;font-size:11px;color:var(--text-muted);margin:8px 0 3px}
+/* 输入框与上方姓名之间的间距（原先由「贡献/作用」标签提供） */
+.member-edit-card .member-contrib,.member-detail-row .member-contrib{margin-top:8px}
 .member-contrib{display:block;width:100%;padding:8px 10px;font-size:13px;line-height:1.6;font-family:inherit;color:var(--text);border:1px solid var(--border);border-radius:8px;box-sizing:border-box;background:var(--surface);resize:none;overflow:hidden;min-height:34px;transition:border-color .15s,box-shadow .15s}
 .member-contrib:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-bg)}
 .member-contrib::placeholder{color:var(--text-muted)}
@@ -4570,7 +4571,6 @@ function renderMemberRows() {
         <span class="mem-name">${escapeHtml(per.name)}${per.identity?`<span class="mem-from">（${escapeHtml(per.identity)}）</span>`:''}</span>
         <button type="button" class="btn-icon" onclick="_tmpMembers.splice(${i},1);renderMemberRows()" title="移除成员">✕</button>
       </div>
-      <label class="member-label">贡献 / 作用</label>
       <textarea class="member-note member-contrib" rows="1" placeholder="如：资金方、介绍资源、对接渠道…" oninput="_tmpMembers[${i}].note=this.value;autoGrowTextarea(this)">${escapeHtml(m.note||'')}</textarea>
     </div>`;
   }).join('');
@@ -4957,9 +4957,10 @@ function autoGrowTextarea(el) {
 function autoGrowAllMembers(retry) {
   var nodes = document.querySelectorAll('#netDetailBody .member-contrib, #netProjectMembers .member-contrib');
   if (!nodes.length) return;
-  var okAny = false;
-  for (var i = 0; i < nodes.length; i++) { if (autoGrowTextarea(nodes[i])) okAny = true; }
-  if (!okAny && (retry || 0) < 4) setTimeout(function () { autoGrowAllMembers((retry || 0) + 1); }, 80);
+  // 注意：必须逐个判断。若用「任一成功就停」，已显示的弹窗会掩盖另一个还没布局的弹窗。
+  var allOk = true;
+  for (var i = 0; i < nodes.length; i++) { if (!autoGrowTextarea(nodes[i])) allOk = false; }
+  if (!allOk && (retry || 0) < 6) setTimeout(function () { autoGrowAllMembers((retry || 0) + 1); }, 80);
 }
 function openNetDetail(kind, id) {
   _netDetailKind = kind; _netDetailId = id;
@@ -4999,7 +5000,6 @@ function projectDetailHtml(p) {
         <span class="member-name" onclick="openNetDetail('person','${m.per.id}')">${escapeHtml(m.per.name)}${m.per.identity?`<span class="mem-from">（${escapeHtml(m.per.identity)}）</span>`:''}${m.active?'':'<span class="mem-from">（已离开）</span>'}</span>
         <button class="btn-icon" onclick="removeProjectMember('${m.per.id}')" title="移除成员">✕</button>
       </div>
-      <label class="member-label">贡献 / 作用</label>
       <textarea class="member-contrib" rows="1" placeholder="如：资金方、介绍资源、对接渠道…" oninput="autoGrowTextarea(this)" onchange="saveMemberContrib('${m.per.id}', this.value)">${escapeHtml(m.note)}</textarea>
     </div>`
   ).join('');
@@ -11599,7 +11599,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920c';
+  b.textContent = 'build 20260920d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
