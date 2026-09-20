@@ -4017,8 +4017,15 @@ function mergeRecords(cloudArr, localArr, mode) {
   return result;
 }
 
-// 标记某条记录为「本地有未同步改动」（在保存点调用，确保即使尚未 push 也不被 pull 丢弃）
-function markPending(rec) { if (rec && !rec._pendingPush) rec._pendingPush = true; }
+// 标记某条记录为「本地有未同步改动」。
+// ⚠️ 必须同时把 updatedAt 推到最新：否则当云端与本地时间戳相同（拉取后就是这种状态）时，
+//    push 合并用的是「严格大于」比较（见 mergeRecords），本地改动会被云端旧版本覆盖并**直接丢掉**
+//    —— 2026-09-20「跟进提醒 / 时间线 加完就消失」就是这个原因。
+function markPending(rec) {
+  if (!rec) return;
+  rec._pendingPush = true;
+  rec.updatedAt = new Date().toISOString();
+}
 
 // 是否还有「本地已改、尚未同步到云端」的记录（存在 _pendingPush 标记）。
 // 用于云端恢复后自动补推：拉取成功后若仍有 pending 记录，立即把它们推上去。
@@ -11719,7 +11726,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920g';
+  b.textContent = 'build 20260920h';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
