@@ -1934,6 +1934,11 @@ tbody tr:hover{background:var(--surface-hover)}
 .net-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer;transition:all .15s}
 .net-card:hover{border-color:var(--primary)}
 .net-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+/* 项目手动排序按钮（按重要性） */
+.proj-sort{margin-left:auto;display:flex;gap:2px;flex-shrink:0}
+.proj-sort-btn{width:26px;height:26px;font-size:11px;line-height:1;opacity:.5;border-radius:6px}
+.proj-sort-btn:hover:not([disabled]){opacity:1;background:var(--primary-bg);color:var(--primary)}
+.proj-sort-btn[disabled]{opacity:.15;cursor:default}
 .net-name{font-weight:700;font-size:15px}
 .net-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .net-tag{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--primary-bg);color:var(--primary)}
@@ -3461,6 +3466,8 @@ let netGroupsData = DB.get('netGroups') || [];
 let netTagsData = DB.get('netTags') || [];
 let memosData = DB.get('memos') || [];
 let hlStateData = DB.get('hlState') || [];
+// 项目手动排序：单独一条极小的记录，只存 id 顺序（不碰项目本身的内容/时间戳，零风险）
+let projOrderData = DB.get('projOrder') || [];
 let netTab = 'project';
 let netGroupFilter = 'all';
 const NET_STATUSES = ['筹备中', '进行中', '已暂停', '已完成', '已搁置'];
@@ -3741,7 +3748,7 @@ function saveAll() {
 // ===== Cloud Sync (Supabase) =====
 const SUPABASE_URL = 'https://naazilvdmqsbwtlhlhkk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_qgdOr6NGtOkYTlCf0X2vZQ_tXfsbFco';
-const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock2', 'media', 'dailyNotes', 'todos', 'projects', 'persons', 'memos', 'hlState'];
+const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock2', 'media', 'dailyNotes', 'todos', 'projects', 'projOrder', 'persons', 'memos', 'hlState'];
 let _pullErrors = 0; // 记录最近一次拉取失败条数，供实时订阅状态判断，避免错误状态被覆盖
 
 // 原生 fetch 直接调 Supabase REST API，不依赖 supabase-js SDK（SDK 从外部 CDN 加载，
@@ -3925,6 +3932,7 @@ async function pullAllFromCloud() {
       case 'dailyNotes': dailyNotes = merged; break;
       case 'todos': todosData = merged; break;
       case 'projects': projectsData = merged; break;
+      case 'projOrder': projOrderData = merged; break;
       case 'persons': personsData = merged; break;
       case 'memos': memosData = merged; break;
       case 'hlState': hlStateData = merged; break;
@@ -4079,6 +4087,7 @@ async function pushAllToCloud() {
                 case 'dailyNotes': dailyNotes = localValue; break;
                 case 'todos': todosData = localValue; break;
                 case 'projects': projectsData = localValue; break;
+                case 'projOrder': projOrderData = localValue; break;
                 case 'persons': personsData = localValue; break;
                 case 'memos': memosData = localValue; break;
                 case 'hlState': hlStateData = localValue; break;
@@ -4346,22 +4355,70 @@ function tagsBlock(label, tags) {
 }
 
 // ---- 项目列表 ----
+// ---- 项目手动排序（按重要性）----
+// 顺序单独存在 projOrder 记录里（只存 id 数组），绝不改动项目本身的内容与时间戳
+function projectOrderIds() {
+  const rec = (projOrderData || []).find(r => r && r.id === 'projOrder' && !r._deleted);
+  return (rec && Array.isArray(rec.order)) ? rec.order : [];
+}
+function saveProjectOrder(ids) {
+  const now = new Date().toISOString();
+  let rec = (projOrderData || []).find(r => r && r.id === 'projOrder');
+  if (!rec) { rec = { id: 'projOrder', order: [], createdAt: now }; projOrderData.push(rec); }
+  rec.order = ids.slice();
+  rec._deleted = false;
+  rec.updatedAt = now;
+  rec._pendingPush = true;
+  DB.set('projOrder', projOrderData);
+  scheduleCloudPush();
+}
+// 展示顺序：有自定义顺序则按它；未列入的排到后面（按更新时间兜底）
+function sortedProjects() {
+  const alive = projectsData.filter(p => !p._deleted);
+  const ids = projectOrderIds();
+  const rank = {};
+  ids.forEach((id, i) => { rank[id] = i; });
+  return alive.sort((a, b) => {
+    const ra = (a.id in rank) ? rank[a.id] : Infinity;
+    const rb = (b.id in rank) ? rank[b.id] : Infinity;
+    if (ra !== rb) return ra - rb;
+    return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+  });
+}
+function moveProject(id, dir, ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  const list = sortedProjects();
+  const idx = list.findIndex(p => p.id === id);
+  if (idx < 0) return;
+  const ni = idx + dir;
+  if (ni < 0 || ni >= list.length) return;
+  const ids = list.map(p => p.id);
+  const tmp = ids[idx]; ids[idx] = ids[ni]; ids[ni] = tmp;
+  saveProjectOrder(ids);
+  renderNetProjects();
+}
+
 function renderNetProjects() {
   const list = document.getElementById('netProjectList');
-  const items = projectsData.filter(p => !p._deleted).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
+  const items = sortedProjects();
   if (!items.length) { list.innerHTML = netEmptyHtml('📁','还没有项目，点击「添加项目」开始', 'openNetProject()'); return; }
-  list.innerHTML = items.map(projectCardHtml).join('');
+  list.innerHTML = items.map((p, i) => projectCardHtml(p, i, items.length)).join('');
 }
-function projectCardHtml(p) {
+function projectCardHtml(p, idx, total) {
   const statusBadge = p.status === '进行中' ? 'badge-success' : p.status === '已完成' ? 'badge-muted' : p.status === '已暂停' ? 'badge-warning' : 'badge-info';
   const due = dueFollowupCount(p);
   const memCount = projectMemberCount(p);
+  const canUp = idx > 0, canDown = idx < total - 1;
   return `<div class="net-card" onclick="openNetProject('${p.id}')">
     <div class="net-head">
       <span class="net-name">${escapeHtml(p.name)}</span>
       ${p.status ? `<span class="badge ${statusBadge}">${p.status}</span>` : ''}
       ${memCount>0 ? `<span class="badge badge-info">👥 ${memCount}人</span>` : ''}
       ${due>0 ? `<span class="badge badge-danger">🔔 ${due} 跟进</span>` : ''}
+      <span class="proj-sort" onclick="event.stopPropagation()">
+        <button class="btn-icon proj-sort-btn" onclick="moveProject('${p.id}',-1,event)"${canUp?'':' disabled'} title="上移">▲</button>
+        <button class="btn-icon proj-sort-btn" onclick="moveProject('${p.id}',1,event)"${canDown?'':' disabled'} title="下移">▼</button>
+      </span>
     </div>
     ${p.domain ? `<div class="net-sub">领域：${escapeHtml(p.domain)}</div>` : ''}
     ${p.intro ? `<div class="net-sub">${escapeHtml(p.intro)}</div>` : ''}
@@ -4710,7 +4767,11 @@ function saveNetProject() {
     const idx = projectsData.findIndex(x=>x.id===id);
     if (idx>=0) projectsData[idx] = {...projectsData[idx], name, domain, status, intro, tags: [], note, members, updatedAt: now, _pendingPush: true};
   } else {
-    projectsData.push({id: uid(), name, domain, status, intro, tags: [], note, members, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
+    const newProj = {id: uid(), name, domain, status, intro, tags: [], note, members, followUps: [], timeline: [], createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true};
+    projectsData.push(newProj);
+    // 已有自定义顺序时，新项目放到最前面
+    const ids = projectOrderIds();
+    if (ids.length) { ids.unshift(newProj.id); saveProjectOrder(ids); }
   }
   saveProjects();
   closeModal('netProjectModal');
@@ -4803,6 +4864,9 @@ function deleteNetProject(id) {
   if (!confirm('删除项目「'+(p?p.name:'')+'」？')) return;
   // 墓碑删除（而非 filter 硬删）：硬删会导致 push 时云端旧记录复活
   if (p) { p._deleted = true; p.updatedAt = new Date().toISOString(); p._pendingPush = true; }
+  // 同步把该项目从手动排序里移除
+  const oids = projectOrderIds();
+  if (oids.indexOf(id) >= 0) saveProjectOrder(oids.filter(x => x !== id));
   saveProjects(); closeModal('netDetailModal'); renderNetProjects();
 }
 
@@ -8267,7 +8331,7 @@ function escapeHtml(s) {
 
 
 function exportAllData() {
-  const data = { fitness: fitnessData, sleep: sleepData, medications: medicationsData, healthNotes: healthNotesData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, projects: projectsData, persons: personsData, memos: memosData, hlState: hlStateData, exportDate: new Date().toISOString() };
+  const data = { fitness: fitnessData, sleep: sleepData, medications: medicationsData, healthNotes: healthNotesData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, projects: projectsData, projOrder: projOrderData, persons: personsData, memos: memosData, hlState: hlStateData, exportDate: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -11599,7 +11663,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920d';
+  b.textContent = 'build 20260920e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
