@@ -1950,7 +1950,28 @@ tbody tr:hover{background:var(--surface-hover)}
 .pp-note{color:var(--text-muted);flex-basis:100%;padding-left:10px}
 .pin-btn{background:none;border:none;cursor:pointer;font-size:15px;opacity:.35;padding:2px;line-height:1}
 .pin-btn.pinned{opacity:1}
-.member-contrib{width:100%;margin-top:4px;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;background:var(--surface)}
+/* 详情：成员卡片（贡献/作用 多行自适应，内容全部可见） */
+.member-detail-row{background:var(--surface-hover);border:1px solid var(--border-light);border-radius:10px;padding:10px 12px;margin-bottom:8px;transition:border-color .15s}
+.member-detail-row:hover{border-color:var(--border)}
+.member-detail-row .mem-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.member-name{font-size:14px;font-weight:600;cursor:pointer;color:var(--text);line-height:1.45}
+.member-name:hover{color:var(--primary)}
+.member-name .mem-from{font-size:12px;font-weight:400;color:var(--text-muted)}
+.member-label{display:block;font-size:11px;color:var(--text-muted);margin:8px 0 3px}
+.member-contrib{display:block;width:100%;padding:8px 10px;font-size:13px;line-height:1.6;font-family:inherit;color:var(--text);border:1px solid var(--border);border-radius:8px;box-sizing:border-box;background:var(--surface);resize:none;overflow:hidden;min-height:34px;transition:border-color .15s,box-shadow .15s}
+.member-contrib:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-bg)}
+.member-contrib::placeholder{color:var(--text-muted)}
+/* 详情：信息行 */
+.net-info{display:flex;gap:10px;font-size:13px;padding:7px 0;border-bottom:1px dashed var(--border-light);line-height:1.6}
+.net-info:last-child{border-bottom:none}
+.net-info .k{flex:0 0 52px;color:var(--text-muted)}
+.net-info .v{flex:1;min-width:0;white-space:pre-wrap;word-break:break-word}
+/* 详情：人脉里「参与的项目」行 */
+.proj-link-row{background:var(--surface-hover);border:1px solid var(--border-light);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:border-color .15s}
+.proj-link-row:hover{border-color:var(--border)}
+.proj-link-row .pl-top{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px}
+.proj-link-row .pl-name{font-weight:600}
+.proj-link-row .pl-note{font-size:12px;color:var(--text-muted);margin-top:6px;padding-left:10px;border-left:2px solid var(--border-light);line-height:1.6;white-space:pre-wrap;word-break:break-word}
 .net-match{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:10px}
 .net-match h4{font-size:13px;font-weight:600;margin:0 0 6px}
 .net-match-item{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px}
@@ -1963,8 +1984,9 @@ tbody tr:hover{background:var(--surface-hover)}
 .net-follow .txt{flex:1;min-width:0}
 .net-follow.due{color:var(--danger)}
 .net-follow.done{opacity:.55;text-decoration:line-through}
-.net-detail-section{margin-bottom:14px}
-.net-detail-section h4{font-size:13px;font-weight:600;margin:0 0 6px}
+.net-detail-section{margin-bottom:16px}
+.net-detail-section h4{position:relative;font-size:13px;font-weight:700;margin:0 0 8px;padding-left:9px;letter-spacing:.2px}
+.net-detail-section h4::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:13px;border-radius:2px;background:var(--primary)}
 .net-timeline-item{font-size:12px;color:var(--text-secondary);padding:3px 0;border-bottom:1px dashed var(--border-light)}
 .net-check-list{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:8px;padding:8px}
 .net-check-item{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
@@ -4309,7 +4331,10 @@ function netEmptyHtml(icon, text, onclick) {
 function dueFollowupCount(rec) {
   return (rec.followUps||[]).filter(f => !f.done && f.date && f.date <= todayStr()).length;
 }
-function infoRow(label, val) { return val ? `<div class="net-sub"><b>${label}：</b>${escapeHtml(val)}</div>` : ''; }
+function infoRow(label, val) {
+  if (!val) return '';
+  return `<div class="net-info"><span class="k">${label}</span><span class="v">${escapeHtml(val)}</span></div>`;
+}
 function tagsBlock(label, tags) {
   return (tags && tags.length) ? `<div class="net-detail-section"><h4>${label}</h4><div class="net-tags">${tags.map(t=>`<span class="net-tag">${escapeHtml(t)}</span>`).join('')}</div></div>` : '';
 }
@@ -4908,6 +4933,24 @@ let _netDetailKind = '', _netDetailId = '';
 function netDetailRecord() {
   return _netDetailKind === 'project' ? projectsData.find(x=>x.id===_netDetailId) : personsData.find(x=>x.id===_netDetailId);
 }
+// 贡献/作用文本框：高度跟随内容自动增长，保证多行内容全部可见
+// ⚠️ 弹窗的 display 是 MutationObserver 异步生效的：若此时还没布局（scrollHeight=0），
+//    不设固定高度，稍后重试，避免把文本框压成 2px。
+function autoGrowTextarea(el) {
+  if (!el) return false;
+  el.style.height = 'auto';
+  var sh = el.scrollHeight;
+  if (!sh) return false;
+  el.style.height = sh + 'px';
+  return true;
+}
+function autoGrowAllMembers(retry) {
+  var nodes = document.querySelectorAll('#netDetailBody .member-contrib');
+  if (!nodes.length) return;
+  var okAny = false;
+  for (var i = 0; i < nodes.length; i++) { if (autoGrowTextarea(nodes[i])) okAny = true; }
+  if (!okAny && (retry || 0) < 4) setTimeout(function () { autoGrowAllMembers((retry || 0) + 1); }, 80);
+}
 function openNetDetail(kind, id) {
   _netDetailKind = kind; _netDetailId = id;
   let body = '';
@@ -4922,6 +4965,7 @@ function openNetDetail(kind, id) {
   }
   document.getElementById('netDetailBody').innerHTML = body;
   document.getElementById('netDetailModal').classList.add('active');
+  autoGrowAllMembers();
 }
 function tagNoteItemHtml(t, cls) {
   const tag = tagOf(t), note = noteOf(t);
@@ -4941,11 +4985,12 @@ function projectDetailHtml(p) {
   h += infoRow('简介', p.intro);
   const memberHtml = members.map(m =>
     `<div class="member-detail-row">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <span style="font-size:13px;font-weight:500;cursor:pointer" onclick="openNetDetail('person','${m.per.id}')">${escapeHtml(m.per.name)}${m.per.identity?` <span style="color:var(--text-muted);font-size:12px;font-weight:400">（${escapeHtml(m.per.identity)}）</span>`:''}${m.active?'':' <span style="color:var(--text-muted);font-size:12px">（已离开）</span>'}</span>
+      <div class="mem-top">
+        <span class="member-name" onclick="openNetDetail('person','${m.per.id}')">${escapeHtml(m.per.name)}${m.per.identity?`<span class="mem-from">（${escapeHtml(m.per.identity)}）</span>`:''}${m.active?'':'<span class="mem-from">（已离开）</span>'}</span>
         <button class="btn-icon" onclick="removeProjectMember('${m.per.id}')" title="移除成员">✕</button>
       </div>
-      <input type="text" class="member-contrib" value="${escapeHtml(m.note)}" placeholder="贡献/作用（如：资金方、介绍资源…）" onchange="saveMemberContrib('${m.per.id}', this.value)">
+      <label class="member-label">贡献 / 作用</label>
+      <textarea class="member-contrib" rows="1" placeholder="如：资金方、介绍资源、对接渠道…" oninput="autoGrowTextarea(this)" onchange="saveMemberContrib('${m.per.id}', this.value)">${escapeHtml(m.note)}</textarea>
     </div>`
   ).join('');
   h += `<div class="net-detail-section"><h4>👥 参与的人（${members.length}）</h4>${memberHtml}
@@ -4965,12 +5010,12 @@ function personDetailHtml(p) {
   h += infoRow('关系来源', p.identity);
   if (linked.length) h += `<div class="net-detail-section"><h4>📁 参与的项目（${linked.length}）</h4>${linked.map(l=>{
     const statusBadge = l.pr.status==='进行中' ? 'badge-success' : l.pr.status==='已完成' ? 'badge-muted' : l.pr.status==='已暂停' ? 'badge-warning' : 'badge-info';
-    return `<div style="cursor:pointer;padding:6px 0;border-bottom:1px solid var(--border-light)" onclick="openNetDetail('project','${l.pr.id}')">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px">
-        <span style="font-weight:500">${escapeHtml(l.pr.name)}${l.active?'':' <span style="color:var(--text-muted);font-size:12px;font-weight:400">（已离开）</span>'}</span>
+    return `<div class="proj-link-row" onclick="openNetDetail('project','${l.pr.id}')">
+      <div class="pl-top">
+        <span class="pl-name">${escapeHtml(l.pr.name)}${l.active?'':'<span class="mem-from">（已离开）</span>'}</span>
         ${l.pr.status?`<span class="badge ${statusBadge}">${escapeHtml(l.pr.status)}</span>`:''}
       </div>
-      ${l.note?`<div style="text-indent:2em;font-size:12px;color:var(--text-muted);margin-top:2px;line-height:1.5">${escapeHtml(l.note)}</div>`:''}
+      ${l.note?`<div class="pl-note">${escapeHtml(l.note)}</div>`:''}
     </div>`;
   }).join('')}</div>`;
   h += followupsHtml(p);
@@ -11544,7 +11589,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920a';
+  b.textContent = 'build 20260920b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
