@@ -2202,7 +2202,6 @@ tbody tr:hover{background:var(--surface-hover)}
         <div style="display:flex;gap:10px;align-items:center">
           <button class="mobile-menu-btn" id="mobileMenuBtn4">☰</button>
           <button class="btn btn-ghost" onclick="openAccountModal()">🏦 添加账户</button>
-          <button class="btn btn-primary" onclick="openBalanceModal()">💰 记录余额</button>
         </div>
       </div>
 
@@ -3070,13 +3069,16 @@ tbody tr:hover{background:var(--surface-hover)}
           </select>
         </div>
         <div class="form-group" id="accAvailableCashGroup" style="display:none">
-          <label class="form-label">现金 <span class="text-muted" style="font-size:11px;font-weight:400">（账户内可用现金）</span></label>
+          <label class="form-label"><span id="accValueLabel">现金</span> <span class="text-muted" style="font-size:11px;font-weight:400" id="accValueNote">（账户内可用现金）</span></label>
           <input type="number" class="form-input" id="accAvailableCash" placeholder="如 50000" step="0.01" min="0">
         </div>
       </div>
       <div class="form-group" id="accStockCashHint" style="display:none">
         <p class="text-sm text-muted" style="margin:0">这个账户的市值 = <b>现金</b> + 持仓项 + 关联股票的实时市值（自动）。现金也可以直接在「股票交易 → 这只股票」的面板里填，两处是同一个数，不用重复填。</p>
       </div>
+      <details id="accAdvancedGroup" style="margin:2px 0 10px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--text-muted);padding:4px 0;user-select:none">高级（可选）：投入本金 / 资金流水（只影响收益率计算）</summary>
+        <div style="padding-top:6px">
       <div class="form-row" id="accPrincipalGroup" style="display:none">
         <div class="form-group">
           <label class="form-label">投入本金 <span class="text-muted" style="font-size:11px;font-weight:400">（可选，留空按持仓成本 + 现金自动估算）</span></label>
@@ -3089,10 +3091,11 @@ tbody tr:hover{background:var(--surface-hover)}
         <div id="accTransactionsList"></div>
         <button class="btn btn-ghost btn-sm" onclick="addTransactionRow()" style="margin-top:8px">➕ 添加流水</button>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">币种</label>
-          <select class="form-select" id="accCurrency">
+        </div>
+      </details>
+      <div class="form-group">
+        <label class="form-label">币种</label>
+        <select class="form-select" id="accCurrency">
             <option value="CNY">¥ 人民币 (CNY)</option>
             <option value="USD">$ 美元 (USD)</option>
             <option value="HKD">HK$ 港币 (HKD)</option>
@@ -3103,31 +3106,13 @@ tbody tr:hover{background:var(--surface-hover)}
             <option value="AUD">A$ 澳元 (AUD)</option>
             <option value="CAD">C$ 加元 (CAD)</option>
             <option value="KRW">₩ 韩元 (KRW)</option>
-          </select>
-        </div>
-        <div class="form-group" id="accCalcModeGroup">
-          <label class="form-label">余额计算方式</label>
-          <select class="form-select" id="accCalcMode" onchange="toggleAccCalcMode()">
-            <option value="direct">直接填写余额</option>
-            <option value="formula">基础余额 + 持仓计算</option>
-          </select>
-        </div>
+        </select>
       </div>
-      <div class="form-group" id="accInitBalanceGroup">
-        <label class="form-label">初始余额</label>
-        <input type="number" class="form-input" id="accInitBalance" placeholder="0.00" step="0.01">
-      </div>
-      <div id="accFormulaGroup" style="display:none">
-        <div class="form-group" id="accBaseAmountGroup">
-          <label class="form-label">基础余额（现金部分）</label>
-          <input type="number" class="form-input" id="accBaseAmount" placeholder="0.00" step="0.01">
-        </div>
-        <div class="form-group">
-          <label class="form-label">持仓明细</label>
-          <p class="text-sm text-muted" style="margin-bottom:8px">市值 = 数量 × 市价，按币种汇率折算。金融投资账户（基金 / 理财 / 虚拟币）在此填写；股票在「股票交易」维护</p>
-          <div id="accHoldingsList"></div>
-          <button class="btn btn-ghost btn-sm" onclick="addHoldingRow()" style="margin-top:8px">➕ 添加持仓</button>
-        </div>
+      <div class="form-group" id="accFormulaGroup" style="display:none">
+        <label class="form-label">持仓明细 <span class="text-muted" style="font-size:11px;font-weight:400">（可选）</span></label>
+        <p class="text-sm text-muted" style="margin-bottom:8px">基金 / 理财 / 虚拟币等在这里加一行（市值 = 数量 × 市价）。<b>股票不用填</b>——在「股票交易」里维护，自动计入</p>
+        <div id="accHoldingsList"></div>
+        <button class="btn btn-ghost btn-sm" onclick="addHoldingRow()" style="margin-top:8px">➕ 添加一项</button>
       </div>
       <div class="form-group" style="display:flex;align-items:flex-start;gap:10px;padding:10px;background:var(--surface-hover);border-radius:8px;border:1px solid var(--border)">
         <input type="checkbox" id="accExcluded" style="margin-top:3px;flex-shrink:0">
@@ -7046,9 +7031,8 @@ function investAccountReturn(acc) {
 }
 // Current balance (CNY) of any account (invest accounts auto-compute market value)
 function getAccountBalanceCNY(acc) {
-  if (acc.category === 'invest') return investAccountMarketValueCNY(acc);
-  const latest = getLatestBalance(acc);
-  return latest ? convertToCNY(latest.amount, acc.currency) : 0;
+  // 所有账户统一口径：账户价值/现金 + 持仓项 + 关联股票（实时行情）
+  return investAccountMarketValueCNY(acc);
 }
 
 // Upsert today's snapshot for an invest account (drives the daily trend chart)
@@ -7239,6 +7223,9 @@ function openAccountModal(id) {
   // Reset holdings & transactions lists
   document.getElementById('accHoldingsList').innerHTML = '';
   document.getElementById('accTransactionsList').innerHTML = '';
+  const adv = document.getElementById('accAdvancedGroup');
+  if (adv) adv.open = false;
+  const cashLabel = document.getElementById('accValueLabel');
   if (id) {
     const acc = accountData.find(a => a.id === id);
     if (acc) {
@@ -7249,9 +7236,6 @@ function openAccountModal(id) {
       document.getElementById('accType').value = acc.category || 'bank';
       document.getElementById('accAvailableCash').value = (acc.cash != null) ? acc.cash : (acc.availableCash != null ? acc.availableCash : '');
       document.getElementById('accPrincipal').value = (acc.principal != null) ? acc.principal : '';
-      document.getElementById('accCalcMode').value = acc.calcMode || 'direct';
-      document.getElementById('accInitBalance').value = '';
-      document.getElementById('accBaseAmount').value = acc.baseAmount || '';
       // Load existing holdings
       if (acc.holdings && acc.holdings.length > 0) {
         acc.holdings.forEach(h => addHoldingRow(h));
@@ -7269,43 +7253,38 @@ function openAccountModal(id) {
     document.getElementById('accType').value = 'invest';
     document.getElementById('accAvailableCash').value = '';
     document.getElementById('accPrincipal').value = '';
-    document.getElementById('accCalcMode').value = 'direct';
-    document.getElementById('accInitBalance').value = '';
-    document.getElementById('accBaseAmount').value = '';
   }
-  toggleAccCalcMode();
   toggleAccType();
   document.getElementById('accountModal').classList.add('active');
-}
-
-function toggleAccCalcMode() {
-  const mode = document.getElementById('accCalcMode').value;
-  document.getElementById('accInitBalanceGroup').style.display = mode === 'direct' ? '' : 'none';
-  document.getElementById('accFormulaGroup').style.display = mode === 'formula' ? '' : 'none';
 }
 
 function toggleAccType() {
   const cat = document.getElementById('accType').value;
   const isInvest = cat === 'invest';
-  const calcMode = document.getElementById('accCalcMode').value;
-  // 已关联股票的账户：市值 = 现金 + 关联股票实时市值（自动），
-  // 所以「持仓明细」和「余额」都不需要再填，界面上直接隐藏，避免重复录入。
   const editingId = document.getElementById('accId').value;
+  // 已关联股票的账户：市值 = 现金 + 关联股票实时市值（自动），
+  // 所以「持仓明细」不用填（填了会重复计算），界面上直接隐藏。
   const accHasStocks = !!(editingId && stockData.some(s => s.accountId === editingId && !s._deleted));
-  document.getElementById('accCalcModeGroup').style.display = isInvest ? 'none' : '';
-  document.getElementById('accInitBalanceGroup').style.display = (isInvest || accHasStocks) ? 'none' : (calcMode === 'direct' ? '' : 'none');
-  document.getElementById('accFormulaGroup').style.display =
-    accHasStocks ? 'none'
-    : (isInvest ? '' : (calcMode === 'formula' ? '' : 'none'));
-  const baseGroup = document.getElementById('accBaseAmountGroup');
-  if (baseGroup) baseGroup.style.display = isInvest ? 'none' : '';
-  document.getElementById('accAvailableCashGroup').style.display = isInvest ? '' : 'none';
+  // 只保留两样可填的东西：一个金额（现金 / 账户价值）+ 可选的持仓明细
+  document.getElementById('accFormulaGroup').style.display = accHasStocks ? 'none' : '';
+  document.getElementById('accAvailableCashGroup').style.display = '';
+  const cashLabel = document.getElementById('accValueLabel');
+  if (cashLabel) cashLabel.textContent = isInvest ? '现金' : '账户价值';
+  const cashNote = document.getElementById('accValueNote');
+  if (cashNote) {
+    cashNote.textContent = isInvest
+      ? '（账户内可用现金；留 0 也可以）'
+      : '（这个账户现在值多少钱；图表会自动沿用，不用天天填）';
+  }
   const stockHint = document.getElementById('accStockCashHint');
   if (stockHint) stockHint.style.display = (isInvest && accHasStocks) ? '' : 'none';
+  // 高级（可选）：投入本金 / 资金流水，只影响收益率计算
   const principalGroup = document.getElementById('accPrincipalGroup');
   if (principalGroup) principalGroup.style.display = isInvest ? '' : 'none';
   const txGroup = document.getElementById('accTransactionsGroup');
   if (txGroup) txGroup.style.display = isInvest ? '' : 'none';
+  const adv = document.getElementById('accAdvancedGroup');
+  if (adv) adv.style.display = isInvest ? '' : 'none';
 }
 
 function addHoldingRow(existing) {
@@ -7356,17 +7335,14 @@ function saveAccount() {
   if (!name) { toast('请输入账户名称'); return; }
   const currency = document.getElementById('accCurrency').value;
   const note = document.getElementById('accNote').value;
-  const calcMode = document.getElementById('accCalcMode').value;
   const category = document.getElementById('accType').value;
   const cash = parseFloat(document.getElementById('accAvailableCash').value) || 0;
   const principal = parseFloat(document.getElementById('accPrincipal').value) || 0;
   const isInvest = category === 'invest';
 
-  // Collect holdings (name + qty + cost + price + currency)
+  // 统一收集持仓明细（所有账户同一套结构；股票不在这里，来自「股票交易」）
   let holdings = [];
-  let baseAmount = 0;
-  if (isInvest || calcMode === 'formula') {
-    baseAmount = parseFloat(document.getElementById('accBaseAmount').value) || 0;
+  {
     const rows = document.querySelectorAll('#accHoldingsList > div');
     rows.forEach(row => {
       const hName = row.querySelector('.holding-name').value.trim();
@@ -7395,62 +7371,47 @@ function saveAccount() {
     });
   }
 
+  // 统一保存：每个账户 = 一个金额（现金 / 账户价值）+ 可选持仓明细 + （投资类）关联股票
+  const mergeHoldings = (target) => {
+    const oldHoldings = target.holdings || [];
+    target.holdings = holdings.map(h => {
+      const old = oldHoldings.find(oh => oh.name === h.name);
+      return old ? { ...h, id: old.id } : h;
+    });
+  };
   if (id) {
     const idx = accountData.findIndex(a => a.id === id);
     if (idx >= 0) {
-      accountData[idx].name = name;
-      accountData[idx].currency = currency;
-      accountData[idx].note = note;
-      accountData[idx].excluded = document.getElementById('accExcluded').checked;
-      accountData[idx].calcMode = calcMode;
-      accountData[idx].category = category;
+      const acc = accountData[idx];
+      acc.name = name;
+      acc.currency = currency;
+      acc.note = note;
+      acc.excluded = document.getElementById('accExcluded').checked;
+      acc.category = category;
+      acc.cash = cash;
+      mergeHoldings(acc);
       if (isInvest) {
-        accountData[idx].cash = cash;
-        accountData[idx].principal = principal;
-        const oldHoldings = accountData[idx].holdings || [];
-        accountData[idx].holdings = holdings.map(h => {
-          const old = oldHoldings.find(oh => oh.name === h.name);
-          return old ? { ...h, id: old.id } : h;
-        });
-        if (!accountData[idx].snapshots) accountData[idx].snapshots = [];
-        accountData[idx].transactions = transactions;
+        acc.principal = principal;
+        if (!acc.snapshots) acc.snapshots = [];
+        acc.transactions = transactions;
       } else {
-        delete accountData[idx].cash;
-        delete accountData[idx].principal;
-        if (calcMode === 'formula') {
-          accountData[idx].baseAmount = baseAmount;
-          const oldHoldings = accountData[idx].holdings || [];
-          accountData[idx].holdings = holdings.map(h => {
-            const old = oldHoldings.find(oh => oh.name === h.name);
-            return old ? { ...h, id: old.id } : h;
-          });
-        }
+        delete acc.principal;
+        delete acc.transactions;
       }
     }
   } else {
     const newAcc = {
       id: uid(),
-      name, currency, note, calcMode, category,
+      name, currency, note, category, cash,
       excluded: document.getElementById('accExcluded').checked,
-      createdAt: todayStr()
+      createdAt: todayStr(),
+      holdings: []
     };
+    mergeHoldings(newAcc);
     if (isInvest) {
-      newAcc.cash = cash;
       newAcc.principal = principal;
-      newAcc.holdings = holdings;
       newAcc.snapshots = [];
       newAcc.transactions = transactions;
-    } else {
-      newAcc.balances = [];
-      if (calcMode === 'formula') {
-        newAcc.baseAmount = baseAmount;
-        newAcc.holdings = holdings;
-      } else {
-        const initBalance = parseFloat(document.getElementById('accInitBalance').value) || 0;
-        if (initBalance !== 0) {
-          newAcc.balances.push({ id: uid(), date: todayStr(), amount: initBalance });
-        }
-      }
     }
     accountData.push(newAcc);
   }
@@ -7471,7 +7432,7 @@ function saveAccount() {
 
 function deleteAccount(id) {
   const acc = accountData.find(a => a.id === id);
-  if (!confirm(`确定删除账户「${acc?.name}」及其所有余额记录？`)) return;
+  if (!confirm(`确定删除账户「${acc?.name}」？`)) return;
   acc._deleted = true;
   acc.updatedAt = new Date().toISOString();
   acc._pendingPush = true;
@@ -7963,7 +7924,6 @@ function renderAccounts() {
 
   // Helper to build a table row for an account
   function buildAccountRow(acc, idx, list, isExcluded) {
-    const latest = getLatestBalance(acc);
     const rate = getRate(acc.currency);
     const isInvest = acc.category === 'invest';
     const cny = getAccountBalanceCNY(acc);
@@ -7972,9 +7932,13 @@ function renderAccounts() {
     const typeLabel = cat.label;
     const typeBadge = isInvest ? 'badge-warning' : 'badge-info';
     const ret = isInvest ? investAccountReturn(acc) : null;
-    const modeBadge = acc.calcMode === 'formula' ? 'badge-warning' : 'badge-success';
-    const modeShort = acc.calcMode === 'formula' ? '📊' : '✏️';
-    const holdingInfo = acc.calcMode === 'formula' && acc.holdings ? `${acc.holdings.length}持仓${acc.holdings.some(h => h.currency && h.currency !== acc.currency) ? '🌍' : ''}` : '';
+    // 一个账户就两种东西：账户价值/现金 + 持仓（股票自动来自「股票交易」）
+    const nHold = (acc.holdings || []).length;
+    const nStock = stocksOfAccount(acc.id).length;
+    const parts = [];
+    if (nHold) parts.push(`持仓 ${nHold} 项`);
+    if (nStock) parts.push(`股票 ${nStock} 只`);
+    const assetInfo = parts.join(' · ');
     const rateStr = acc.currency === 'CNY' ? '' : ` ¥${rate.toFixed(4)}`;
     const excludeTag = isExcluded ? '<span class="badge badge-warning" style="margin-left:4px;font-size:10px">长期不动</span>' : '';
     return `<tr>
@@ -7987,18 +7951,13 @@ function renderAccounts() {
         <span class="badge ${typeBadge}" style="margin-left:4px">${typeLabel}</span>
         <span class="badge ${curBadge}" style="margin-left:4px">${acc.currency}</span>
         ${excludeTag}
-        ${acc.calcMode === 'formula' ? `<span class="badge ${modeBadge}" style="margin-left:2px" title="${holdingInfo}">${modeShort}${holdingInfo?' '+holdingInfo:''}</span>` : ''}
+        ${assetInfo ? `<span class="text-muted" style="font-size:11px;margin-left:6px">${assetInfo}</span>` : ''}
         ${acc.note ? `<span class="text-muted" style="font-size:11px;margin-left:4px">${acc.note}</span>` : ''}
         ${rateStr ? `<span class="text-muted" style="font-size:11px;margin-left:4px">${rateStr}</span>` : ''}
       </td>
-      <td>${isInvest
-        ? `<span>市值 ${fmtMoney(investAccountMarketValueCNY(acc))}</span><span class="text-muted" style="font-size:11px;margin-left:4px">+ 现金 ${fmtMoney(convertToCNY(acc.cash || 0, acc.currency || 'CNY'))}</span>`
-        : `${latest ? fmtCurrency(latest.amount, acc.currency) : '—'}<span class="text-muted" style="font-size:11px;margin-left:4px">${latest ? fmtDate(latest.date) : ''}</span>`}</td>
       <td style="font-weight:700">${fmtMoney(cny)}${isInvest && ret != null ? `<br><span style="font-size:11px;font-weight:600;color:${ret >= 0 ? 'var(--danger)' : 'var(--success)'}">${ret >= 0 ? '+' : ''}${(ret * 100).toFixed(2)}%</span>` : ''}</td>
       <td style="text-align:right;white-space:nowrap">
-        ${!isInvest ? `<button class="btn-icon" onclick="openBalanceModalForAccount('${acc.id}')" title="记录余额">💰</button>` : ''}
-        ${!isInvest ? `<button class="btn-icon" onclick="openBalanceHistory('${acc.id}')" title="余额记录">📋</button>` : ''}
-        ${isInvest ? `<button class="btn btn-primary btn-sm" onclick="openAccountModal('${acc.id}')">编辑持仓</button>` : `<button class="btn btn-ghost btn-sm" onclick="openAccountModal('${acc.id}')">编辑</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="openAccountModal('${acc.id}')">编辑</button>
         <button class="btn-icon" onclick="deleteAccount('${acc.id}')" title="删除">🗑️</button>
       </td>
     </tr>`;
@@ -8094,8 +8053,7 @@ function renderPassiveInvestment(passiveAccounts, passiveTotalCNY) {
     if (hs.length) {
       detail = hs.map(h => `<div style="white-space:nowrap">${h.name} ${fmtCurrency(h.quantity || 0, h.currency)}</div>`).join('');
     } else {
-      const latest = getLatestBalance(a);
-      detail = latest ? `余额记录于 ${fmtDate(latest.date)}` : '—';
+      detail = `账户价值 ${fmtCurrency(a.cash || 0, a.currency)}`;
     }
     const curBadge = a.currency === 'CNY' ? 'badge-success' : 'badge-info';
     html += `<tr>
@@ -11988,7 +11946,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920l';
+  b.textContent = 'build 20260920m';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
