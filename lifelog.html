@@ -3109,8 +3109,8 @@ tbody tr:hover{background:var(--surface-hover)}
         </select>
       </div>
       <div class="form-group" id="accFormulaGroup" style="display:none">
-        <label class="form-label">持仓明细 <span class="text-muted" style="font-size:11px;font-weight:400">（可选）</span></label>
-        <p class="text-sm text-muted" style="margin-bottom:8px">基金 / 理财 / 虚拟币等在这里加一行。<b>只填「数量」就当作金额</b>；填了「市价」则按 数量 × 市价 算。<b>股票不用填</b>——在「股票交易」里维护，自动计入</p>
+        <label class="form-label">资产明细 <span class="text-muted" style="font-size:11px;font-weight:400">（名称 + 金额 + 币种）</span></label>
+        <p class="text-sm text-muted" style="margin-bottom:8px">每项只填 <b>名称 + 金额 + 币种</b>。如：人民币余额 / 港币 / 美元 / 基金 / 理财。<b>股票不用填</b>——在「股票交易」里维护，自动计入</p>
         <div id="accHoldingsList"></div>
         <button class="btn btn-ghost btn-sm" onclick="addHoldingRow()" style="margin-top:8px">➕ 添加一项</button>
       </div>
@@ -7296,17 +7296,18 @@ function addHoldingRow(existing) {
   const list = document.getElementById('accHoldingsList');
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap';
-  const h = existing || { name: '', quantity: '', currency: '', price: '', costPrice: '' };
+  const h = existing || { name: '', quantity: '', currency: '', price: null };
   const accCurrency = document.getElementById('accCurrency')?.value || 'CNY';
   const holdingCurrency = h.currency || accCurrency;
   const curOptions = ['CNY','USD','HKD','EUR','GBP','JPY','SGD','AUD','CAD','KRW']
     .map(c => `<option value="${c}" ${c === holdingCurrency ? 'selected' : ''}>${c}</option>`).join('');
+  // 金额 = 数量 × (市价 或 1)。旧数据只填了数量，那数量本身就是金额。
+  const hasPrice = h.price != null && h.price !== '' && !isNaN(Number(h.price));
+  const amount = (Number(h.quantity) || 0) * (hasPrice ? Number(h.price) : 1);
   row.innerHTML = `
-    <input type="text" class="form-input holding-name" placeholder="名称" value="${h.name || ''}" style="flex:1;min-width:90px">
-    <input type="number" class="form-input holding-qty" placeholder="数量" step="0.0001" value="${h.quantity || ''}" style="width:80px">
-    <input type="number" class="form-input holding-cost" placeholder="成本价" step="0.0001" value="${h.costPrice != null ? h.costPrice : ''}" style="width:90px">
-    <input type="number" class="form-input holding-price" placeholder="市价(可不填)" step="0.0001" value="${h.price != null ? h.price : ''}" style="width:100px">
-    <select class="form-input holding-cur" style="width:80px">${curOptions}</select>
+    <input type="text" class="form-input holding-name" placeholder="如 人民币余额 / 港币 / 基金 / 理财" value="${h.name || ''}" style="flex:1;min-width:110px">
+    <input type="number" class="form-input holding-amount" placeholder="金额" step="0.01" value="${amount ? amount : ''}" style="width:120px">
+    <select class="form-input holding-cur" style="width:78px">${curOptions}</select>
     <button class="btn-icon" onclick="this.parentElement.remove()" title="删除">🗑️</button>
   `;
   list.appendChild(row);
@@ -7345,19 +7346,17 @@ function saveAccount() {
   const principal = parseFloat(document.getElementById('accPrincipal').value) || 0;
   const isInvest = category === 'invest';
 
-  // 统一收集持仓明细（所有账户同一套结构；股票不在这里，来自「股票交易」）
+  // 统一收集持仓明细：每项 = 名称 + 金额 + 币种（股票不在这里，来自「股票交易」）
+  // 存储仍用 quantity 字段承载金额、price 固定为 null，读取时按 数量×1 计，零迁移成本。
   let holdings = [];
   {
     const rows = document.querySelectorAll('#accHoldingsList > div');
     rows.forEach(row => {
       const hName = row.querySelector('.holding-name').value.trim();
-      const hQty = parseFloat(row.querySelector('.holding-qty').value);
-      const hPrice = parseFloat(row.querySelector('.holding-price')?.value);
-      const hCost = parseFloat(row.querySelector('.holding-cost')?.value);
+      const hAmount = parseFloat(row.querySelector('.holding-amount')?.value);
       const hCur = row.querySelector('.holding-cur')?.value || currency;
-      if (hName && hQty > 0) {
-        // 市价留空 → 存 null（表示"数量本身就是金额"），不要存 0，否则整项会被算成 0
-        holdings.push({ id: uid(), name: hName, quantity: hQty, price: isNaN(hPrice) ? null : hPrice, costPrice: isNaN(hCost) ? 0 : hCost, currency: hCur, type: 'wealth' });
+      if (hName && !isNaN(hAmount) && hAmount > 0) {
+        holdings.push({ id: uid(), name: hName, quantity: hAmount, price: null, currency: hCur, type: 'wealth' });
       }
     });
   }
@@ -12072,7 +12071,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260920o';
+  b.textContent = 'build 20260920p';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
