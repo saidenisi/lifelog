@@ -3432,6 +3432,17 @@ var __RESYNC_KEYS__ = (function () {
         removed++;
       }
     });
+    // ⚠️ 关键：必须把这几个集合的「同步时间戳缓存」一起清掉。
+    // 否则 pull 的增量判断会认为「本地时间戳 == 云端时间戳，无需拉取」而**跳过这些集合** ——
+    // 本地刚被清空、云端又不拉 → 界面变成一片空白（2026-09-28「待办全空」事故的根因）。
+    try {
+      var metaKey = 'lifelog_syncMeta';
+      var meta = JSON.parse(localStorage.getItem(metaKey) || '{}');
+      var clearedMeta = 0;
+      __RESYNC_KEYS__.forEach(function (k) { if (meta[k] != null) { delete meta[k]; clearedMeta++; } });
+      localStorage.setItem(metaKey, JSON.stringify(meta));
+      console.log('[resync] 已清除同步时间戳缓存 ' + clearedMeta + ' 项（强制下次全量拉取）');
+    } catch (e) { console.warn('[resync] syncMeta 清理失败', e); }
     console.log('[resync] 已备份并清空本地: ' + __RESYNC_KEYS__.join(', ') + '（清 ' + removed + ' 项）；本次会话禁止推送');
     if (!/[?&]resynced=1\b/.test(location.search)) {
       location.replace(location.href + (location.href.indexOf('?') >= 0 ? '&' : '?') + 'resynced=1');
@@ -3856,14 +3867,24 @@ async function pullAllFromCloud() {
     console.warn('[Sync] meta pull failed, fallback to full pull', e);
   }
 
-  // 需要全量拉取的集合：云端存在 且（本地无缓存 或 云端 updated_at 与缓存不同）
+  // 本地数据「缺失或为空」时必须强制拉取 —— 即使时间戳缓存说"没变化"。
+  // 否则任何一次本地被清空（?resync、用户清缓存、换浏览器配置）都会让该集合永久空白：
+  // 本地没了、又因为时间戳相同而不去拉，界面就永远是空的（2026-09-28「待办全空」根因之二）。
+  function localPayloadMissing(key) {
+    if (key === 'rates') { var r = DB.get('rates', null); return !r || !r.rates; }
+    var v = DB.get(key);
+    return !Array.isArray(v) || v.length === 0;
+  }
+
+  // 需要全量拉取的集合：云端存在 且（本地无缓存 / 云端 updated_at 变了 / 本地数据是空的）
   var keysToPull = metaFailed
     ? SYNC_KEYS.slice()
     : SYNC_KEYS.filter(function(key) {
         var cloudTs = cloudMeta[key];
         if (cloudTs == null) return false;            // 云端没有该集合 → 无需拉
         var localTs = localMeta[key];
-        return localTs == null || cloudTs !== localTs; // 首次 或 已变化
+        if (localTs == null || cloudTs !== localTs) return true; // 首次 或 已变化
+        return localPayloadMissing(key);              // 时间戳没变但本地为空 → 也要拉回来
       });
 
   // 第二步：只对变化的集合做全量拉取 + 合并
@@ -12096,7 +12117,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260928a';
+  b.textContent = 'build 20260928b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
