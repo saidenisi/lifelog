@@ -10294,38 +10294,16 @@ function toggleTodo(id) {
   renderTodosView();
 }
 
-// 自动延期：未完成且「结束日期距今已过 2 天宽限期（第 3 天起）」的待办，自动顺延。
-// 顺延基准 = 原日期 + 7 天（保持每周节奏）。单日 date+7；多日整体 +7 保持时长。
+// 【2026-09-28 已停用，请勿重新启用】原本的「自动延期」：未完成 + 结束日期距今 >2 天 → 日期 +7 天
+// 并直接写回 + 同步云端。用户 2026-08-18 提过这个需求，但实际使用中造成了严重困扰：
+//   ① 它是**静默改写**用户计划 —— 一次批量把所有过期项往前推 7 天（更老的推 2 次 = 14 天），
+//      整个工作周的计划被平移到下一周的同一天，历史日期被搬空（2026-09-28：9/22–9/25 全空，
+//      17 条待办被改日期，用户以为「待办丢了 / 错位了」）；
+//   ② 对**固定日期的事件**（发布会、体检、演奏会、机票）顺延是完全错误的；
+//   ③ 顺延会 bump updatedAt 并推到所有设备，其它端无从判断这是用户改的还是系统改的。
+// 2026-09-28 用户明确选择「关掉自动顺延」。保留同名空函数，避免任何遗留调用报错。
 function autoPostponeOverdueTodos() {
-  var today = todayStr();
-  var todayDate = new Date(today + 'T00:00:00');
-  var weekMs = 7 * 86400000;
-  var count = 0;
-
-  todosData.forEach(function(t) {
-    if (t._deleted || t.done) return;
-    var end = t.dateEnd || t.date;
-    if (!end) return;
-    var endDate = new Date(end + 'T00:00:00');
-    var diffDays = Math.floor((todayDate.getTime() - endDate.getTime()) / 86400000);
-    if (diffDays <= 2) return;  // 给足 2 天宽限，第 3 天才顺延
-
-    if (isMultiDay(t)) {
-      t.date = fmtDateFull(new Date(new Date(t.date + 'T00:00:00').getTime() + weekMs));
-      t.dateEnd = fmtDateFull(new Date(new Date(t.dateEnd + 'T00:00:00').getTime() + weekMs));
-    } else {
-      t.date = fmtDateFull(new Date(new Date(t.date + 'T00:00:00').getTime() + weekMs));
-    }
-    t.updatedAt = new Date().toISOString();
-    t._pendingPush = true;
-    count++;
-  });
-
-  if (count > 0) {
-    saveAll();  // 写本地 + 触发云端同步
-    console.log('[todos] 自动顺延 ' + count + ' 个事项一周');
-    toast(count + ' 个待办已过期，自动顺延一周 📅');
-  }
+  /* 已停用：不再自动修改任何待办的日期。过期与否由界面提示，是否顺延由用户自己决定。 */
 }
 
 function deleteTodo(id) {
@@ -12047,8 +12025,8 @@ initTheme();
 initDailyHighlight();
 // 初始渲染默认页（待办事项）
 navigate('todos');
-// 自动延期过期待办（本地数据，覆盖离线场景）
-autoPostponeOverdueTodos();
+// 【2026-09-28 已停用】过期待办「自动顺延一周」曾把日期批量改写并推上云端（见函数处注释）。
+// 用户明确要求关掉：不再自动移动任何待办的日期。
 // Auto-refresh exchange rates if not yet loaded or outdated (>1 day old)
 (function initRates() {
   const today = todayStr();
@@ -12085,8 +12063,7 @@ function showRescueBanner() {
       // 归一化每日记录（随机 id → 按日期确定性 id + 同日期合并），有变化则标记待推送
       if (normalizeDailyNotes()) _pendingPush = true;
       dedupeAccounts();
-      // 云端数据加载后，再检查一次过期待办自动延期（幂等）
-      autoPostponeOverdueTodos();
+      // 【2026-09-28 已停用】此处原本再跑一次过期待办自动顺延，已按用户要求关闭。
       // 若初始化完成前有改动（如删除/修改）没推出去，此时补推一次，确保墓碑/修改同步到云端
       if (_pendingPush) {
         _pendingPush = false;
@@ -12117,7 +12094,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260928b';
+  b.textContent = 'build 20260928c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
