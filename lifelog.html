@@ -2393,17 +2393,10 @@ tbody tr:hover{background:var(--surface-hover)}
               </div>
               <div class="daily-section">
                 <div class="daily-section-label">
-                  <span>💡 新知</span>
-                  <span class="tag" style="background:var(--success-bg);color:var(--success)">学到的新东西</span>
+                  <span>🌟 自悟和他悟</span>
+                  <span class="tag" style="background:var(--purple-bg);color:var(--purple)">自己的领悟 · 他人的启发</span>
                 </div>
-                <textarea class="daily-textarea" id="dailyKnowledge" placeholder="今天学到了什么新知识、新技能？"></textarea>
-              </div>
-              <div class="daily-section">
-                <div class="daily-section-label">
-                  <span>🌟 感悟</span>
-                  <span class="tag" style="background:var(--purple-bg);color:var(--purple)">思考和体会</span>
-                </div>
-                <textarea class="daily-textarea" id="dailyReflection" placeholder="有什么感悟和思考？"></textarea>
+                <textarea class="daily-textarea" id="dailyInsight" placeholder="自己想通的、从别人或书里学到的一句话…"></textarea>
               </div>
               <div class="daily-section">
                 <div class="daily-section-label"><span>🖼️ 图片</span></div>
@@ -8905,7 +8898,7 @@ function clearAllData() {
 }
 
 /* ============================================================
-   DAILY NOTES MODULE — 模板日记（经历/新知/感悟 + 图片 + 日历）
+   DAILY NOTES MODULE — 模板日记（经历 / 自悟和他悟 + 图片 + 日历）
    ============================================================ */
 let dailyDate = todayStr();
 let calYear = new Date().getFullYear();
@@ -9001,7 +8994,7 @@ function migrateDailyNotes() {
     } else {
       dailyNotes.push({
         id: dailyNoteId(date), date: date,
-        experience: expText, knowledge: '', reflection: '',
+        experience: expText, knowledge: '',
         images: [],
         createdAt: items[0].createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -9014,6 +9007,18 @@ function migrateDailyNotes() {
 }
 
 // Flush any pending input before switching date (avoid losing unsaved typing)
+// 2026-10-12：「新知」+「感悟」两个栏目合并为「自悟和他悟」（界面上只剩一个输入框）。
+// 存储仍复用 knowledge 字段（避免旧版本客户端读到空），reflection 视为已废弃。
+// 读取时把两个字段的文本合起来显示：**只读、不静默改写数据**（铁律 9）；
+// 真正落库发生在用户点保存 / 自动保存时（写 knowledge，并清空 reflection，避免下次重复拼接）。
+function dailyInsightText(note) {
+  if (!note) return '';
+  var a = String(note.knowledge || '').trim();
+  var b = String(note.reflection || '').trim();
+  if (a && b) return a.indexOf(b) >= 0 ? a : a + '\n\n' + b; // 已包含则不再拼接（防旧客户端回写造成重复）
+  return a || b || '';
+}
+
 function flushDailyInput() {
   clearTimeout(_dailyAutoSaveTimer);
   saveDailyNoteSilent();
@@ -9046,14 +9051,11 @@ function renderDaily() {
   if (renderedDate !== dailyDate) {
     var note = getDailyNote(dailyDate);
     var expEl = document.getElementById('dailyExperience');
-    var knowEl = document.getElementById('dailyKnowledge');
-    var reflEl = document.getElementById('dailyReflection');
+    var insEl = document.getElementById('dailyInsight');
     if (expEl) expEl.value = note ? (note.experience || '') : '';
-    if (knowEl) knowEl.value = note ? (note.knowledge || '') : '';
-    if (reflEl) reflEl.value = note ? (note.reflection || '') : '';
+    if (insEl) insEl.value = dailyInsightText(note);
     autoResizeTextarea(expEl);
-    autoResizeTextarea(knowEl);
-    autoResizeTextarea(reflEl);
+    autoResizeTextarea(insEl);
     currentImages = (note && note.images) ? note.images.slice() : [];
     currentTags = (note && note.tags) ? note.tags.slice() : [];
     renderDailyTags();
@@ -9076,19 +9078,17 @@ function scheduleDailyAutoSave() {
 
 function saveDailyNoteSilent() {
   var expEl = document.getElementById('dailyExperience');
-  var knowEl = document.getElementById('dailyKnowledge');
-  var reflEl = document.getElementById('dailyReflection');
-  if (!expEl || !knowEl || !reflEl) return;
+  var insEl = document.getElementById('dailyInsight');
+  if (!expEl || !insEl) return;
   var exp = expEl.value.trim();
-  var know = knowEl.value.trim();
-  var refl = reflEl.value.trim();
-  if (!exp && !know && !refl && currentImages.length === 0 && currentTags.length === 0) return; // nothing to save
+  var ins = insEl.value.trim();
+  if (!exp && !ins && currentImages.length === 0 && currentTags.length === 0) return; // nothing to save
 
   var note = getDailyNote(dailyDate);
   if (note) {
     note.experience = exp;
-    note.knowledge = know;
-    note.reflection = refl;
+    note.knowledge = ins;       // 「自悟和他悟」= 合并后的单一字段
+    note.reflection = '';       // 已并入 knowledge，清空以免下次重复拼接
     note.images = currentImages.slice();
     note.tags = currentTags.slice();
     note.updatedAt = new Date().toISOString();
@@ -9097,7 +9097,7 @@ function saveDailyNoteSilent() {
   } else {
     dailyNotes.push({
       id: dailyNoteId(dailyDate), date: dailyDate,
-      experience: exp, knowledge: know, reflection: refl,
+      experience: exp, knowledge: ins,
       images: currentImages.slice(), tags: currentTags.slice(),
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _pendingPush: true
     });
@@ -9110,11 +9110,10 @@ function saveDailyNoteSilent() {
 
 function saveDailyNote() {
   var exp = document.getElementById('dailyExperience').value.trim();
-  var know = document.getElementById('dailyKnowledge').value.trim();
-  var refl = document.getElementById('dailyReflection').value.trim();
+  var ins = document.getElementById('dailyInsight').value.trim();
   var tip = document.getElementById('dailySavedTip');
 
-  if (!exp && !know && !refl && currentImages.length === 0 && currentTags.length === 0) {
+  if (!exp && !ins && currentImages.length === 0 && currentTags.length === 0) {
     // Empty: remove existing note for this date if any
     var existing = getDailyNote(dailyDate);
     if (existing) {
@@ -9134,8 +9133,8 @@ function saveDailyNote() {
     var note = getDailyNote(dailyDate);
     if (note) {
       note.experience = exp;
-      note.knowledge = know;
-      note.reflection = refl;
+      note.knowledge = ins;
+      note.reflection = '';
       note.images = currentImages.slice();
       note.tags = currentTags.slice();
       note.updatedAt = new Date().toISOString();
@@ -9144,7 +9143,7 @@ function saveDailyNote() {
     } else {
       dailyNotes.push({
         id: dailyNoteId(dailyDate), date: dailyDate,
-        experience: exp, knowledge: know, reflection: refl,
+        experience: exp, knowledge: ins,
         images: currentImages.slice(), tags: currentTags.slice(),
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _pendingPush: true
       });
@@ -9427,13 +9426,10 @@ function renderTagResults() {
       html += '<div class="field"><span class="flabel" style="background:var(--info-bg);color:var(--info)">经历</span>'+
         '<div class="ftext">'+escapeHtml(n.experience)+'</div></div>';
     }
-    if (n.knowledge) {
-      html += '<div class="field"><span class="flabel" style="background:var(--success-bg);color:var(--success)">新知</span>'+
-        '<div class="ftext">'+escapeHtml(n.knowledge)+'</div></div>';
-    }
-    if (n.reflection) {
-      html += '<div class="field"><span class="flabel" style="background:var(--purple-bg);color:var(--purple)">感悟</span>'+
-        '<div class="ftext">'+escapeHtml(n.reflection)+'</div></div>';
+    var insText = dailyInsightText(n);
+    if (insText) {
+      html += '<div class="field"><span class="flabel" style="background:var(--purple-bg);color:var(--purple)">自悟和他悟</span>'+
+        '<div class="ftext">'+escapeHtml(insText)+'</div></div>';
     }
     var otherTags = (n.tags || []).filter(function(t) { return t !== activeTag; });
     if (otherTags.length) {
@@ -9454,7 +9450,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (input) {
     input.addEventListener('change', function() { handleDailyImageUpload(this); });
   }
-  ['dailyExperience', 'dailyKnowledge', 'dailyReflection'].forEach(function(id) {
+  ['dailyExperience', 'dailyInsight'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
       el.addEventListener('input', function() {
@@ -12094,7 +12090,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20260928c';
+  b.textContent = 'build 20261012a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
