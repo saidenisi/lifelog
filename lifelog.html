@@ -9074,11 +9074,18 @@ function settleTodoLog(now) {
     if (line === '· ') return;
     todoCoveredDays(t).forEach(function(D) {
       if (D > limit) return;                          // 还没到 22:00 的当天 / 未来的日子 → 先不带入
-      var note = getDailyNote(D);
+      var note = getDailyNote(D);          // 按日期找存活记录（可能是历史遗留的随机 id）
       if (!note) {
-        note = { id: dailyNoteId(D), date: D, experience: '', knowledge: '', images: [], tags: [],
-                 todoLog: '', todoLogIds: [], createdAt: new Date().toISOString() };
-        dailyNotes.push(note);
+        var canonical = dailyNoteId(D);
+        var sameId = dailyNotes.filter(function(n) { return n && n.id === canonical; });
+        var liveSame = sameId.filter(function(n) { return !n._deleted; })[0];
+        if (liveSame) note = liveSame;
+        else if (sameId.length) return;     // 该日记录已被用户删除（墓碑）→ 不复活、也不产生重复 id
+        else {
+          note = { id: canonical, date: D, experience: '', knowledge: '', images: [], tags: [],
+                   todoLog: '', todoLogIds: [], createdAt: new Date().toISOString() };
+          dailyNotes.push(note);
+        }
       }
       if (!Array.isArray(note.todoLogIds)) note.todoLogIds = [];
       if (note.todoLogIds.indexOf(t.id) >= 0) return; // 已带入过 → 不重复
@@ -12204,7 +12211,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20261012b';
+  b.textContent = 'build 20261012c';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
