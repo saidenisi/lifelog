@@ -2393,6 +2393,14 @@ tbody tr:hover{background:var(--surface-hover)}
               </div>
               <div class="daily-section">
                 <div class="daily-section-label">
+                  <span>✅ 今日完成</span>
+                  <span class="tag" style="background:var(--info-bg);color:var(--info)">自待办 · 22:00 后带入</span>
+                  <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:11px;padding:2px 8px" onclick="pullTodosToDaily()">🔄 从待办带入</button>
+                </div>
+                <textarea class="daily-textarea" id="dailyTodoLog" placeholder="待办里勾选完成的事项会自动带到这里；你也可以在这里补充说明"></textarea>
+              </div>
+              <div class="daily-section">
+                <div class="daily-section-label">
                   <span>🌟 自悟和他悟</span>
                   <span class="tag" style="background:var(--purple-bg);color:var(--purple)">自己的领悟 · 他人的启发</span>
                 </div>
@@ -9019,6 +9027,93 @@ function dailyInsightText(note) {
   return a || b || '';
 }
 
+// ===== 待办 → 每日记录「今日完成」自动带入（2026-10-12，用户确认的 5 条规则）=====
+//  1) 归属日 = 待办自己的日期；多天待办（有 dateEnd）覆盖到的**每一天**都会带入
+//  2) 当天 **22:00 起**才结算当天内容（22:00 前不带入当天）；22:00 之后新打勾的**立即**带入
+//  3) 过了当天才打勾的，也追加进它自己那天的日记（**不加**"补勾"字样）
+//  4) 一条待办在同一天只带入一次（`note.todoLogIds` 记 id）；取消打勾 / 删除待办**都不撤回**已带入的文字
+//  5) 只**追加**进 `note.todoLog`，**绝不覆盖**用户在日记里编辑增加的内容
+//  6) 只对「完成时间 ≥ 本功能上线时刻」的待办生效 —— 上线前完成的旧项不会突然灌进日记
+//     （若将来要补历史，需要用户明确同意后单独跑一次）
+const TODO_LOG_SINCE_MS = new Date('2026-10-12T00:00:00').getTime();  // 本地时间解析
+const TODO_LOG_HOUR = 22;
+var _dailyDirty = false;   // 每日记录表单是否有未落盘的输入（避免无谓的写回与同步）
+
+function todoDoneTs(t) { return new Date(t.doneAt || t.updatedAt || 0).getTime(); }
+
+// 可结算到的最晚日期：22:00 前只结算到「昨天」，22:00（含）之后包含「今天」
+function todoLogSettledUpTo(now) {
+  var d = now || new Date();
+  var base = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (d.getHours() < TODO_LOG_HOUR) base.setDate(base.getDate() - 1);
+  return localDateStr(base);
+}
+
+// 该待办覆盖的每一天（多天返回整段；单条返回 1 天）
+function todoCoveredDays(t) {
+  var out = [];
+  if (!t || !t.date) return out;
+  var end = (t.dateEnd && t.dateEnd > t.date) ? t.dateEnd : t.date;
+  var cur = new Date(t.date + 'T00:00:00'), last = new Date(end + 'T00:00:00');
+  if (isNaN(cur.getTime()) || isNaN(last.getTime())) return out;
+  var guard = 0;
+  while (cur.getTime() <= last.getTime() && guard++ < 400) { out.push(localDateStr(cur)); cur.setDate(cur.getDate() + 1); }
+  return out;
+}
+
+function todoLogLine(t) { return '· ' + String(t.content || '').trim(); }
+
+// 结算：幂等地把「已完成且已到结算时点」的待办追加进对应日期的日记。返回被改动的日期数组。
+function settleTodoLog(now) {
+  var limit = todoLogSettledUpTo(now);
+  var changedDates = [];
+  todosData.forEach(function(t) {
+    if (!t || t._deleted || !t.done || !t.date) return;
+    if (todoDoneTs(t) < TODO_LOG_SINCE_MS) return;   // 功能上线前就完成的旧项 → 不带入
+    var line = todoLogLine(t);
+    if (line === '· ') return;
+    todoCoveredDays(t).forEach(function(D) {
+      if (D > limit) return;                          // 还没到 22:00 的当天 / 未来的日子 → 先不带入
+      var note = getDailyNote(D);
+      if (!note) {
+        note = { id: dailyNoteId(D), date: D, experience: '', knowledge: '', images: [], tags: [],
+                 todoLog: '', todoLogIds: [], createdAt: new Date().toISOString() };
+        dailyNotes.push(note);
+      }
+      if (!Array.isArray(note.todoLogIds)) note.todoLogIds = [];
+      if (note.todoLogIds.indexOf(t.id) >= 0) return; // 已带入过 → 不重复
+      note.todoLog = (String(note.todoLog || '').replace(/\s+$/, '') ? String(note.todoLog).replace(/\s+$/, '') + '\n' : '') + line;
+      note.todoLogIds.push(t.id);
+      note.updatedAt = new Date().toISOString();
+      note._deleted = false;
+      note._pendingPush = true;
+      if (changedDates.indexOf(D) < 0) changedDates.push(D);
+    });
+  });
+  if (changedDates.length) { saveDailyNotes(); saveAll(); }
+  return changedDates;
+}
+
+// 结算 + 刷新界面。会先把「正在编辑但未落盘」的内容存下来，避免追加时吞掉用户刚打的字。
+function runTodoLogSettle(now) {
+  if (_dailyDirty) flushDailyInput();   // 只在真有未保存输入时落盘，避免无谓的写回与同步
+  var touched = settleTodoLog(now);
+  if (!touched.length) return 0;
+  if (touched.indexOf(dailyDate) >= 0) {
+    var el = document.getElementById('dailyTodoLog');
+    var note = getDailyNote(dailyDate);
+    if (el && note) { el.value = note.todoLog || ''; autoResizeTextarea(el); _dailyDirty = false; }
+  }
+  renderCalendar();
+  return touched.length;
+}
+
+// 「🔄 从待办带入」按钮
+function pullTodosToDaily() {
+  var n = runTodoLogSettle();
+  toast(n > 0 ? ('已从待办带入 ' + n + ' 天 ✅') : '没有需要带入的完成事项');
+}
+
 function flushDailyInput() {
   clearTimeout(_dailyAutoSaveTimer);
   saveDailyNoteSilent();
@@ -9052,10 +9147,14 @@ function renderDaily() {
     var note = getDailyNote(dailyDate);
     var expEl = document.getElementById('dailyExperience');
     var insEl = document.getElementById('dailyInsight');
+    var logEl = document.getElementById('dailyTodoLog');
     if (expEl) expEl.value = note ? (note.experience || '') : '';
     if (insEl) insEl.value = dailyInsightText(note);
+    if (logEl) logEl.value = note ? (note.todoLog || '') : '';
     autoResizeTextarea(expEl);
     autoResizeTextarea(insEl);
+    autoResizeTextarea(logEl);
+    _dailyDirty = false;
     currentImages = (note && note.images) ? note.images.slice() : [];
     currentTags = (note && note.tags) ? note.tags.slice() : [];
     renderDailyTags();
@@ -9079,16 +9178,19 @@ function scheduleDailyAutoSave() {
 function saveDailyNoteSilent() {
   var expEl = document.getElementById('dailyExperience');
   var insEl = document.getElementById('dailyInsight');
+  var logEl = document.getElementById('dailyTodoLog');
   if (!expEl || !insEl) return;
   var exp = expEl.value.trim();
   var ins = insEl.value.trim();
-  if (!exp && !ins && currentImages.length === 0 && currentTags.length === 0) return; // nothing to save
+  var todoLog = logEl ? logEl.value.replace(/\s+$/, '') : '';
+  if (!exp && !ins && !todoLog && currentImages.length === 0 && currentTags.length === 0) { _dailyDirty = false; return; } // nothing to save
 
   var note = getDailyNote(dailyDate);
   if (note) {
     note.experience = exp;
     note.knowledge = ins;       // 「自悟和他悟」= 合并后的单一字段
     note.reflection = '';       // 已并入 knowledge，清空以免下次重复拼接
+    note.todoLog = todoLog;     // 待办自动带入的内容（用户可编辑增加）
     note.images = currentImages.slice();
     note.tags = currentTags.slice();
     note.updatedAt = new Date().toISOString();
@@ -9097,11 +9199,12 @@ function saveDailyNoteSilent() {
   } else {
     dailyNotes.push({
       id: dailyNoteId(dailyDate), date: dailyDate,
-      experience: exp, knowledge: ins,
+      experience: exp, knowledge: ins, todoLog: todoLog,
       images: currentImages.slice(), tags: currentTags.slice(),
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _pendingPush: true
     });
   }
+  _dailyDirty = false;
   saveDailyNotes();
   saveAll();
   renderCalendar();
@@ -9111,9 +9214,11 @@ function saveDailyNoteSilent() {
 function saveDailyNote() {
   var exp = document.getElementById('dailyExperience').value.trim();
   var ins = document.getElementById('dailyInsight').value.trim();
+  var logEl = document.getElementById('dailyTodoLog');
+  var todoLog = logEl ? logEl.value.replace(/\s+$/, '') : '';
   var tip = document.getElementById('dailySavedTip');
 
-  if (!exp && !ins && currentImages.length === 0 && currentTags.length === 0) {
+  if (!exp && !ins && !todoLog && currentImages.length === 0 && currentTags.length === 0) {
     // Empty: remove existing note for this date if any
     var existing = getDailyNote(dailyDate);
     if (existing) {
@@ -9135,6 +9240,7 @@ function saveDailyNote() {
       note.experience = exp;
       note.knowledge = ins;
       note.reflection = '';
+      note.todoLog = todoLog;
       note.images = currentImages.slice();
       note.tags = currentTags.slice();
       note.updatedAt = new Date().toISOString();
@@ -9143,7 +9249,7 @@ function saveDailyNote() {
     } else {
       dailyNotes.push({
         id: dailyNoteId(dailyDate), date: dailyDate,
-        experience: exp, knowledge: ins,
+        experience: exp, knowledge: ins, todoLog: todoLog,
         images: currentImages.slice(), tags: currentTags.slice(),
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _pendingPush: true
       });
@@ -9450,10 +9556,11 @@ document.addEventListener('DOMContentLoaded', function() {
   if (input) {
     input.addEventListener('change', function() { handleDailyImageUpload(this); });
   }
-  ['dailyExperience', 'dailyInsight'].forEach(function(id) {
+  ['dailyExperience', 'dailyInsight', 'dailyTodoLog'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) {
       el.addEventListener('input', function() {
+        _dailyDirty = true;
         autoResizeTextarea(el);
         scheduleDailyAutoSave();
       });
@@ -10283,10 +10390,13 @@ function toggleTodo(id) {
   var t = todosData.find(function(x) { return x.id === id; });
   if (!t) return;
   t.done = !t.done;
+  t.doneAt = t.done ? new Date().toISOString() : null;   // 完成时刻：判「22:00 后打勾」「过当天才打勾」用
   t.updatedAt = new Date().toISOString();
   t._pendingPush = true;
   saveTodos();
   saveAll();
+  // 已过 22:00 的当天打勾、或给过去某天补打勾 → 立即带入每日记录（无需等下一次轮询）
+  try { runTodoLogSettle(); } catch (e) { console.warn('[todoLog] settle failed', e); }
   renderTodosView();
 }
 
@@ -12023,6 +12133,8 @@ initDailyHighlight();
 navigate('todos');
 // 【2026-09-28 已停用】过期待办「自动顺延一周」曾把日期批量改写并推上云端（见函数处注释）。
 // 用户明确要求关掉：不再自动移动任何待办的日期。
+// 待办 → 每日记录：用本地数据先结算一次（云端数据到位后还会再结算，见 initCloudSync）
+try { runTodoLogSettle(); } catch (e) { console.warn('[todoLog] settle failed', e); }
 // Auto-refresh exchange rates if not yet loaded or outdated (>1 day old)
 (function initRates() {
   const today = todayStr();
@@ -12060,6 +12172,8 @@ function showRescueBanner() {
       if (normalizeDailyNotes()) _pendingPush = true;
       dedupeAccounts();
       // 【2026-09-28 已停用】此处原本再跑一次过期待办自动顺延，已按用户要求关闭。
+      // 云端数据到位后再结算一次「待办 → 每日记录」（覆盖离线期间打勾、以及 22:00 前关页面的情形）
+      try { runTodoLogSettle(); } catch (e) { console.warn('[todoLog] settle failed', e); }
       // 若初始化完成前有改动（如删除/修改）没推出去，此时补推一次，确保墓碑/修改同步到云端
       if (_pendingPush) {
         _pendingPush = false;
@@ -12090,7 +12204,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20261012a';
+  b.textContent = 'build 20261012b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
@@ -12136,6 +12250,9 @@ checkBackupReminder();
     try { if (typeof renderTodos === 'function') renderTodos(); } catch(e) {}
   }
   setInterval(refreshIfDayChanged, 60000);                                          // 每分钟检查是否跨天
+  // 每分钟尝试结算一次「待办 → 每日记录」：到了 22:00 自动带入当天完成项，
+  // 22:00 之后新打勾的也会在 1 分钟内出现（打勾瞬间已经立即带入一次）。幂等，无事可做时不写任何东西。
+  setInterval(function() { try { runTodoLogSettle(); } catch (e) {} }, 60000);
   document.addEventListener('visibilitychange', function(){ if (!document.hidden) refreshIfDayChanged(); });
   window.addEventListener('focus', refreshIfDayChanged);
 })();
