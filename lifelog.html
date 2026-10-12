@@ -2155,8 +2155,13 @@ tbody tr:hover{background:var(--surface-hover)}
         </div>
 
         <div class="card mb-16">
-          <div class="card-header">
-            <div class="card-title">📅 本月锻炼标记</div>
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+            <div class="card-title">📅 锻炼标记（一屏 5 周：上上周 → 下下周）</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" onclick="fitCalShift(-1)" title="再往前看一周">◀ 往前一周</button>
+              <button class="btn btn-ghost btn-sm" onclick="fitCalShift(1)" title="往后一周">往后一周 ▶</button>
+              <button class="btn btn-ghost btn-sm" onclick="fitCalReset()" title="回到本周">● 回到本周</button>
+            </div>
           </div>
           <div class="card-body">
             <div id="fitnessCalWrap"></div>
@@ -5932,7 +5937,7 @@ function renderFitness() {
   document.getElementById('fitMonthlyCount').textContent = monthRecords.length + ' 次';
   document.getElementById('fitMonthlyDays').textContent = monthDays + ' 天';
 
-  // 本月锻炼标记日历（有没有锻炼 + 当天锻炼内容）
+  // 锻炼标记：一屏 5 周（有没有锻炼 + 当天锻炼内容）
   renderFitnessCal(alive);
 
   // Table
@@ -5968,60 +5973,99 @@ function renderFitness() {
   document.getElementById('fitnessTableWrap').innerHTML = html;
 }
 
-// 渲染本月锻炼标记：日历格子标记"有没有锻炼"，下方列当天锻炼内容
+// 渲染锻炼标记：一屏显示 5 周（默认 上上周 / 上周 / 本周 / 下周 / 下下周），每格标"有没有锻炼"+当天项目
+// 2026-10-12 改版：由「本月」改为「5 周窗口」；支持往前/往后翻一周、一键回到本周。
+var fitCalWeekOffset = 0;   // 相对「本周」的偏移（周为单位）；负数 = 往前翻
+
+function weekStartOf(dateObj) {
+  const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));   // 周一起始
+  return d;
+}
+// 相对本周的周数 → 中文标签（超出 ±2 周就直接说"几周前/后"）
+function fitCalWeekLabel(weeksAgo) {
+  if (weeksAgo === 0) return '本周';
+  if (weeksAgo === 1) return '上周';
+  if (weeksAgo === 2) return '上上周';
+  if (weeksAgo === -1) return '下周';
+  if (weeksAgo === -2) return '下下周';
+  return weeksAgo > 0 ? (weeksAgo + ' 周前') : ((-weeksAgo) + ' 周后');
+}
+function fitCalShift(n) { fitCalWeekOffset += n; renderFitnessCal(); }
+function fitCalReset() { fitCalWeekOffset = 0; renderFitnessCal(); }
+
 function renderFitnessCal(alive) {
   const wrap = document.getElementById('fitnessCalWrap');
   if (!wrap) return;
-  const now = new Date();
-  const year = now.getFullYear(), month = now.getMonth();
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  // 周一起始：周一=0 …… 周日=6
-  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+  if (!alive) alive = fitnessData.filter(f => !f._deleted);
   const today = todayStr();
+  const curWeekStart = weekStartOf(new Date());
+  const anchor = new Date(curWeekStart);
+  anchor.setDate(anchor.getDate() + fitCalWeekOffset * 7);
+  // 窗口从「锚点周的前两周」的周一开始，共 5 周
+  const winStart = new Date(anchor);
+  winStart.setDate(winStart.getDate() - 14);
+  const winEnd = new Date(winStart);
+  winEnd.setDate(winEnd.getDate() + 34);
 
   // 按日期归并当天锻炼内容
   const byDate = {};
   alive.forEach(f => { (byDate[f.date] = byDate[f.date] || []).push(f); });
 
-  // 星期头（周一起始，周日结束）
-  const weekHead = ['一','二','三','四','五','六','日'].map(w => `<div style="text-align:center;font-size:12px;color:var(--text-muted);padding:4px 0">${w}</div>`).join('');
-  // 空格子（月初前）
-  let cells = '';
-  for (let i = 0; i < firstWeekday; i++) cells += '<div></div>';
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const recs = byDate[dateStr];
-    const hasWorkout = !!recs && recs.length > 0;
-    const isToday = dateStr === today;
-    const bg = hasWorkout ? 'var(--primary)' : 'var(--surface-hover)';
-    const color = hasWorkout ? '#fff' : 'var(--text-muted)';
-    const border = isToday ? '2px solid var(--primary)' : '1px solid var(--border)';
-    // 数字下面直接显示运动项目名（多项目分行，过长截断）
-    let contentHtml = '';
-    if (hasWorkout) {
-      contentHtml = recs.map(f => {
-        const name = (f.type || '').trim();
-        const short = name.length > 4 ? name.slice(0, 4) + '…' : name;
-        return `<span style="font-size:10px;line-height:1.25;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(short)}</span>`;
-      }).join('');
-    } else {
-      contentHtml = `<span style="font-size:11px;line-height:1.25;opacity:.5">·</span>`;
+  const weekHead = ['一','二','三','四','五','六','日'].map(w => `<div style="text-align:center;font-size:12px;color:var(--text-muted);padding:2px 0">${w}</div>`).join('');
+
+  let html = '';
+  for (let w = 0; w < 5; w++) {
+    const ws = new Date(winStart);
+    ws.setDate(ws.getDate() + w * 7);
+    const we = new Date(ws);
+    we.setDate(we.getDate() + 6);
+    const weeksAgo = Math.round((curWeekStart.getTime() - ws.getTime()) / 604800000);
+    const isCurWeek = weeksAgo === 0;
+    const labelColor = isCurWeek ? 'var(--primary)' : 'var(--text-secondary, var(--text-muted))';
+    let cells = '';
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(ws);
+      d.setDate(d.getDate() + i);
+      const dateStr = localDateStr(d);
+      const recs = byDate[dateStr];
+      const hasWorkout = !!recs && recs.length > 0;
+      const isToday = dateStr === today;
+      const bg = hasWorkout ? 'var(--primary)' : 'var(--surface-hover)';
+      const color = hasWorkout ? '#fff' : 'var(--text-muted)';
+      const border = isToday ? '2px solid var(--primary)' : '1px solid var(--border)';
+      let contentHtml;
+      if (hasWorkout) {
+        contentHtml = recs.map(f => {
+          const name = (f.type || '').trim();
+          const short = name.length > 4 ? name.slice(0, 4) + '…' : name;
+          return `<span style="font-size:10px;line-height:1.25;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(short)}</span>`;
+        }).join('');
+      } else {
+        contentHtml = `<span style="font-size:11px;line-height:1.25;opacity:.5">·</span>`;
+      }
+      cells += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px 2px;border-radius:8px;background:${bg};color:${color};border:${border};min-height:48px;box-sizing:border-box">
+        <span style="font-size:13px;font-weight:600;line-height:1">${d.getDate()}</span>
+        ${contentHtml}
+      </div>`;
     }
-    cells += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px 2px;border-radius:8px;background:${bg};color:${color};border:${border};min-height:48px;box-sizing:border-box">
-      <span style="font-size:13px;font-weight:600;line-height:1">${d}</span>
-      ${contentHtml}
+    html += `<div style="margin-bottom:10px${isCurWeek ? ';padding:6px 8px;border-radius:10px;background:var(--surface-hover)' : ''}">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+        <span style="font-size:12px;font-weight:700;color:${labelColor}">${fitCalWeekLabel(weeksAgo)}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${fmtShort(localDateStr(ws))} – ${fmtShort(localDateStr(we))}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${weekHead}${cells}</div>
     </div>`;
   }
-  wrap.innerHTML = `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${weekHead}${cells}</div>`;
 
-  // 当天锻炼内容列表
-  const monthDates = Object.keys(byDate).filter(d => d.startsWith(`${year}-${String(month+1).padStart(2,'0')}`)).sort((a,b) => b.localeCompare(a));
-  if (!monthDates.length) {
-    wrap.innerHTML += `<div style="margin-top:12px;font-size:13px;color:var(--text-muted)">本月还没有锻炼记录</div>`;
+  // 窗口内（5 周）的锻炼清单
+  const winDates = Object.keys(byDate).filter(d => d >= localDateStr(winStart) && d <= localDateStr(winEnd)).sort((a, b) => b.localeCompare(a));
+  if (!winDates.length) {
+    wrap.innerHTML = html + `<div style="margin-top:12px;font-size:13px;color:var(--text-muted)">这 5 周还没有锻炼记录</div>`;
     return;
   }
-  let listHtml = `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">`;
-  monthDates.forEach(d => {
+  let listHtml = `<div style="margin-top:6px;border-top:1px solid var(--border);padding-top:12px">`;
+  winDates.forEach(d => {
     const recs = byDate[d];
     const content = recs.map(f => `${escapeHtml(f.type)} ${fitAmountText(f)}`).join('、');
     listHtml += `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:13px">
@@ -6030,7 +6074,7 @@ function renderFitnessCal(alive) {
     </div>`;
   });
   listHtml += `</div>`;
-  wrap.innerHTML += listHtml;
+  wrap.innerHTML = html + listHtml;
 }
 
 /* ============================================================
@@ -12211,7 +12255,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20261012c';
+  b.textContent = 'build 20261012d';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
