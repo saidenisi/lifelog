@@ -2144,19 +2144,20 @@ tbody tr:hover{background:var(--surface-hover)}
         <div class="stat-grid">
           <div class="stat-card fit">
             <div class="stat-icon">📅</div>
-            <div class="stat-label">本月锻炼次数</div>
-            <div class="stat-value" id="fitMonthlyCount">0</div>
+            <div class="stat-label">窗口内锻炼次数</div>
+            <div class="stat-value" id="fitWinCount">0</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px" id="fitWinRange"></div>
           </div>
           <div class="stat-card streak">
             <div class="stat-icon">✅</div>
-            <div class="stat-label">本月锻炼天数</div>
-            <div class="stat-value" id="fitMonthlyDays">0 天</div>
+            <div class="stat-label">窗口内锻炼天数</div>
+            <div class="stat-value" id="fitWinDays">0 天</div>
           </div>
         </div>
 
         <div class="card mb-16">
           <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-            <div class="card-title">📅 锻炼标记（一屏 5 周：上上周 → 下下周）</div>
+            <div class="card-title">📅 锻炼标记（一屏 4 周：上上周 → 下周）</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn btn-ghost btn-sm" onclick="fitCalShift(-1)" title="再往前看一周">◀ 往前一周</button>
               <button class="btn btn-ghost btn-sm" onclick="fitCalShift(1)" title="往后一周">往后一周 ▶</button>
@@ -5926,18 +5927,20 @@ function deleteFitness(id) {
 }
 
 function renderFitness() {
-  // Stats
   const alive = fitnessData.filter(f => !f._deleted);
-  const now = new Date();
-  const monthRecords = alive.filter(f => {
-    const d = new Date(f.date);
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  });
-  const monthDays = new Set(monthRecords.map(f => f.date)).size;
-  document.getElementById('fitMonthlyCount').textContent = monthRecords.length + ' 次';
-  document.getElementById('fitMonthlyDays').textContent = monthDays + ' 天';
+  // Stats：跟着「锻炼标记」的窗口走（4 周），不再按自然月（2026-10-12 用户要求）
+  const W = fitCalWindow();
+  const wsStr = localDateStr(W.start), weStr = localDateStr(W.end);
+  const winRecords = alive.filter(f => f.date >= wsStr && f.date <= weStr);
+  const winDays = new Set(winRecords.map(f => f.date)).size;
+  const cntEl = document.getElementById('fitWinCount');
+  const dayEl = document.getElementById('fitWinDays');
+  const rngEl = document.getElementById('fitWinRange');
+  if (cntEl) cntEl.textContent = winRecords.length + ' 次';
+  if (dayEl) dayEl.textContent = winDays + ' 天';
+  if (rngEl) rngEl.textContent = fmtShort(wsStr) + ' – ' + fmtShort(weStr) + ' · 共 ' + FIT_CAL_WEEKS + ' 周';
 
-  // 锻炼标记：一屏 5 周（有没有锻炼 + 当天锻炼内容）
+  // 锻炼标记：一屏 4 周（有没有锻炼 + 当天锻炼内容）
   renderFitnessCal(alive);
 
   // Table
@@ -5973,16 +5976,28 @@ function renderFitness() {
   document.getElementById('fitnessTableWrap').innerHTML = html;
 }
 
-// 渲染锻炼标记：一屏显示 5 周（默认 上上周 / 上周 / 本周 / 下周 / 下下周），每格标"有没有锻炼"+当天项目
-// 2026-10-12 改版：由「本月」改为「5 周窗口」；支持往前/往后翻一周、一键回到本周。
+// 渲染锻炼标记：一屏显示 4 周（默认 上上周 / 上周 / 本周 / 下周），每格标"有没有锻炼"+当天项目
+// 2026-10-12 改版：由「本月」改为「4 周窗口」；支持往前/往后翻一周、一键回到本周；统计卡跟随窗口。
 var fitCalWeekOffset = 0;   // 相对「本周」的偏移（周为单位）；负数 = 往前翻
+var FIT_CAL_WEEKS = 4;      // 一屏显示几周（去掉「下下周」后为 4）
 
 function weekStartOf(dateObj) {
   const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));   // 周一起始
   return d;
 }
-// 相对本周的周数 → 中文标签（超出 ±2 周就直接说"几周前/后"）
+// 当前窗口的起止日期：从「上上周」的周一到「下周」的周日（供日历与统计卡共用，保证口径一致）
+function fitCalWindow() {
+  const curWeekStart = weekStartOf(new Date());
+  const anchor = new Date(curWeekStart);
+  anchor.setDate(anchor.getDate() + fitCalWeekOffset * 7);
+  const start = new Date(anchor);
+  start.setDate(start.getDate() - 14);
+  const end = new Date(start);
+  end.setDate(end.getDate() + FIT_CAL_WEEKS * 7 - 1);
+  return { start: start, end: end, curWeekStart: curWeekStart, anchor: anchor };
+}
+// 相对本周的周数 → 中文标签（超出可见范围就直接说"几周前/后"）
 function fitCalWeekLabel(weeksAgo) {
   if (weeksAgo === 0) return '本周';
   if (weeksAgo === 1) return '上周';
@@ -5991,22 +6006,17 @@ function fitCalWeekLabel(weeksAgo) {
   if (weeksAgo === -2) return '下下周';
   return weeksAgo > 0 ? (weeksAgo + ' 周前') : ((-weeksAgo) + ' 周后');
 }
-function fitCalShift(n) { fitCalWeekOffset += n; renderFitnessCal(); }
-function fitCalReset() { fitCalWeekOffset = 0; renderFitnessCal(); }
+// 翻页后连统计卡一起刷新（统计卡跟随窗口）
+function fitCalShift(n) { fitCalWeekOffset += n; renderFitness(); }
+function fitCalReset() { fitCalWeekOffset = 0; renderFitness(); }
 
 function renderFitnessCal(alive) {
   const wrap = document.getElementById('fitnessCalWrap');
   if (!wrap) return;
   if (!alive) alive = fitnessData.filter(f => !f._deleted);
   const today = todayStr();
-  const curWeekStart = weekStartOf(new Date());
-  const anchor = new Date(curWeekStart);
-  anchor.setDate(anchor.getDate() + fitCalWeekOffset * 7);
-  // 窗口从「锚点周的前两周」的周一开始，共 5 周
-  const winStart = new Date(anchor);
-  winStart.setDate(winStart.getDate() - 14);
-  const winEnd = new Date(winStart);
-  winEnd.setDate(winEnd.getDate() + 34);
+  const W = fitCalWindow();
+  const winStart = W.start, winEnd = W.end, curWeekStart = W.curWeekStart;
 
   // 按日期归并当天锻炼内容
   const byDate = {};
@@ -6015,7 +6025,7 @@ function renderFitnessCal(alive) {
   const weekHead = ['一','二','三','四','五','六','日'].map(w => `<div style="text-align:center;font-size:12px;color:var(--text-muted);padding:2px 0">${w}</div>`).join('');
 
   let html = '';
-  for (let w = 0; w < 5; w++) {
+  for (let w = 0; w < FIT_CAL_WEEKS; w++) {
     const ws = new Date(winStart);
     ws.setDate(ws.getDate() + w * 7);
     const we = new Date(ws);
@@ -12255,7 +12265,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20261012d';
+  b.textContent = 'build 20261012e';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
