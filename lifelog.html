@@ -9,8 +9,21 @@
 <meta http-equiv="Expires" content="0">
 <title>人生手账 · LifeHub</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📓</text></svg>">
+<!-- PWA：可安装到主屏（图标 + 全屏 + 离线）。离线与更新策略见 sw.js -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="人生手账">
+<link rel="apple-touch-icon" href="apple-touch-icon-180.png">
+<!-- 字体必须「非阻塞」加载：原来这里是 render-blocking 的样式表链接，
+     而它后面紧跟着内联脚本块 —— 浏览器要等样式表就绪才执行脚本，
+     于是 fonts.googleapis.com 一旦慢/不可达（中国大陆很常见），整个 App 就卡着不渲染。
+     改成 media=print + onload 切换：字体照旧生效，但永远不阻塞首屏（CSS 里已有系统字体兜底）。 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"></noscript>
 <script>
 /* chart.js 4.4.1 — 已内嵌（原 jsdelivr CDN 在中国大陆不稳定，曾致页面白屏） */
 /**
@@ -1514,6 +1527,32 @@ tbody tr:hover{background:var(--surface-hover)}
   animation:slideUp .3s;
   display:flex;align-items:center;gap:8px;
 }
+
+/* ===== PWA 状态条（离线提示 / 新版本提示）===== */
+/* 放在底部：移动端要和固定在底部的导航栏错开，否则会被盖住 */
+#pwaBars{
+  position:fixed;left:0;right:0;bottom:0;z-index:400;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:0 12px calc(env(safe-area-inset-bottom,0px) + 12px);
+  pointer-events:none;
+}
+@media(max-width:768px){
+  #pwaBars{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 74px)}
+}
+.pwa-bar{
+  pointer-events:auto;
+  max-width:min(92vw,560px);
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;
+  padding:9px 14px;border-radius:10px;
+  font-size:13px;font-weight:500;line-height:1.4;
+  box-shadow:0 4px 16px rgba(0,0,0,.22);
+}
+.pwa-bar button{
+  border:none;border-radius:6px;padding:5px 12px;
+  font-size:13px;font-weight:600;cursor:pointer;
+  background:rgba(255,255,255,.95);color:#3c3489;
+}
+.pwa-bar .pwa-x{background:transparent;color:inherit;font-size:18px;padding:0 4px;line-height:1}
 
 /* ===== Chart container ===== */
 .chart-container{position:relative;height:280px}
@@ -12265,7 +12304,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20261012e';
+  b.textContent = 'build 20261014a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
@@ -12316,6 +12355,176 @@ checkBackupReminder();
   setInterval(function() { try { runTodoLogSettle(); } catch (e) {} }, 60000);
   document.addEventListener('visibilitychange', function(){ if (!document.hidden) refreshIfDayChanged(); });
   window.addEventListener('focus', refreshIfDayChanged);
+})();
+</script>
+
+<script>
+// ===== PWA：离线能力 + 更新提示（2026-10-14）=====
+// 缓存策略全部在 sw.js 里（页面一律网络优先）。这里只负责：
+//   1) 注册 Service Worker；2) 有新版本时提示；3) 离线时提示；4) ?nosw=1 一键救援。
+// 验证：test_pwa.js
+(function () {
+  var hasSW = ('serviceWorker' in navigator);
+  var isSecure = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+  var KILL = /[?&]nosw=1\b/.test(location.search);           // ?nosw=1 → 注销 SW 并清空缓存
+  var IS_RESCUE = (typeof __RESCUE_MODE__ !== 'undefined') && __RESCUE_MODE__;
+
+  // ---- 底部提示条工具（可同时存在多条，如「离线」+「有新版本」）----
+  function host() {
+    var h = document.getElementById('pwaBars');
+    if (!h) { h = document.createElement('div'); h.id = 'pwaBars'; document.body.appendChild(h); }
+    return h;
+  }
+  function showBar(id, html, bg, fg) {
+    var el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = id;
+      el.className = 'pwa-bar';
+      host().appendChild(el);
+    }
+    el.style.background = bg;
+    el.style.color = fg;
+    el.innerHTML = html;
+    return el;
+  }
+  window.pwaHideBar = function (id) {
+    var el = document.getElementById(id);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  };
+  window.pwaCleanReload = function () { location.reload(); };
+
+  // ---- 离线提示 ----
+  function renderOffline() {
+    if (navigator.onLine) window.pwaHideBar('pwaOfflineBar');
+    else showBar('pwaOfflineBar', '离线 · 正在显示本地数据，联网后会自动同步', 'rgba(56,56,66,.94)', '#fff');
+  }
+  window.addEventListener('online', renderOffline);
+  window.addEventListener('offline', renderOffline);
+
+  // ---- ?nosw=1 救援：注销 SW + 清空所有缓存 ----
+  // 注意：Service Worker 与 Cache 都是「按网址共享」的，所以在任意浏览器标签里打开
+  // ?nosw=1，会同时解除手机上那个已安装 App 的 SW。
+  //
+  // 刻意**不做自动重载**：曾经试过「注销后 reload 一次」以保证清干净，但重载有可能
+  // 因为网络抖动/连接中断拿到半截页面（只剩 head、没有 body）→ 用户看到白屏。
+  // 现在改为：① 先让运行中的 SW 停机写入（消息 RESCUE）；② 前后各清一遍缓存。
+  // 想要重新加载，提示条上有 ↻ 按钮，由用户自己点。
+  if (KILL) {
+    (async function () {
+      function clearCaches() {
+        return caches.keys().then(function (ks) {
+          return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+        });
+      }
+      function nap(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+      function cap(p, ms) { return Promise.race([p, nap(ms)]); }
+      function report(text) {
+        showBar('pwaKillBar',
+          text + '<button class="pwa-x" onclick="pwaCleanReload()" title="重新加载">↻</button>',
+          '#dc2626', '#fff');
+      }
+      try {
+        // ① 先清空所有缓存 —— 这是救援的关键效果，一定做得到，先做先给反馈
+        if (window.caches) await cap(clearCaches(), 3000);
+        await nap(300);
+        if (window.caches) await cap(clearCaches(), 3000);
+        // 离开页面时再扫一遍，兜住最后时刻的写入
+        window.addEventListener('pagehide', function () {
+          try {
+            if (window.caches) caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); });
+          } catch (e) {}
+        });
+
+        // ② 注销 Service Worker。
+        //    实测这一步可能**很慢**（页面还在等某个卡住的外部请求时，Chrome 要等页面加载结束
+        //    才终止控制它的 SW —— 本环境里到了 20 秒）。所以绝不 await 阻塞界面：
+        //    先把「缓存已清空」告诉用户，注销在后台完成后再更新文案。
+        var regs = hasSW ? ((await cap(navigator.serviceWorker.getRegistrations(), 3000)) || []) : [];
+        if (!regs.length) { report('已清空离线缓存（本机没有注册 Service Worker）'); return; }
+        report('已清空离线缓存，正在解除 Service Worker…');
+
+        var left = regs.length, done = 0;
+        regs.forEach(function (reg) {
+          reg.unregister().catch(function () {}).then(function () {
+            done++;
+            if (--left <= 0) {
+              // 注销完成后再通知 SW 停机写入（顺序不能反：先发消息会让 unregister 更慢）
+              try {
+                if (navigator.serviceWorker.controller) {
+                  navigator.serviceWorker.controller.postMessage({ type: 'RESCUE' });
+                }
+              } catch (e) {}
+              report('已解除离线缓存（注销 ' + done + ' 个 Service Worker、缓存已清空）');
+            }
+          });
+        });
+      } catch (e) {
+        report('清除失败：' + (e && e.message));
+      }
+    })();
+    return;   // 救援分支不再注册 SW
+  }
+
+  renderOffline();
+
+  // 抢救模式（?rescue=1）是只读诊断通道，保持干净：不碰 SW、不碰缓存
+  if (!hasSW || !isSecure || IS_RESCUE) return;
+
+  var wantReload = false;
+  // 只有用户点了「立即更新」才自动重载。否则首次安装时 clients.claim() 触发的
+  // controllerchange 会导致一次多余的整页刷新（体验上很像崩溃）。
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (wantReload) location.reload();
+  });
+
+  window.pwaApplyUpdate = function () {
+    var el = document.getElementById('pwaUpdateBar');
+    if (el) el.innerHTML = '<span>正在更新…</span>';
+    navigator.serviceWorker.getRegistration().then(function (reg) {
+      if (reg && reg.waiting) {
+        wantReload = true;
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        setTimeout(function () { location.reload(); }, 3000);   // 兜底（重载会销毁本定时器）
+      } else {
+        location.reload();
+      }
+    }).catch(function () { location.reload(); });
+  };
+
+  function showUpdateBar() {
+    showBar('pwaUpdateBar',
+      '<span>有新版本已就绪</span>'
+      + '<button onclick="pwaApplyUpdate()">立即更新</button>'
+      + '<button class="pwa-x" onclick="pwaHideBar(\'pwaUpdateBar\')" title="稍后">×</button>',
+      '#6366f1', '#fff');
+  }
+
+  navigator.serviceWorker.register('sw.js', { scope: './' }).then(function (reg) {
+    function checkWaiting() {
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdateBar();
+    }
+    checkWaiting();
+    reg.addEventListener('updatefound', function () {
+      var nw = reg.installing;
+      if (!nw) return;
+      nw.addEventListener('statechange', function () {
+        if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBar();
+      });
+    });
+    // 主动查更新：不然要等浏览器默认的 ~24 小时节流；这里最多 5 分钟查一次
+    var lastCheck = 0;
+    function checkUpdate(force) {
+      var now = Date.now();
+      if (!force && now - lastCheck < 300000) return;
+      lastCheck = now;
+      reg.update().catch(function () {});
+    }
+    checkUpdate(true);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkUpdate(false); });
+  }).catch(function (e) {
+    console.warn('[pwa] Service Worker 注册失败（不影响正常使用）', e);
+  });
 })();
 </script>
 
