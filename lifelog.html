@@ -1375,6 +1375,16 @@ tbody tr:hover{background:var(--surface-hover)}
 .cover-drop-hint{text-align:center;flex:1;color:var(--text-muted)}
 .cover-clear-btn{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.8}
 .cover-clear-btn:hover{opacity:1}
+/* 手机/平板（无 hover）没有 Ctrl+V 和拖拽 → 改成「点封面从相册选图」的文案与手势 */
+.cover-hint-mobile{display:none}
+.cover-mobile-hint{display:none;margin-top:6px;font-size:11px;color:var(--text-muted);text-align:center}
+@media(hover:none){
+  .cover-hint-desktop{display:none}
+  .cover-hint-mobile{display:block}
+  .cover-mobile-hint.show{display:block}
+  .cover-drop-zone{cursor:pointer}
+  .cover-drop-zone:hover{border-color:var(--border);background:var(--surface)}
+}
 
 /* ===== Stock Signal Styles ===== */
 .ma-up{color:var(--success);font-weight:600}
@@ -3348,18 +3358,26 @@ tbody tr:hover{background:var(--surface-hover)}
         <div id="coverDropZone" class="cover-drop-zone" tabindex="0">
           <img id="coverPreviewImg" referrerpolicy="no-referrer" style="display:none;max-width:70px;max-height:110px;object-fit:contain;border-radius:6px;flex-shrink:0" onerror="onCoverPreviewError()">
           <div id="coverDropHint" class="cover-drop-hint">
-            <div style="font-size:22px;margin-bottom:2px">📋</div>
-            <div style="font-size:13px;font-weight:500">粘贴图片 (Ctrl+V) 或拖拽到此</div>
-            <div style="font-size:11px;margin-top:3px;opacity:.7;display:flex;align-items:center;justify-content:center;gap:6px">
-              <span>到豆瓣右键封面→复制图片→回来 Ctrl+V</span>
+            <div style="font-size:22px;margin-bottom:2px">🖼️</div>
+            <div class="cover-hint-desktop">
+              <div style="font-size:13px;font-weight:500">粘贴图片 (Ctrl+V) 或拖拽到此</div>
+              <div style="font-size:11px;margin-top:3px;opacity:.7">到豆瓣右键封面→复制图片→回来 Ctrl+V</div>
             </div>
-            <button type="button" onclick="coverPickFile()" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-hover);color:var(--text-secondary);cursor:pointer">📁 选择文件</button>
+            <div class="cover-hint-mobile">
+              <div style="font-size:13px;font-weight:500">点这里从相册选择图片</div>
+              <div style="font-size:11px;margin-top:3px;opacity:.7">也可以直接拍照</div>
+            </div>
+            <button type="button" onclick="coverPickFile()" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-hover);color:var(--text-secondary);cursor:pointer">📁 选择图片</button>
           </div>
           <button type="button" id="coverClearBtn" class="cover-clear-btn" style="display:none" onclick="clearCover(event)">✕</button>
         </div>
+        <div id="coverMobileHint" class="cover-mobile-hint">点封面可更换图片</div>
         <input type="text" class="form-input" id="mediaCoverUrl" placeholder="也可粘贴图片URL" style="margin-top:6px;font-size:12px" oninput="onCoverUrlInput(this.value)">
       </div>
       <input type="hidden" id="mediaCover">
+      <!-- 封面选图：必须用**页面里常驻**的 input。原来用 document.createElement 临时造一个、
+           从不插入 DOM 就 .click()，手机（iOS / 部分安卓）不会唤起相册选择器。 -->
+      <input type="file" id="mediaCoverFile" accept="image/*" style="display:none" onchange="handleCoverFileInput(this)">
       <div class="form-group" id="mediaDateSingleGroup">
         <label class="form-label">日期</label>
         <input type="date" class="form-input" id="mediaDate">
@@ -8380,6 +8398,13 @@ function openDoubanSearch() {
   window.open(baseUrl + encodeURIComponent(title), '_blank');
 }
 
+// 手机专用的一行提示「点封面可更换图片」：只有已有封面时才显示（CSS 里限定仅无 hover 设备）
+function _coverMobileHint(show) {
+  var el = document.getElementById('coverMobileHint');
+  if (!el) return;
+  if (show) el.classList.add('show'); else el.classList.remove('show');
+}
+
 function clearCover(e) {
   if (e) e.stopPropagation();
   document.getElementById('mediaCover').value = '';
@@ -8389,6 +8414,7 @@ function clearCover(e) {
   img.style.display = 'none';
   document.getElementById('coverClearBtn').style.display = 'none';
   document.getElementById('coverDropHint').style.display = '';
+  _coverMobileHint(false);
 }
 
 function setCoverPreview(src) {
@@ -8399,6 +8425,7 @@ function setCoverPreview(src) {
   img.style.display = '';
   document.getElementById('coverClearBtn').style.display = '';
   document.getElementById('coverDropHint').style.display = 'none';
+  _coverMobileHint(true);
 }
 
 function onCoverUrlInput(url) {
@@ -8411,6 +8438,7 @@ function onCoverUrlInput(url) {
   img.style.display = '';
   document.getElementById('coverClearBtn').style.display = '';
   document.getElementById('coverDropHint').style.display = 'none';
+  _coverMobileHint(true);
 }
 
 function onCoverPreviewError() {
@@ -8421,24 +8449,37 @@ function onCoverPreviewError() {
   document.getElementById('coverClearBtn').style.display = 'none';
   document.getElementById('mediaCover').value = '';
   document.getElementById('mediaCoverUrl').value = '';
-  toast('图片URL加载失败（可能有防盗链），请直接粘贴图片 (Ctrl+V)');
+  _coverMobileHint(false);
+  var touchOnly = window.matchMedia && window.matchMedia('(hover: none)').matches;
+  toast(touchOnly
+    ? '图片URL加载失败（可能有防盗链），请点封面从相册选图'
+    : '图片URL加载失败（可能有防盗链），请直接粘贴图片 (Ctrl+V)');
 }
 
+// 打开系统选图（手机上是相册 / 拍照，桌面是文件对话框）
+// ⚠️ 必须点击页面里**常驻**的 input，不能临时 createElement（手机上不会弹相册）
 function coverPickFile() {
-  var input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.onchange = function() {
-    if (input.files && input.files[0]) handleImageBlob(input.files[0]);
-  };
+  var input = document.getElementById('mediaCoverFile');
+  if (!input) { toast('找不到选图控件，请刷新页面后重试'); return; }
+  input.value = '';   // 复位：否则连续选同一张图不会触发 change
   input.click();
+}
+
+function handleCoverFileInput(input) {
+  var f = input.files && input.files[0];
+  var accepted = f ? handleImageBlob(f) : false;
+  if (f && !accepted) toast('这个文件不是图片，请重新选择');
+  input.value = '';   // 复位，便于再次选择同一张
 }
 
 /* ===== Image paste / drag-drop → Supabase Storage ===== */
 let _coverUploadPromise = null; // tracks the in-flight cover upload
 
 function handleImageBlob(blob) {
-  if (!blob || !blob.type.startsWith('image/')) return false;
+  if (!blob) return false;
+  // 有些安卓相册返回的 File.type 是空串 → 不能因此直接拒绝，交给解码去判断
+  var t = (blob.type || '').toLowerCase();
+  if (t && t.indexOf('image/') !== 0) return false;
   compressImageToBlob(blob, 400, function(compressedBlob) {
     if (!compressedBlob) { toast('图片处理失败'); return; }
     // Show local preview immediately (no network wait)
@@ -8485,7 +8526,18 @@ function initCoverPasteDrop() {
     modal._pasteBound = true;
   }
 
-  // Drag & drop only — NO click handler (click was opening file picker,
+  // 触屏设备（手机/平板）没有 Ctrl+V 也没有拖拽 → 点整个封面区就唤起相册。
+  // 桌面端仍然不加 click：那会让「点击聚焦后粘贴」变成弹文件框（见下面 dragover 的注释）。
+  if (window.matchMedia && window.matchMedia('(hover: none)').matches && !zone._tapBound) {
+    zone.addEventListener('click', function(e) {
+      // 点在按钮上（选择图片 / ✕）交给按钮自己处理，避免弹两次
+      if (e.target && e.target.closest && e.target.closest('button')) return;
+      coverPickFile();
+    });
+    zone._tapBound = true;
+  }
+
+  // Drag & drop only — NO click handler on desktop (click was opening file picker,
   // blocking users from clicking to focus for Ctrl+V paste)
   zone.addEventListener('dragover', function(e) {
     e.preventDefault();
@@ -12304,7 +12356,7 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20261014a';
+  b.textContent = 'build 20261022a';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
