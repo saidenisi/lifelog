@@ -12356,7 +12356,8 @@ checkBackupReminder();
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
 (function(){
   var b = document.createElement('div');
-  b.textContent = 'build 20261022a';
+  b.id = 'buildMarker';
+  b.textContent = 'build 20261022b';
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
 })();
@@ -12530,38 +12531,81 @@ checkBackupReminder();
     if (wantReload) location.reload();
   });
 
+  var _newBuild = '';           // 检出到的线上版本（与当前运行的版本不同）
+
+  function runningBuild() {
+    var el = document.getElementById('buildMarker');
+    var m = el && /build\s+(\S+)/.exec(el.textContent || '');
+    return m ? m[1] : '';
+  }
+
   window.pwaApplyUpdate = function () {
     var el = document.getElementById('pwaUpdateBar');
     if (el) el.innerHTML = '<span>正在更新…</span>';
+    function hardReload() {
+      // 用「唯一参数」的地址导航：绕开 CDN 与 HTTP 缓存，一次拿到新 HTML。
+      // 这一步很关键 —— 没有等待中的 SW 时（旧 SW 一直没被替换），普通 reload 可能又拿回旧页面。
+      location.href = location.pathname + '?pwa=1&upd=' + Date.now();
+    }
     navigator.serviceWorker.getRegistration().then(function (reg) {
       if (reg && reg.waiting) {
         wantReload = true;
         reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         setTimeout(function () { location.reload(); }, 3000);   // 兜底（重载会销毁本定时器）
+      } else if (_newBuild) {
+        hardReload();
       } else {
         location.reload();
       }
-    }).catch(function () { location.reload(); });
+    }).catch(function () {
+      if (_newBuild) hardReload(); else location.reload();
+    });
   };
 
-  function showUpdateBar() {
+  function showUpdateBar(newB, curB) {
+    var label = '有新版本' + (newB ? ' ' + newB : '')
+      + (curB ? '（当前 ' + curB + '）' : '') + ' 已就绪';
     showBar('pwaUpdateBar',
-      '<span>有新版本已就绪</span>'
+      '<span>' + label + '</span>'
       + '<button onclick="pwaApplyUpdate()">立即更新</button>'
       + '<button class="pwa-x" onclick="pwaHideBar(\'pwaUpdateBar\')" title="稍后">×</button>',
       '#6366f1', '#fff');
   }
 
+  // ---- 版本自检（不依赖 SW 的更新流程）----
+  // 为什么需要：安卓上「已安装的 App」经常只是把后台页面**恢复**，不会重新导航，
+  // 于是一直跑着旧代码 —— 2026-10-22 就是这种情况（网址打开正常、点桌面图标还是旧行为）。
+  // 这里直接读线上的 sw.js（唯一参数 + no-store，绕开 CDN 与 HTTP 缓存）比对 BUILD。
+  var lastBuildCheck = 0;
+  function checkNewBuild(force) {
+    var now = Date.now();
+    if (!force && now - lastBuildCheck < 60000) return;
+    lastBuildCheck = now;
+    var cur = runningBuild();
+    if (!cur) return;
+    fetch('sw.js?cb=' + now, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (t) {
+        var m = /const\s+BUILD\s*=\s*'([^']+)'/.exec(t || '');
+        if (m && m[1] && m[1] !== cur) {
+          _newBuild = m[1];
+          showUpdateBar(m[1], cur);
+        }
+      })
+      .catch(function () {});
+  }
+  window.pwaCheckNewBuild = checkNewBuild;   // 供测试与手工调用
+
   navigator.serviceWorker.register('sw.js', { scope: './' }).then(function (reg) {
     function checkWaiting() {
-      if (reg.waiting && navigator.serviceWorker.controller) showUpdateBar();
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdateBar(_newBuild, runningBuild());
     }
     checkWaiting();
     reg.addEventListener('updatefound', function () {
       var nw = reg.installing;
       if (!nw) return;
       nw.addEventListener('statechange', function () {
-        if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBar();
+        if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBar(_newBuild, runningBuild());
       });
     });
     // 主动查更新：不然要等浏览器默认的 ~24 小时节流；这里最多 5 分钟查一次
@@ -12573,10 +12617,16 @@ checkBackupReminder();
       reg.update().catch(function () {});
     }
     checkUpdate(true);
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkUpdate(false); });
   }).catch(function (e) {
     console.warn('[pwa] Service Worker 注册失败（不影响正常使用）', e);
   });
+
+  // 版本自检独立于 SW：即使 SW 注册失败也要能提示更新。
+  // 每次页面「重新可见 / 获得焦点」都查一次（60 秒节流）—— 这正是「从后台恢复 App」的场景，
+  // 恢复时不会重新导航，只能靠这条把它从旧版本里救出来。
+  checkNewBuild(true);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) checkNewBuild(false); });
+  window.addEventListener('focus', function () { checkNewBuild(false); });
 })();
 </script>
 
