@@ -1768,6 +1768,9 @@ body.touch-ui .cover-mobile-hint.show{display:block}
   transition:all .15s;
 }
 .daily-img-add span{font-size:10px}
+/* 作为 <label> 使用时（原生触发选图）：去掉默认外观、加触摸友好属性 */
+label.daily-img-add{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .daily-img-add:hover{border-color:var(--primary);color:var(--primary)}
 
 /* ===== Daily tags ===== */
@@ -2483,7 +2486,8 @@ body.touch-ui .cover-mobile-hint.show{display:block}
               <div class="daily-section">
                 <div class="daily-section-label"><span>🖼️ 图片</span></div>
                 <div class="daily-images" id="dailyImages"></div>
-                <input type="file" id="dailyImageInput" accept="image/*" multiple style="display:none">
+                <input type="file" id="dailyImageInput" class="file-input-sr"
+                       accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp" multiple>
               </div>
               <div class="daily-section">
                 <div class="daily-section-label">
@@ -2551,8 +2555,9 @@ body.touch-ui .cover-mobile-hint.show{display:block}
           <div class="card-header"><div class="card-title">📤 数据导入</div></div>
           <div class="card-body">
             <p class="text-sm text-muted mb-16">从 JSON 备份文件恢复数据</p>
-            <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
-            <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()">📤 选择文件导入</button>
+            <input type="file" id="importFile" class="file-input-sr" accept=".json,application/json" onchange="importData(event)">
+            <!-- 用原生 label 触发：已安装的 PWA / 安卓 WebView 里，JS 的 input.click() 可能被静默忽略 -->
+            <label class="btn btn-ghost" for="importFile" style="cursor:pointer">📤 选择文件导入</label>
           </div>
         </div>
       </div>
@@ -3061,7 +3066,8 @@ body.touch-ui .cover-mobile-hint.show{display:block}
       </div>
       <div class="form-group">
         <label class="form-label">药品图片 <span class="text-muted" style="font-size:11px;font-weight:400">（粘贴/上传药品照片）</span></label>
-        <input type="file" id="medImageInput" accept="image/*" multiple style="display:none" onchange="handleMedImageUpload(this)">
+        <input type="file" id="medImageInput" class="file-input-sr"
+               accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp" multiple onchange="handleMedImageUpload(this)">
         <div class="daily-images" id="medImages"></div>
       </div>
       <div class="form-group">
@@ -6674,7 +6680,8 @@ function renderMedImages() {
       '<button class="daily-img-del" onclick="removeMedImage('+idx+')" title="删除">×</button>'+
     '</div>';
   });
-  html += '<button class="daily-img-add" onclick="triggerMedImageUpload()" title="添加图片">＋<span>图片</span></button>';
+  // 原生 <label for> 触发（理由同 renderImages）
+  html += '<label class="daily-img-add" for="medImageInput" title="添加图片">＋<span>图片</span></label>';
   el.innerHTML = html;
 }
 
@@ -9644,7 +9651,9 @@ function renderImages() {
       '<button class="daily-img-del" onclick="deleteDailyImage('+idx+')" title="删除">×</button>'+
     '</div>';
   });
-  html += '<button class="daily-img-add" onclick="triggerImageUpload()" title="添加图片">＋<span>图片</span></button>';
+  // 用原生 <label for> 触发选图（不用 onclick + input.click()）：
+  // 已安装的 PWA / 安卓 WebView 里 JS 触发可能被静默忽略，label 由浏览器自己弹。
+  html += '<label class="daily-img-add" for="dailyImageInput" title="添加图片">＋<span>图片</span></label>';
   el.innerHTML = html;
 }
 
@@ -12419,7 +12428,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261022c';
+  window.__BUILD__ = 'build 20261022d';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
