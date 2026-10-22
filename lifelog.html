@@ -1542,6 +1542,9 @@ body.touch-ui .cover-mobile-hint.show{display:block}
   bottom:24px;left:50%;
   transform:translateX(-50%);
   z-index:300;
+  /* toast 只是提示、内部没有任何可点元素 —— 必须让它穿透点击，
+     否则提示显示的那几秒会盖住弹窗页脚的「取消/保存」按钮，手机上点了没反应。 */
+  pointer-events:none;
   display:flex;
   flex-direction:column;
   gap:8px;
@@ -12428,7 +12431,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261022d';
+  window.__BUILD__ = 'build 20261022e';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;

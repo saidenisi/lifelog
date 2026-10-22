@@ -9,7 +9,7 @@
  * BUILD 必须与 lifelog.html 里的 build 号完全一致（deploy-lifelog.js 会强制校验，
  * 不一致直接拒绝部署）。每次部署换一个新缓存名，activate 时清掉旧的 lifelog-* 缓存。
  */
-const BUILD = '20261022d';
+const BUILD = '20261022e';
 const CACHE = 'lifelog-' + BUILD;
 const BASE = new URL('./', self.location).href;
 const HTML_URL = BASE + 'lifelog.html';
