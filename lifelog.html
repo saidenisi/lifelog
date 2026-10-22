@@ -1375,6 +1375,25 @@ tbody tr:hover{background:var(--surface-hover)}
 .cover-drop-hint{text-align:center;flex:1;color:var(--text-muted)}
 .cover-clear-btn{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:none;background:var(--danger);color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.8}
 .cover-clear-btn:hover{opacity:1}
+/* 文件选择控件：不能用 display:none —— 部分安卓 WebView / 已安装的 PWA 里，
+   display:none 的 <input type=file> 点不动（浏览器认为它"不可交互"）。
+   用「视觉隐藏」替代：仍在渲染树里、可被 label 激活、也能被 .click() 触发。 */
+.file-input-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;opacity:0;pointer-events:none}
+
+/* 触屏模式：整块封面区盖一层透明的原生 <label>，点它就由**浏览器原生**唤起相册，
+   完全不经过 JS（不依赖用户手势判定，PWA/WebView 里也稳）。 */
+.cover-file-tap{display:none}
+.cover-drop-zone.touch-mode .cover-file-tap{display:block;position:absolute;inset:0;z-index:2;cursor:pointer;-webkit-tap-highlight-color:transparent}
+/* 按钮与清除键必须压在透明 label 之上，否则点击会被 label 吃掉 */
+.cover-file-btn{position:relative;z-index:3;display:inline-block;cursor:pointer}
+.cover-drop-zone.touch-mode .cover-file-btn{font-size:13px!important;padding:9px 18px!important}
+/* 「点封面可更换图片」这条提示在 zone 外面，用 body 上的 touch-ui 兜住 */
+body.touch-ui .cover-mobile-hint.show{display:block}
+.cover-drop-zone.touch-mode #coverClearBtn{z-index:4}
+/* 文案也跟 touch-mode 走：万一某设备的 hover 媒体查询不准，JS 判定的 class 仍能纠正文案 */
+.cover-drop-zone.touch-mode .cover-hint-desktop{display:none}
+.cover-drop-zone.touch-mode .cover-hint-mobile{display:block}
+
 /* 手机/平板（无 hover）没有 Ctrl+V 和拖拽 → 改成「点封面从相册选图」的文案与手势 */
 .cover-hint-mobile{display:none}
 .cover-mobile-hint{display:none;margin-top:6px;font-size:11px;color:var(--text-muted);text-align:center}
@@ -2549,6 +2568,15 @@ tbody tr:hover{background:var(--surface-hover)}
       </div>
 
       <div class="card mt-16">
+        <div class="card-header"><div class="card-title">🔧 环境诊断</div></div>
+        <div class="card-body">
+          <p class="text-sm text-muted mb-16">装到桌面图标（PWA）后如果某个功能不正常，点这里可以看到当前运行环境——比如是否在独立窗口里、触屏判定结果、封面选图控件状态。截图发我即可定位。</p>
+          <button class="btn btn-ghost" onclick="showEnvDiag()">🔍 显示诊断信息</button>
+          <div class="mt-8" id="envDiagBody" style="display:none"></div>
+        </div>
+      </div>
+
+      <div class="card mt-16">
         <div class="card-header"><div class="card-title">🖼️ 旧图片迁移</div></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-16">把之前以 base64 形式存在数据库里的旧图片，迁移到文件存储（释放数据库空间）。迁移前建议先「导出全部数据」备份。</p>
@@ -3367,17 +3395,25 @@ tbody tr:hover{background:var(--surface-hover)}
               <div style="font-size:13px;font-weight:500">点这里从相册选择图片</div>
               <div style="font-size:11px;margin-top:3px;opacity:.7">也可以直接拍照</div>
             </div>
-            <button type="button" onclick="coverPickFile()" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-hover);color:var(--text-secondary);cursor:pointer">📁 选择图片</button>
+            <button type="button" class="cover-file-btn" onclick="coverPickFile()" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-hover);color:var(--text-secondary);cursor:pointer">📁 选择图片</button>
           </div>
           <button type="button" id="coverClearBtn" class="cover-clear-btn" style="display:none" onclick="clearCover(event)">✕</button>
+          <!-- 触屏时覆盖整块封面区的原生 label：点它由浏览器自己唤起相册，不经 JS。
+               这是已安装 PWA / 安卓 WebView 里最可靠的路径。 -->
+          <label class="cover-file-tap" for="mediaCoverFile" aria-label="从相册选择图片"></label>
         </div>
         <div id="coverMobileHint" class="cover-mobile-hint">点封面可更换图片</div>
         <input type="text" class="form-input" id="mediaCoverUrl" placeholder="也可粘贴图片URL" style="margin-top:6px;font-size:12px" oninput="onCoverUrlInput(this.value)">
       </div>
       <input type="hidden" id="mediaCover">
       <!-- 封面选图：必须用**页面里常驻**的 input。原来用 document.createElement 临时造一个、
-           从不插入 DOM 就 .click()，手机（iOS / 部分安卓）不会唤起相册选择器。 -->
-      <input type="file" id="mediaCoverFile" accept="image/*" style="display:none" onchange="handleCoverFileInput(this)">
+           从不插入 DOM 就 .click()，手机（iOS / 部分安卓）不会唤起相册选择器。
+           也不能用 display:none —— 已安装的 PWA / 部分安卓 WebView 会认为它不可交互而拒绝弹窗，
+           改用 .file-input-sr（视觉隐藏但仍可被激活）。
+           accept 里补上具体扩展名：某些安卓相册服务对 image/* 解析失败会静默不弹。 -->
+      <input type="file" id="mediaCoverFile" class="file-input-sr"
+             accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp"
+             onchange="handleCoverFileInput(this)">
       <div class="form-group" id="mediaDateSingleGroup">
         <label class="form-label">日期</label>
         <input type="date" class="form-input" id="mediaDate">
@@ -8502,9 +8538,40 @@ function handleImageBlob(blob) {
   return true;
 }
 
+// 纯触屏设备判定（手机/平板）。比单独用 (hover:none) 稳：某些安卓 WebView / 已安装 PWA 里
+// hover 媒体查询不可靠，这里用多条线索交叉判断。
+function _isTouchOnlyDevice() {
+  try {
+    var mm = window.matchMedia;
+    if (mm) {
+      if (mm('(hover: none) and (pointer: coarse)').matches) return true;
+      if (mm('(any-pointer: coarse)').matches && !mm('(any-pointer: fine)').matches) return true;
+    }
+    var hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    if (hasTouch) {
+      // 有触摸但同时也报了精细指针（带触摸屏的笔记本）→ 仍按桌面处理，保留 Ctrl+V 流程
+      if (!mm) return true;
+      return !mm('(pointer: fine)').matches;
+    }
+  } catch (e) {}
+  return false;
+}
+
 function initCoverPasteDrop() {
   var zone = document.getElementById('coverDropZone');
   if (!zone) return;
+
+  // 触屏模式：整块封面区盖一层透明 <label for="mediaCoverFile">，
+  // 点它由**浏览器原生**打开相册 —— 不走 JS、不受用户手势判定影响，
+  // 这是已安装 PWA / 安卓 WebView 里唯一稳的路径（JS 的 input.click() 在某些壳里会被静默忽略）。
+  var touchMode = _isTouchOnlyDevice();
+  if (touchMode) {
+    zone.classList.add('touch-mode');
+    document.body.classList.add('touch-ui');
+  } else {
+    zone.classList.remove('touch-mode');
+    document.body.classList.remove('touch-ui');
+  }
 
   // Paste listener on the whole modal
   var modal = document.getElementById('mediaModal');
@@ -8526,16 +8593,11 @@ function initCoverPasteDrop() {
     modal._pasteBound = true;
   }
 
-  // 触屏设备（手机/平板）没有 Ctrl+V 也没有拖拽 → 点整个封面区就唤起相册。
-  // 桌面端仍然不加 click：那会让「点击聚焦后粘贴」变成弹文件框（见下面 dragover 的注释）。
-  if (window.matchMedia && window.matchMedia('(hover: none)').matches && !zone._tapBound) {
-    zone.addEventListener('click', function(e) {
-      // 点在按钮上（选择图片 / ✕）交给按钮自己处理，避免弹两次
-      if (e.target && e.target.closest && e.target.closest('button')) return;
-      coverPickFile();
-    });
-    zone._tapBound = true;
-  }
+  // 触屏设备（手机/平板）没有 Ctrl+V 也没有拖拽 → 点整个封面区唤起相册。
+  // 【2026-10-22】这一步以前用 JS 的 input.click()，在"已安装的 PWA / 安卓 WebView"里会被静默忽略。
+  // 现在改由上面那层原生 <label for="mediaCoverFile"> 完成（浏览器自己弹），JS 不再插手；
+  // 桌面端仍不加 click（保留"点一下聚焦、Ctrl+V 粘贴"的习惯）。
+  // 备用路径：提示区里的「📁 选择图片」按钮走 coverPickFile()（JS），与 label 互为兜底。
 
   // Drag & drop only — NO click handler on desktop (click was opening file picker,
   // blocking users from clicking to focus for Ctrl+V paste)
@@ -12354,12 +12416,57 @@ checkBackupReminder();
 
 // Visible build marker — lets the user confirm which deployed version they see
 // (useful when debugging cache/CDN staleness). Update this string on every deploy.
+// 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
+// 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
+  window.__BUILD__ = 'build 20261022c';
   var b = document.createElement('div');
   b.id = 'buildMarker';
-  b.textContent = 'build 20261022b';
+  b.textContent = window.__BUILD__;
   b.style.cssText = 'position:fixed;bottom:4px;right:6px;font-size:10px;opacity:.5;z-index:99999;pointer-events:none;font-family:monospace;color:#888';
   document.body.appendChild(b);
+
+  window.showEnvDiag = function () {
+    var q = function (s) { try { return String(window.matchMedia(s).matches); } catch (e) { return 'err'; } };
+    var zone = document.getElementById('coverDropZone');
+    var inp = document.getElementById('mediaCoverFile');
+    var lb = document.querySelector('label.cover-file-tap');
+    var cs = inp ? getComputedStyle(inp) : null;
+    var lines = [
+      'build: ' + window.__BUILD__,
+      '',
+      'UA: ' + navigator.userAgent,
+      'standalone: ' + q('(display-mode: standalone)') + '   (ios standalone: ' + (navigator.standalone === true) + ')',
+      'hover:none = ' + q('(hover: none)') + '   pointer:coarse = ' + q('(pointer: coarse)'),
+      'any-pointer coarse/fine = ' + q('(any-pointer: coarse)') + ' / ' + q('(any-pointer: fine)'),
+      'maxTouchPoints = ' + navigator.maxTouchPoints + '   ontouchstart = ' + ('ontouchstart' in window),
+      'isTouchOnlyDevice() = ' + (typeof _isTouchOnlyDevice === 'function' ? _isTouchOnlyDevice() : 'n/a'),
+      '',
+      '封面区 touch-mode = ' + (zone ? zone.classList.contains('touch-mode') : 'no zone'),
+      '原生 label display = ' + (lb ? getComputedStyle(lb).display : 'missing'),
+      '文件输入 = ' + (cs ? (cs.display + ' / ' + cs.visibility + ' / opacity ' + cs.opacity) : 'missing'),
+      '',
+      'url: ' + location.href
+    ];
+    var txt = lines.join('\n');
+    var box = document.getElementById('envDiagBody');
+    if (box) {
+      box.textContent = txt;
+      box.style.cssText = 'display:block;background:var(--surface-hover);border:1px solid var(--border);border-radius:8px;'
+        + 'padding:10px;font:11px/1.5 monospace;white-space:pre-wrap;word-break:break-all;max-height:50vh;overflow:auto';
+      return;
+    }
+    // 兜底：数据页不存在时用浮层
+    var old = document.getElementById('envDiagPanel');
+    if (old) { old.parentNode.removeChild(old); return; }
+    var p = document.createElement('div');
+    p.id = 'envDiagPanel';
+    p.style.cssText = 'position:fixed;left:8px;right:8px;bottom:24px;max-height:70vh;overflow:auto;z-index:100000;'
+      + 'background:#111;color:#e5e5e5;font:11px/1.45 monospace;padding:12px;border-radius:10px;'
+      + 'box-shadow:0 8px 30px rgba(0,0,0,.5);white-space:pre-wrap;word-break:break-all';
+    p.textContent = txt + '\n\n（再点一次按钮关闭）';
+    document.body.appendChild(p);
+  };
 })();
 </script>
 
