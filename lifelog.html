@@ -2603,6 +2603,7 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-ghost" onclick="showEnvDiag()">🔍 显示诊断信息</button>
             <button class="btn btn-ghost" onclick="showPickerHelp()">🖼️ 选不了图？</button>
+            <button class="btn btn-ghost" onclick="pwaCheckNewBuild(true, true)">🔄 检查更新</button>
           </div>
           <div class="mt-8" id="envDiagBody" style="display:none"></div>
         </div>
@@ -12772,7 +12773,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024a';
+  window.__BUILD__ = 'build 20261024b';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
@@ -12981,15 +12982,19 @@ checkBackupReminder();
 
   renderOffline();
 
-  // 抢救模式（?rescue=1）是只读诊断通道，保持干净：不碰 SW、不碰缓存
-  if (!hasSW || !isSecure || IS_RESCUE) return;
+  // 抢救模式（?rescue=1）是只读诊断通道，保持干净：不碰 SW、不碰缓存。
+  // 但「版本自检 / 更新提示 / 自动更新」这些**纯 UI 逻辑**必须照常定义 ——
+  // 否则 rescue 模式（以及不支持 SW 的浏览器）里这些函数全是 undefined，连测试都没法测。
+  var swEnabled = !!(hasSW && isSecure && !IS_RESCUE);
 
   var wantReload = false;
   // 只有用户点了「立即更新」才自动重载。否则首次安装时 clients.claim() 触发的
   // controllerchange 会导致一次多余的整页刷新（体验上很像崩溃）。
-  navigator.serviceWorker.addEventListener('controllerchange', function () {
-    if (wantReload) location.reload();
-  });
+  if (swEnabled) {
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (wantReload) location.reload();
+    });
+  }
 
   var _newBuild = '';           // 检出到的线上版本（与当前运行的版本不同）
 
@@ -13007,6 +13012,7 @@ checkBackupReminder();
       // 这一步很关键 —— 没有等待中的 SW 时（旧 SW 一直没被替换），普通 reload 可能又拿回旧页面。
       location.href = location.pathname + '?pwa=1&upd=' + Date.now();
     }
+    if (!swEnabled || !navigator.serviceWorker) { hardReload(); return; }
     navigator.serviceWorker.getRegistration().then(function (reg) {
       if (reg && reg.waiting) {
         wantReload = true;
@@ -13021,6 +13027,44 @@ checkBackupReminder();
       if (_newBuild) hardReload(); else location.reload();
     });
   };
+
+  // ===== 安全自动更新 =====
+  // 为什么需要：我在持续部署新版本，而「主屏图标」可能一直跑着旧代码（安卓点图标只是恢复后台页）。
+  // 用户以为测的是新版，其实不是 —— 这类误会已经发生过多次。
+  // 规则：检测到新版本且当前「没有弹窗 / 没有正在输入 / 没有图片上传」→ 等 3 秒自动更新；
+  // 否则保留提示条，等用户自己点（绝不在用户操作中打断）。
+  function _anyModalOpen() {
+    var list = document.querySelectorAll('.modal-overlay');
+    for (var i = 0; i < list.length; i++) {
+      var el = list[i];
+      if (el.classList.contains('active')) return true;
+      var d = el.style.display;
+      if (d && d !== 'none') return true;
+    }
+    return false;
+  }
+  function canAutoUpdate() {
+    if (_anyModalOpen()) return { ok: false, reason: 'modal' };
+    if (window._coverUploadPromise) return { ok: false, reason: 'uploading' };
+    var ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName) && (ae.value || '').length > 0) {
+      return { ok: false, reason: 'typing' };
+    }
+    return { ok: true };
+  }
+  window.pwaCanAutoUpdate = canAutoUpdate;
+  function autoUpdateIfSafe(delay) {
+    var d = canAutoUpdate();
+    if (!d.ok) return false;
+    setTimeout(function () {
+      if (!canAutoUpdate().ok) return;          // 期间用户可能打开了弹窗 → 放弃
+      try { if (typeof flushDailyInput === 'function') flushDailyInput(); } catch (e) {}
+      window.__pwaAutoUpdated = true;
+      window.pwaApplyUpdate();
+    }, delay == null ? 3000 : delay);
+    return true;
+  }
+  window.pwaAutoUpdateIfSafe = autoUpdateIfSafe;
 
   function showUpdateBar(newB, curB) {
     var label = '有新版本' + (newB ? ' ' + newB : '')
@@ -13037,7 +13081,7 @@ checkBackupReminder();
   // 于是一直跑着旧代码 —— 2026-10-22 就是这种情况（网址打开正常、点桌面图标还是旧行为）。
   // 这里直接读线上的 sw.js（唯一参数 + no-store，绕开 CDN 与 HTTP 缓存）比对 BUILD。
   var lastBuildCheck = 0;
-  function checkNewBuild(force) {
+  function checkNewBuild(force, manual) {
     var now = Date.now();
     if (!force && now - lastBuildCheck < 60000) return;
     lastBuildCheck = now;
@@ -13050,13 +13094,17 @@ checkBackupReminder();
         if (m && m[1] && m[1] !== cur) {
           _newBuild = m[1];
           showUpdateBar(m[1], cur);
+          // 空闲时自动更新，避免「一直在测旧版本」；忙碌时只留提示条
+          autoUpdateIfSafe(3000);
+        } else if (m && manual) {
+          toast('已是最新版本（' + cur + '）✅');
         }
       })
       .catch(function () {});
   }
   window.pwaCheckNewBuild = checkNewBuild;   // 供测试与手工调用
 
-  navigator.serviceWorker.register('sw.js', { scope: './' }).then(function (reg) {
+  if (swEnabled) navigator.serviceWorker.register('sw.js', { scope: './' }).then(function (reg) {
     function checkWaiting() {
       if (reg.waiting && navigator.serviceWorker.controller) showUpdateBar(_newBuild, runningBuild());
     }
