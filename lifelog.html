@@ -1043,7 +1043,9 @@ body{
   content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);
   width:3px;height:20px;background:var(--primary);border-radius:0 2px 2px 0;
 }
-.nav-item .icon{font-size:18px;width:24px;text-align:center;flex-shrink:0}
+.nav-item .icon{font-size:18px;width:24px;text-align:center;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.nav-item .icon svg,.mobile-nav-item .icon svg{width:18px;height:18px;display:block}
+.mobile-nav-item .icon{display:flex;align-items:center;justify-content:center}
 
 .sidebar-footer{
   padding:12px;
@@ -1908,7 +1910,8 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
 }
 .todo-row{
   display:flex;align-items:center;gap:10px;
-  padding:10px 4px;border-bottom:1px solid var(--border-light);
+  padding:10px 4px 10px 7px;border-bottom:1px solid var(--border-light);
+  border-left:3px solid transparent;
 }
 .todo-check{
   width:20px;height:20px;border-radius:6px;flex-shrink:0;
@@ -1928,6 +1931,11 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
   font-size:16px;padding:4px 8px;border-radius:6px;flex-shrink:0;
   transition:all .15s;
 }
+.todo-row.todo-accent-done{border-left-color:var(--success)}
+.todo-row.todo-accent-overdue{border-left-color:var(--danger)}
+.todo-row.todo-accent-today{border-left-color:var(--primary)}
+.todo-row.todo-accent-week{border-left-color:var(--warning)}
+.todo-due{font-size:11px;font-weight:500;padding:1px 7px;border-radius:6px;flex-shrink:0;white-space:nowrap}
 .todo-del:hover{background:var(--danger-bg);color:var(--danger)}
 .todo-empty{text-align:center;color:var(--text-muted);padding:24px 0;font-size:13px}
 .todo-add-btn{
@@ -5863,6 +5871,72 @@ function navigate(page) {
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
+// ===== UI 提质：导航线性图标 + 待办层次 + 页面副标题 =====
+// 导航图标：用一套线性 SVG（Lucide 风，stroke=currentColor）替换 emoji。
+// 导航项本就靠 color 控制选中/悬停色，SVG 用 currentColor 即可自动跟随，无需重写配色。
+var NAV_ICONS = {
+  health:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>',
+  finance:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/></svg>',
+  media:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 8h20M2 15h20"/></svg>',
+  daily:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  todos:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  network:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  export:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8l-9 5-9-5V8l9-5 9 5Z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>'
+};
+function applyNavIcons() {
+  document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(function(el) {
+    var p = el.getAttribute('data-page');
+    var svg = NAV_ICONS[p];
+    if (!svg) return;
+    var span = el.querySelector('.icon');
+    if (span) span.innerHTML = svg;
+  });
+}
+
+// 待办层次：左侧状态色条 + 到期胶囊（日历视图用独立 lane，不受影响）
+function dayDiff(a, b) {
+  return Math.round((Date.parse(a + 'T00:00:00') - Date.parse(b + 'T00:00:00')) / 86400000);
+}
+function todoAccentClass(t) {
+  if (t.done) return 'todo-accent-done';
+  var d = dayDiff(t.date, todayStr());
+  if (d < 0) return 'todo-accent-overdue';
+  if (d === 0) return 'todo-accent-today';
+  if (d <= 7) return 'todo-accent-week';
+  return '';
+}
+function todoDuePill(t) {
+  if (t.done) return '';
+  var d = dayDiff(t.date, todayStr());
+  if (d < 0) return '<span class="todo-due" style="background:var(--danger-bg);color:var(--danger)">逾期</span>';
+  if (d === 0) return '<span class="todo-due" style="background:var(--primary-bg);color:var(--primary)">今日</span>';
+  if (d <= 7) return '<span class="todo-due" style="background:var(--warning-bg);color:#854f0b">本周</span>';
+  return '';
+}
+
+// 页面副标题：给每个页面头部补一行说明，缓解"头部太空"
+var PAGE_SUBTITLES = {
+  health:'睡眠 · 运动 · 用药',
+  finance:'账户与持仓市值',
+  media:'看过的电影 / 剧 / 书 / 演出',
+  daily:'今天的记录与自悟',
+  todos:'今天 ' + todayStr() + ' 的待办',
+  network:'人脉与项目',
+  export:'备份 · 同步 · 系统状态'
+};
+function applyPageSubtitle(page) {
+  var h = document.querySelector('.page.active .page-header');
+  if (!h) return;
+  var sub = h.querySelector('.page-subtitle');
+  if (!sub) {
+    sub = document.createElement('div');
+    sub.className = 'page-subtitle';
+    sub.style.flexBasis = '100%';
+    h.appendChild(sub);
+  }
+  sub.textContent = PAGE_SUBTITLES[page] || '';
+}
+
 function renderPage(page) {
   switch(page) {
     case 'health': renderHealth(); break;
@@ -5883,6 +5957,7 @@ function renderPage(page) {
     case 'network': renderNetwork(); break;
     case 'export': renderSystemStatus(); loadDbUsage(); break;
   }
+  applyPageSubtitle(page);
 }
 
 document.querySelectorAll('[data-page]').forEach(el => {
@@ -10230,6 +10305,7 @@ function renderTagResults() {
 
 // Bind file input + auto-save on typing + tag enter
 document.addEventListener('DOMContentLoaded', function() {
+  applyNavIcons();
   var input = document.getElementById('dailyImageInput');
   if (input) {
     input.addEventListener('change', function() { handleDailyImageUpload(this); });
@@ -10897,9 +10973,12 @@ function renderTodoRow(t) {
   var tag = getTodoTag(t.tag);
   var badge = tag ? '<span class="todo-tag-badge" style="background:'+tag.bg+';color:'+tag.color+'">'+tag.label+'</span>' : '';
   var range = isMultiDay(t) ? '<span class="todo-tag-badge" style="background:var(--surface-hover);color:var(--text-muted)">📅 '+fmtShort(t.date)+' → '+fmtShort(t.dateEnd)+'</span>' : '';
-  return '<div class="todo-row">'+
+  var accent = todoAccentClass(t);
+  var due = todoDuePill(t);
+  return '<div class="todo-row '+accent+'">'+
     '<div class="todo-check'+(t.done?' done':'')+'" onclick="toggleTodo(\''+t.id+'\')">'+(t.done?'✓':'')+'</div>'+
     '<div class="todo-content'+(t.done?' done':'')+'" onclick="startEditTodo(\''+t.id+'\')" title="点击修改内容、标签和日期">'+(badge ? badge+' ' : '')+(range ? range+' ' : '')+escapeHtml(t.content)+'</div>'+
+    (due ? due : '')+
     '<button class="todo-del" onclick="deleteTodo(\''+t.id+'\')" title="删除">×</button>'+
   '</div>';
 }
@@ -12882,7 +12961,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024d';
+  window.__BUILD__ = 'build 20261024e';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
