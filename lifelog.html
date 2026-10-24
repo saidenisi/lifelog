@@ -2588,6 +2588,19 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
 
       <div class="card mt-16">
         <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div class="card-title">🩺 系统状态</div>
+          <button class="btn btn-ghost btn-sm" onclick="renderSystemStatus()">🔄 刷新</button>
+        </div>
+        <div class="card-body">
+          <div id="sysStatusBody" style="display:none"></div>
+          <div class="text-sm text-muted" style="margin-top:10px;font-size:11px;line-height:1.6">
+            任何功能异常，先看这一屏：版本号、是否跑在主屏壳里、上次同步/备份多久前、有没有没推上去的改动。
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-16">
+        <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
           <div class="card-title">📊 云端用量</div>
           <button class="btn btn-ghost btn-sm" onclick="loadDbUsage()">🔄 刷新</button>
         </div>
@@ -4095,6 +4108,7 @@ async function pullAllFromCloud() {
   if (!metaFailed) setSyncMeta(localMeta);
 
   _pullErrors = errors;
+  if (!errors) markSynced();     // 记录上次成功同步（供「系统状态」显示）
   if (errors) {
     setSyncStatus('拉取失败('+errors+') ⚠️', 'error');
   } else if (changed) {
@@ -4207,6 +4221,91 @@ function keyHasPending(key) {
   return v.some(function(r) { return r && r._pendingPush; });
 }
 
+// 记录「上次成功同步」时间戳（系统状态卡用）
+function markSynced() {
+  try { localStorage.setItem('lifelog_lastSync', new Date().toISOString()); } catch (e) {}
+}
+
+// ===== 系统状态卡（数据页）=====
+// 目的：把「版本 / 环境 / 同步 / 备份 / 待推送 / 离线 / SW」集中到一处。
+// 以后任何异常（同步没上来、备份过期、跑在奇怪的壳里）先看这一屏就能判断，
+// 不用再靠猜或来回问。
+function _fmtAgo(iso) {
+  if (!iso) return '从未';
+  var t = new Date(iso).getTime();
+  if (!t) return '从未';
+  var ms = Date.now() - t;
+  var min = Math.floor(ms / 60000);
+  if (min < 1) return '刚刚';
+  if (min < 60) return min + ' 分钟前';
+  var h = Math.floor(min / 60);
+  if (h < 24) return h + ' 小时前';
+  var d = Math.floor(h / 24);
+  return d + ' 天前';
+}
+
+function renderSystemStatus() {
+  var box = document.getElementById('sysStatusBody');
+  if (!box) return;
+
+  var e = (typeof _pickerEnvInfo === 'function') ? _pickerEnvInfo() : { standalone: false, shell: '', ua: '' };
+  var envLabel = e.shell ? ('主屏壳：' + e.shell) : (e.standalone ? '主屏独立窗口' : '浏览器页面');
+
+  // 注意：不能用 keyHasPending —— 它对单对象集合（rates / hlState）永远返回 true
+  // （按设计它们每次都推），那样「待推送」永远非空，这条信息就没意义了。
+  // 这里只统计「数组集合里确实存在 _pendingPush 记录」的，才是用户真正关心的"还没同步上去"。
+  var pending = [];
+  try {
+    SYNC_KEYS.forEach(function (k) {
+      var v = DB.get(k);
+      if (!Array.isArray(v)) return;
+      if (v.some(function (r) { return r && r._pendingPush; })) pending.push(k);
+    });
+  } catch (err) {}
+
+  var lastSync = localStorage.getItem('lifelog_lastSync');
+  var lastBackup = localStorage.getItem('lifelog_lastBackup');
+  var backupDays = lastBackup ? Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000) : null;
+  var backupWarn = (backupDays === null) || backupDays >= 7;
+
+  function row(k, v, color) {
+    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border-light)">'
+      + '<span style="color:var(--text-muted);font-size:12px;flex-shrink:0">' + k + '</span>'
+      + '<span style="font-size:12px;font-weight:600;text-align:right;word-break:break-all;'
+      + (color ? 'color:' + color : '') + '">' + v + '</span></div>';
+  }
+
+  var html = '';
+  html += row('版本', (window.__BUILD__ || '未知'));
+  html += row('运行环境', envLabel);
+  html += row('网络', navigator.onLine ? '在线' : '离线（本地数据，恢复后自动同步）', navigator.onLine ? '' : 'var(--warning)');
+  html += row('上次同步', _fmtAgo(lastSync));
+  html += row('待推送集合', pending.length ? (pending.length + ' 个：' + pending.slice(0, 4).join('、') + (pending.length > 4 ? '…' : '')) : '无（全部已同步）',
+    pending.length ? 'var(--warning)' : 'var(--success)');
+  html += row('上次备份', (lastBackup ? (_fmtAgo(lastBackup) + (backupDays !== null ? '（' + backupDays + ' 天前）' : '')) : '从未备份'),
+    backupWarn ? 'var(--danger)' : '');
+  if (backupWarn) {
+    html += '<div style="margin-top:8px;font-size:12px;line-height:1.6;color:var(--danger)">'
+      + '⚠️ 备份已' + (lastBackup ? ('超过 ' + backupDays + ' 天') : '从未做过') + '。'
+      + '云端没有版本历史，建议现在导出一次（见上方「📦 数据导出」）。</div>';
+  }
+
+  box.innerHTML = html;
+  box.style.cssText = 'display:block;margin-top:8px';
+
+  // SW 状态单独异步补一行（不阻塞渲染）
+  if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+    navigator.serviceWorker.getRegistration().then(function (reg) {
+      var txt = reg ? (reg.active ? ('已注册（' + (reg.active.state || 'active') + '）') : '已注册（未激活）') : '未注册（离线不可用）';
+      var extra = document.createElement('div');
+      extra.style.cssText = 'display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-size:12px';
+      extra.innerHTML = '<span style="color:var(--text-muted)">离线能力</span>'
+        + '<span style="font-weight:600;color:' + (reg ? 'var(--success)' : 'var(--text-muted)') + '">' + txt + '</span>';
+      box.appendChild(extra);
+    }).catch(function () {});
+  }
+}
+
 // Push all local data to cloud
 async function pushAllToCloud() {
   if (__RESCUE_MODE__) return;
@@ -4278,6 +4377,7 @@ async function pushAllToCloud() {
       }
     } catch(e) { errors++; console.warn('[Sync] push failed', key, e); }
   }
+  if (!errors) markSynced();
   setSyncStatus(errors ? '上传失败 ⚠️' : '已同步 ✅', errors ? 'error' : 'synced');
   // 失败自动重试一次（网络抖动常见），避免删除/修改没同步到云端、其它端看到旧数据
   if (errors && (_pushRetryCount || 0) < 2) {
@@ -5780,7 +5880,7 @@ function renderPage(page) {
     case 'daily': renderDaily(); break;
     case 'todos': renderTodos(); break;
     case 'network': renderNetwork(); break;
-    case 'export': loadDbUsage(); break;
+    case 'export': renderSystemStatus(); loadDbUsage(); break;
   }
 }
 
@@ -12773,7 +12873,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024b';
+  window.__BUILD__ = 'build 20261024c';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
