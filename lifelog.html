@@ -6712,6 +6712,7 @@ function renderMedImages() {
   });
   // 原生 <label for> 触发（理由同 renderImages）
   html += '<label class="daily-img-add" for="medImageInput" title="添加图片">＋<span>图片</span></label>';
+  html += _imageUrlRowHtml('med');
   el.innerHTML = html;
 }
 
@@ -9937,6 +9938,53 @@ function deleteDailyImage(index) {
   }
 }
 
+// ===== 「用链接添加图片」：选不了图时的替代路径（任何环境都能用）=====
+// prefix: 'daily' | 'med'
+function _imageUrlRowHtml(prefix) {
+  var rowId = prefix + 'ImgUrlRow';
+  return '<div style="flex-basis:100%;margin-top:2px">'
+    + '<a href="javascript:void(0)" style="font-size:11px;color:var(--primary);text-decoration:underline"'
+    + ' onclick="toggleImageUrlRow(\'' + prefix + '\')">🔗 用链接添加图片</a>'
+    + '<div id="' + rowId + '" style="display:none;margin-top:6px;gap:6px;align-items:center">'
+    + '<input type="url" id="' + prefix + 'ImgUrlInput" class="form-input" placeholder="https://… 图片地址"'
+    + ' style="flex:1;min-width:0;font-size:12px;padding:6px 8px" autocomplete="off"'
+    + ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();addImageByUrl(\'' + prefix + '\');}">'
+    + '<button type="button" class="btn btn-ghost btn-sm" onclick="addImageByUrl(\'' + prefix + '\')">添加</button>'
+    + '</div></div>';
+}
+
+function toggleImageUrlRow(prefix) {
+  var row = document.getElementById(prefix + 'ImgUrlRow');
+  if (!row) return;
+  var open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'flex';
+  if (!open) {
+    var inp = document.getElementById(prefix + 'ImgUrlInput');
+    if (inp) { setTimeout(function () { inp.focus(); }, 50); }
+  }
+}
+
+function addImageByUrl(prefix) {
+  var inp = document.getElementById(prefix + 'ImgUrlInput');
+  if (!inp) return;
+  var url = (inp.value || '').trim();
+  if (!url) { toast('请先粘贴图片地址'); return; }
+  if (!/^https?:\/\//i.test(url)) { toast('地址要以 http:// 或 https:// 开头'); return; }
+  if (prefix === 'daily') {
+    currentImages.push(url);
+    inp.value = '';
+    renderImages();
+    _dailyDirty = true;
+    scheduleDailyAutoSave();
+    toast('已用链接添加图片 ✅');
+  } else {
+    currentMedImages.push(url);
+    inp.value = '';
+    renderMedImages();
+    toast('已用链接添加图片 ✅');
+  }
+}
+
 function renderImages() {
   var el = document.getElementById('dailyImages');
   if (!el) return;
@@ -9950,6 +9998,7 @@ function renderImages() {
   // 用原生 <label for> 触发选图（不用 onclick + input.click()）：
   // 已安装的 PWA / 安卓 WebView 里 JS 触发可能被静默忽略，label 由浏览器自己弹。
   html += '<label class="daily-img-add" for="dailyImageInput" title="添加图片">＋<span>图片</span></label>';
+  html += _imageUrlRowHtml('daily');
   el.innerHTML = html;
 }
 
@@ -12723,7 +12772,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261022g';
+  window.__BUILD__ = 'build 20261024a';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
