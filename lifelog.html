@@ -900,8 +900,6 @@
 :root{
   --primary:#6366f1;
   --primary-light:#818cf8;
-  --purple:#7c3aed;
-  --purple-bg:#f5f3ff;
   --primary-dark:#4f46e5;
   --primary-bg:#eef2ff;
   --success:#10b981;
@@ -937,8 +935,6 @@
 [data-theme="dark"]{
   --primary:#818cf8;
   --primary-light:#a5b4fc;
-  --purple:#a78bfa;
-  --purple-bg:#3b0764;
   --primary-dark:#6366f1;
   --primary-bg:#312e81;
   --success:#34d399;
@@ -2123,92 +2119,6 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .member-pick-dropdown .opt .py{color:var(--text-muted);font-size:11px;flex-shrink:0}
 .net-note{font-size:12px;color:var(--text-secondary);background:var(--border-light);padding:1px 6px;border-radius:6px;margin-left:4px;line-height:1.5}
 .net-tagline{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px}
-
-/* ===== 工作台 / 工作模块 新增样式 ===== */
-.mb-16{margin-bottom:16px}
-/* 模块直达网格 */
-.mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:14px}
-.mod-card{display:flex;align-items:center;gap:14px;padding:16px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow);cursor:pointer;transition:transform .2s,box-shadow .2s,border-color .2s;position:relative;overflow:hidden}
-.mod-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--primary)}
-.mod-icon{width:46px;height:46px;border-radius:13px;background:var(--primary-bg);color:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.mod-icon svg{width:24px;height:24px;display:block}
-.mod-body{min-width:0;flex:1}
-.mod-name{font-size:15px;font-weight:700}
-.mod-desc{font-size:12px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mod-badge{position:absolute;top:10px;right:12px;font-size:12px;font-weight:700;color:var(--primary);background:var(--primary-bg);border-radius:20px;padding:2px 9px}
-.mod-arrow{font-size:22px;color:var(--text-muted);margin-left:4px;flex-shrink:0;line-height:1}
-.mod-card:hover .mod-arrow{color:var(--primary)}
-
-/* 工作台速览列表 */
-.hm-check{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
-.hm-check.done{background:var(--success);border-color:var(--success)}
-.hm-todo,.hm-proj,.hm-note{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border-light);font-size:14px;cursor:pointer}
-.hm-todo:last-child,.hm-proj:last-child,.hm-note:last-child{border-bottom:none}
-.hm-todo:hover,.hm-proj:hover,.hm-note:hover{background:var(--surface-hover)}
-.hm-todo-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hm-todo-text.done{text-decoration:line-through;color:var(--text-muted)}
-.hm-todo-date{font-size:12px;color:var(--text-muted);flex-shrink:0}
-.hm-proj{justify-content:space-between}
-.hm-proj-name{font-weight:600}
-.hm-proj-meta{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap}
-.hm-note{padding:10px 4px}
-.hm-note-date{font-size:12px;color:var(--text-muted);flex-shrink:0;font-weight:600}
-.hm-note-text{flex:1;min-width:0;color:var(--text-secondary);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hm-empty{padding:18px;text-align:center;color:var(--text-muted);font-size:13px}
-.card-more{font-size:13px;color:var(--primary);cursor:pointer;font-weight:600}
-.card-more:hover{text-decoration:underline}
-
-/* 工作模块统计卡配色 */
-.stat-card.home::before{background:linear-gradient(90deg,var(--primary),var(--purple))}
-.stat-card.home .stat-icon{background:var(--primary-bg);color:var(--primary)}
-.stat-card.work::before{background:linear-gradient(90deg,var(--purple),#a855f7)}
-.stat-card.work .stat-icon{background:var(--purple-bg);color:var(--purple)}
-
-/* 工作模块：项目看板 + 待办清单 */
-.wk-board{display:flex;flex-direction:column;gap:10px;max-height:540px;overflow-y:auto;padding-right:4px}
-.wk-proj{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);cursor:pointer;transition:border-color .2s,transform .2s}
-.wk-proj:hover{border-color:var(--purple);transform:translateY(-2px)}
-.wk-proj-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.wk-proj-name{font-weight:700;font-size:14px}
-.wk-proj-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.wk-proj-intro{font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.5;white-space:pre-wrap}
-.wk-todo-list{max-height:540px;overflow-y:auto;padding-right:4px}
-.wk-todo{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--border-light);cursor:pointer;font-size:14px}
-.wk-todo:hover{background:var(--surface-hover)}
-.wk-todo-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wk-todo-text.done{text-decoration:line-through;color:var(--text-muted)}
-.wk-todo-date{font-size:12px;color:var(--text-muted);flex-shrink:0}
-.wk-sec-title{font-size:13px;font-weight:700;color:var(--text-secondary);margin:14px 0 6px}
-.wk-sec-title:first-child{margin-top:0}
-
-/* 工作项目详情弹窗（二级钻取） */
-.wk-detail-section{margin-top:14px}
-.wk-detail-section h4{font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-secondary)}
-.wk-detail-intro{font-size:14px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin:10px 0}
-.wk-member-list{display:flex;flex-wrap:wrap;gap:8px}
-.wk-member{font-size:13px;background:var(--surface-hover);border:1px solid var(--border);border-radius:20px;padding:4px 12px;display:inline-flex;align-items:center;gap:6px}
-.wk-member-note{color:var(--text-muted);font-size:12px}
-.wk-member-left{color:var(--text-muted);font-size:11px}
-.wk-fu{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px}
-.wk-fu-dot{width:8px;height:8px;border-radius:50%;background:var(--border);flex-shrink:0}
-.wk-fu-done{color:var(--text-muted)}
-.wk-fu-done .wk-fu-dot{background:var(--success)}
-.wk-fu-due .wk-fu-text{color:var(--danger);font-weight:600}
-.wk-fu-due .wk-fu-dot{background:var(--danger)}
-.wk-fu-text{flex:1;min-width:0}
-.wk-fu-date{font-size:12px;color:var(--text-muted);flex-shrink:0}
-
-/* 移动端底部导航：9 项可横向滚动，避免挤压 */
-.mobile-nav{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.mobile-nav::-webkit-scrollbar{display:none}
-.mobile-nav-item{flex:0 0 auto;min-width:58px}
-
-@media(max-width:768px){
-  .mod-grid{grid-template-columns:1fr 1fr}
-}
-@media(max-width:480px){
-  .mod-grid{grid-template-columns:1fr}
-}
 </style>
 </head>
 <body>
@@ -2226,9 +2136,6 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
     </div>
     <nav class="nav">
       <div class="nav-label">主功能</div>
-      <div class="nav-item active" data-page="home">
-        <span class="icon">🏠</span><span>工作台</span>
-      </div>
       <div class="nav-item" data-page="health">
         <span class="icon">❤️</span><span>健康</span>
       </div>
@@ -2241,11 +2148,8 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
       <div class="nav-item" data-page="daily">
         <span class="icon">📅</span><span>每日记录</span>
       </div>
-      <div class="nav-item" data-page="todos">
+      <div class="nav-item active" data-page="todos">
         <span class="icon">✅</span><span>待办事项</span>
-      </div>
-      <div class="nav-item" data-page="work">
-        <span class="icon">💼</span><span>工作</span>
       </div>
       <div class="nav-item" data-page="network">
         <span class="icon">👥</span><span>人脉</span>
@@ -2268,9 +2172,6 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
   <!-- ===== Main ===== -->
   <main class="main">
     <div class="top-sync-bar offline" id="topSyncBar" onclick="syncNow()" title="点击同步">☁️ 等待连接</div>
-
-    <!-- ===== Home / 工作台总览 ===== -->
-    <div class="page" id="page-home"></div>
 
     <!-- ===== Health Page（睡眠 + 健身 + 用药 + 健康理念） ===== -->
     <div class="page" id="page-health">
@@ -2643,7 +2544,7 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
     </div>
 
     <!-- ===== Todos Page ===== -->
-    <div class="page" id="page-todos">
+    <div class="page active" id="page-todos">
       <div class="page-header">
         <div>
           <div class="page-title">待办事项</div>
@@ -2796,21 +2697,16 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
       </div>
     </div>
 
-    <!-- ===== Work / 工作模块 ===== -->
-    <div class="page" id="page-work"></div>
-
   </main>
 </div>
 
 <!-- ===== Mobile Bottom Nav ===== -->
 <div class="mobile-nav">
-  <div class="mobile-nav-item active" data-page="home"><span class="icon">🏠</span>工作台</div>
   <div class="mobile-nav-item" data-page="health"><span class="icon">❤️</span>健康</div>
   <div class="mobile-nav-item" data-page="finance"><span class="icon">💰</span>投资</div>
   <div class="mobile-nav-item" data-page="media"><span class="icon">🎬</span>影音</div>
   <div class="mobile-nav-item" data-page="daily"><span class="icon">📅</span>每日</div>
-  <div class="mobile-nav-item" data-page="todos"><span class="icon">✅</span>待办</div>
-  <div class="mobile-nav-item" data-page="work"><span class="icon">💼</span>工作</div>
+  <div class="mobile-nav-item active" data-page="todos"><span class="icon">✅</span>待办</div>
   <div class="mobile-nav-item" data-page="network"><span class="icon">👥</span>人脉</div>
   <div class="mobile-nav-item" data-page="export"><span class="icon">📦</span>数据</div>
 </div>
@@ -5985,9 +5881,7 @@ var NAV_ICONS = {
   daily:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
   todos:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
   network:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-  export:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8l-9 5-9-5V8l9-5 9 5Z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>',
-  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></svg>',
-  work:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/></svg>'
+  export:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8l-9 5-9-5V8l9-5 9 5Z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>'
 };
 function applyNavIcons() {
   document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(function(el) {
@@ -6022,13 +5916,11 @@ function todoDuePill(t) {
 
 // 页面副标题：给每个页面头部补一行说明，缓解"头部太空"
 var PAGE_SUBTITLES = {
-  home:'今日概览 · 模块直达',
   health:'睡眠 · 运动 · 用药',
   finance:'账户与持仓市值',
   media:'看过的电影 / 剧 / 书 / 演出',
   daily:'今天的记录与自悟',
   todos:'今天 ' + todayStr() + ' 的待办',
-  work:'事务所工作 · 相关项目 · 进度追踪',
   network:'人脉与项目',
   export:'备份 · 同步 · 系统状态'
 };
@@ -6047,7 +5939,6 @@ function applyPageSubtitle(page) {
 
 function renderPage(page) {
   switch(page) {
-    case 'home': renderHome(); break;
     case 'health': renderHealth(); break;
     case 'finance':
       renderFinance();
@@ -6063,321 +5954,15 @@ function renderPage(page) {
     case 'media': renderMedia(); break;
     case 'daily': renderDaily(); break;
     case 'todos': renderTodos(); break;
-    case 'work': renderWork(); break;
     case 'network': renderNetwork(); break;
     case 'export': renderSystemStatus(); loadDbUsage(); break;
   }
   applyPageSubtitle(page);
 }
 
-// ===== 工作台总览首页（renderHome） =====
-// 纯只读聚合：统计 + 模块直达 + 今日待办 + 进行中项目 + 近期自悟。不写任何数据、不新建 schema。
-function homeStatCard(cls, icon, label, value, trendHtml) {
-  return '<div class="stat-card ' + cls + '">'
-    + '<div class="stat-icon">' + icon + '</div>'
-    + '<div class="stat-label">' + label + '</div>'
-    + '<div class="stat-value">' + value + '</div>'
-    + (trendHtml || '') + '</div>';
-}
-function homeTagBadge(tag) {
-  var t = getTodoTag(tag);
-  if (!t) return '';
-  return '<span class="todo-tag-badge" style="background:' + t.bg + ';color:' + t.color + '">' + escapeHtml(t.label) + '</span>';
-}
-function homeTodoRow(t) {
-  var end = t.dateEnd || t.date;
-  var range = (t.dateEnd && t.dateEnd > t.date) ? (' 📅' + fmtShort(t.date) + '→' + fmtShort(t.dateEnd)) : '';
-  var status = t.done ? '<span class="hm-check done">✓</span>' : '<span class="hm-check"></span>';
-  return '<div class="hm-todo" onclick="navigate(\'todos\')">'
-    + status
-    + '<span class="hm-todo-text' + (t.done ? ' done' : '') + '">' + escapeHtml(t.content || '') + '</span>'
-    + homeTagBadge(t.tag)
-    + '<span class="hm-todo-date">' + fmtShort(end) + range + '</span>'
-    + '</div>';
-}
-function renderHome() {
-  var p = document.getElementById('page-home');
-  if (!p) return;
-  var today = todayStr();
-  var todosAlive = (todosData || []).filter(function(t) { return !t._deleted; });
-  var todayTodos = todosAlive.filter(function(t) { var e = t.dateEnd || t.date; return t.date <= today && today <= e; });
-  var overdue = todayTodos.filter(function(t) { return !t.done && dayDiff(t.date, today) < 0; });
-  var dueToday = todayTodos.filter(function(t) { return !t.done && dayDiff(t.date, today) === 0; });
-  var openTodos = todosAlive.filter(function(t) { return !t.done; });
-  var doneThisMonth = todosAlive.filter(function(t) {
-    if (!t.done) return false;
-    var d = (t.doneAt || t.updatedAt || '').slice(0, 7);
-    return d === today.slice(0, 7);
-  });
-  var projects = (projectsData || []).filter(function(x) { return !x._deleted; });
-  var activeProjects = projects.filter(function(x) { return x.status === '进行中'; });
-  var persons = (personsData || []).filter(function(x) { return !x._deleted; });
-  var media = (mediaData || []).filter(function(x) { return !x._deleted; });
-  var workOpen = openTodos.filter(function(t) { return t.tag === 'work' || t.tag === 'project'; });
-
-  // 问候
-  var hr = new Date().getHours();
-  var greet = hr < 6 ? '凌晨好' : hr < 12 ? '早上好' : hr < 14 ? '中午好' : hr < 18 ? '下午好' : '晚上好';
-  var d = new Date();
-  var wk = '日一二三四五六'[d.getDay()];
-  var dateLabel = (d.getMonth() + 1) + '月' + d.getDate() + '日 · 周' + wk;
-  var lunar = lunarDayOnly(today);
-
-  // 模块直达
-  var MODULES = [
-    { page: 'health', name: '健康', desc: '睡眠 · 运动 · 用药', icon: 'health' },
-    { page: 'finance', name: '投资', desc: '账户与持仓市值', icon: 'finance' },
-    { page: 'media', name: '影音书演', desc: '电影 / 剧 / 书 / 演出', icon: 'media' },
-    { page: 'daily', name: '每日记录', desc: '今天的记录与自悟', icon: 'daily' },
-    { page: 'todos', name: '待办事项', desc: '今日待办与清单', icon: 'todos' },
-    { page: 'work', name: '工作', desc: '事务所与相关项目', icon: 'work' },
-    { page: 'network', name: '人脉', desc: '项目与人脉网络', icon: 'network' }
-  ];
-  function modCount(m) {
-    if (m.page === 'todos') return openTodos.length;
-    if (m.page === 'work') return workOpen.length;
-    if (m.page === 'network') return persons.length;
-    if (m.page === 'media') return media.length;
-    if (m.page === 'daily') return (dailyNotes || []).filter(function(n) { return !n._deleted; }).length;
-    return null;
-  }
-  var modHtml = MODULES.map(function(m) {
-    var svg = NAV_ICONS[m.icon] || '';
-    var c = modCount(m);
-    var badge = (typeof c === 'number') ? '<span class="mod-badge">' + c + '</span>' : '';
-    return '<div class="mod-card" onclick="navigate(\'' + m.page + '\')">'
-      + '<div class="mod-icon">' + svg + '</div>'
-      + '<div class="mod-body"><div class="mod-name">' + m.name + '</div>'
-      + '<div class="mod-desc">' + m.desc + '</div></div>'
-      + badge + '<span class="mod-arrow">›</span></div>';
-  }).join('');
-
-  // 今日待办速览（逾期 + 今日，最多 8 条）
-  var todoShow = overdue.concat(dueToday).slice(0, 8);
-  var todoHtml = todoShow.length
-    ? todoShow.map(homeTodoRow).join('')
-    : '<div class="hm-empty">今天没有待办，享受当下 ✨</div>';
-
-  // 进行中项目（最多 5 条）
-  var projShow = sortedProjects().filter(function(x) { return x.status === '进行中'; }).slice(0, 5);
-  var projHtml = projShow.length
-    ? projShow.map(function(pr) {
-        var mc = projectMemberCount(pr);
-        var due = dueFollowupCount(pr);
-        return '<div class="hm-proj" onclick="openWorkProject(\'' + pr.id + '\')">'
-          + '<span class="hm-proj-name">' + escapeHtml(pr.name) + '</span>'
-          + '<span class="hm-proj-meta"><span class="badge badge-success">进行中</span>'
-          + (mc > 0 ? ' <span class="badge badge-info">👥 ' + mc + ' 人</span>' : '')
-          + (due > 0 ? ' <span class="badge badge-danger">🔔 ' + due + '</span>' : '')
-          + '</span></div>';
-      }).join('')
-    : '<div class="hm-empty">暂无进行中的项目</div>';
-
-  // 近期自悟（最近 3 条有 knowledge 的每日记录）
-  var notes = (dailyNotes || []).filter(function(n) { return !n._deleted && n.knowledge && String(n.knowledge).trim(); })
-    .sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); }).slice(0, 3);
-  var noteHtml = notes.length
-    ? notes.map(function(n) {
-        var txt = String(n.knowledge).replace(/\s+/g, ' ').trim();
-        if (txt.length > 64) txt = txt.slice(0, 64) + '…';
-        return '<div class="hm-note" onclick="navigate(\'daily\')">'
-          + '<span class="hm-note-date">' + fmtShort(n.date) + '</span>'
-          + '<span class="hm-note-text">' + escapeHtml(txt) + '</span></div>';
-      }).join('')
-    : '<div class="hm-empty">还没有记录「自悟和他悟」</div>';
-
-  var overdueTrend = overdue.length
-    ? '<div class="stat-trend down">逾期 ' + overdue.length + '</div>'
-    : '<div class="stat-trend up">无逾期 🎉</div>';
-
-  p.innerHTML =
-    '<div class="page-header"><div><div class="page-title">' + greet + '，欢迎回到工作台</div>'
-    + '<div class="page-subtitle">' + dateLabel + (lunar ? ' · 农历' + lunar : '') + '</div></div></div>'
-    + '<div class="stat-grid">'
-    + homeStatCard('home', '📋', '今日待办', dueToday.length, overdueTrend)
-    + homeStatCard('streak', '⏰', '逾期事项', overdue.length, overdue.length ? '' : '<div class="stat-trend neutral">已清空</div>')
-    + homeStatCard('finance', '📁', '进行中项目', activeProjects.length, '<div class="stat-trend neutral">共 ' + projects.length + ' 个</div>')
-    + homeStatCard('sleep', '👥', '人脉', persons.length, '')
-    + homeStatCard('fit', '✅', '本月完成', doneThisMonth.length, '<div class="stat-trend up">继续保持</div>')
-    + homeStatCard('work', '🎬', '影音书演', media.length, '')
-    + '</div>'
-    + '<div class="card mb-16"><div class="card-header"><div class="card-title">🧭 模块直达</div>'
-    + '<button class="btn btn-ghost btn-sm" onclick="navigate(\'todos\')">查看全部待办</button></div>'
-    + '<div class="card-body"><div class="mod-grid">' + modHtml + '</div></div></div>'
-    + '<div class="grid-2">'
-    + '<div class="card"><div class="card-header"><div class="card-title">📌 今日待办</div>'
-    + '<span class="card-more" onclick="navigate(\'todos\')">全部 ' + openTodos.length + ' ›</span></div>'
-    + '<div class="card-body">' + todoHtml + '</div></div>'
-    + '<div class="card"><div class="card-header"><div class="card-title">🚀 进行中项目</div>'
-    + '<span class="card-more" onclick="navigate(\'work\')">工作模块 ›</span></div>'
-    + '<div class="card-body">' + projHtml + '</div></div>'
-    + '</div>'
-    + '<div class="card mb-16"><div class="card-header"><div class="card-title">💡 近期自悟</div>'
-    + '<span class="card-more" onclick="navigate(\'daily\')">每日记录 ›</span></div>'
-    + '<div class="card-body">' + noteHtml + '</div></div>';
-}
-
 document.querySelectorAll('[data-page]').forEach(el => {
   el.addEventListener('click', () => navigate(el.dataset.page));
 });
-
-// ===== 工作模块（renderWork） =====
-// 一等公民「工作」模块：聚合 work/project 标签待办 + 人脉项目，纯只读，不新建 schema。
-// 二级钻取：点击项目卡片 → openWorkProject 弹窗（项目详情 + 成员 + 跟进 + 相关待办）。
-function workTodoGroups() {
-  var today = todayStr();
-  var alive = (todosData || []).filter(function(t) { return !t._deleted && (t.tag === 'work' || t.tag === 'project'); });
-  var open = alive.filter(function(t) { return !t.done; });
-  var g = {
-    overdue: [], today: [], week: [], later: [], done: []
-  };
-  open.forEach(function(t) {
-    var dd = dayDiff(t.date, today);
-    if (dd < 0) g.overdue.push(t);
-    else if (dd === 0) g.today.push(t);
-    else if (dd <= 7) g.week.push(t);
-    else g.later.push(t);
-  });
-  g.done = alive.filter(function(t) { return t.done; });
-  return g;
-}
-function workTodoRow(t) {
-  var end = t.dateEnd || t.date;
-  var range = (t.dateEnd && t.dateEnd > t.date) ? (' 📅' + fmtShort(t.date) + '→' + fmtShort(t.dateEnd)) : '';
-  var status = t.done ? '<span class="hm-check done">✓</span>' : '<span class="hm-check"></span>';
-  return '<div class="wk-todo" onclick="navigate(\'todos\')">'
-    + status
-    + '<span class="wk-todo-text' + (t.done ? ' done' : '') + '">' + escapeHtml(t.content || '') + '</span>'
-    + homeTagBadge(t.tag)
-    + '<span class="wk-todo-date">' + fmtShort(end) + range + '</span></div>';
-}
-function renderWork() {
-  var p = document.getElementById('page-work');
-  if (!p) return;
-  var today = todayStr();
-  var g = workTodoGroups();
-  var openWork = g.overdue.length + g.today.length + g.week.length + g.later.length;
-  var projects = sortedProjects();
-  var activeProjects = projects.filter(function(x) { return x.status === '进行中'; });
-
-  var statHtml =
-    '<div class="stat-grid">'
-    + homeStatCard('work', '💼', '工作待办', openWork, '<div class="stat-trend neutral">work + project</div>')
-    + homeStatCard('finance', '📁', '项目总数', projects.length, '<div class="stat-trend neutral">进行中 ' + activeProjects.length + '</div>')
-    + homeStatCard('streak', '⏰', '逾期工作', g.overdue.length, g.overdue.length ? '' : '<div class="stat-trend up">无逾期</div>')
-    + homeStatCard('home', '📅', '本周待办', g.week.length, '<div class="stat-trend neutral">含今日 ' + g.today.length + '</div>')
-    + '</div>';
-
-  // 项目看板
-  var boardHtml = projects.length
-    ? projects.map(function(pr) {
-        var mc = projectMemberCount(pr);
-        var due = dueFollowupCount(pr);
-        var badge = pr.status === '进行中' ? 'badge-success' : pr.status === '已完成' ? 'badge-muted' : pr.status === '已暂停' ? 'badge-warning' : 'badge-info';
-        return '<div class="wk-proj" onclick="openWorkProject(\'' + pr.id + '\')">'
-          + '<div class="wk-proj-head"><span class="wk-proj-name">' + escapeHtml(pr.name) + '</span>'
-          + '<span class="badge ' + badge + '">' + escapeHtml(pr.status || '未设定') + '</span></div>'
-          + '<div class="wk-proj-meta">'
-          + (mc > 0 ? '<span class="badge badge-info">👥 ' + mc + ' 人</span>' : '')
-          + (due > 0 ? '<span class="badge badge-danger">🔔 ' + due + '</span>' : '')
-          + (pr.domain ? '<span class="badge badge-muted">' + escapeHtml(pr.domain) + '</span>' : '')
-          + '</div>'
-          + (pr.intro ? '<div class="wk-proj-intro">' + escapeHtml(pr.intro) + '</div>' : '')
-          + '</div>';
-      }).join('')
-    : '<div class="hm-empty">还没有项目，去「人脉 → 项目」添加</div>';
-
-  // 工作待办清单
-  function section(title, arr, empty) {
-    if (!arr.length) return empty ? '' : '<div class="wk-sec-title">' + title + '</div><div class="hm-empty">无</div>';
-    return '<div class="wk-sec-title">' + title + '（' + arr.length + '）</div>' + arr.map(workTodoRow).join('');
-  }
-  var todoHtml =
-    section('🔴 逾期', g.overdue)
-    + section('🟠 今日', g.today)
-    + section('🔵 本周', g.week)
-    + section('⚪ 其他', g.later)
-    + section('✅ 已完成', g.done);
-
-  p.innerHTML =
-    '<div class="page-header"><div><div class="page-title">工作</div>'
-    + '<div class="page-subtitle">事务所工作 · 相关项目 · 进度追踪</div></div>'
-    + '<button class="btn btn-ghost btn-sm" onclick="navigate(\'todos\')">➕ 去加待办</button></div>'
-    + statHtml
-    + '<div class="grid-2">'
-    + '<div class="card"><div class="card-header"><div class="card-title">📋 工作待办清单</div>'
-    + '<span class="card-more" onclick="navigate(\'todos\')">全部 ' + openWork + ' ›</span></div>'
-    + '<div class="card-body wk-todo-list">' + (todoHtml || '<div class="hm-empty">暂无工作相关待办</div>') + '</div></div>'
-    + '<div class="card"><div class="card-header"><div class="card-title">🗂️ 项目看板</div>'
-    + '<span class="card-more" onclick="navigate(\'network\')">人脉 ›</span></div>'
-    + '<div class="card-body wk-board">' + boardHtml + '</div></div>'
-    + '</div>';
-}
-
-// 二级钻取：项目详情弹窗（只读）
-function openWorkProject(id) {
-  var pr = (projectsData || []).find(function(x) { return x.id === id && !x._deleted; });
-  if (!pr) return;
-  var mc = projectMemberCount(pr);
-  var due = dueFollowupCount(pr);
-  var statusBadge = pr.status === '进行中' ? 'badge-success' : pr.status === '已完成' ? 'badge-muted' : pr.status === '已暂停' ? 'badge-warning' : 'badge-info';
-  // 成员姓名解析
-  var membersHtml = '';
-  var members = (pr.members || []);
-  if (members.length) {
-    membersHtml = '<div class="wk-detail-section"><h4>成员（' + mc + '）</h4><div class="wk-member-list">'
-      + members.map(function(mm) {
-          var person = (personsData || []).find(function(pp) { return pp.id === mm.personId && !pp._deleted; });
-          var name = person ? person.name : '未知';
-          var note = (mm.note) ? ' <span class="wk-member-note">' + escapeHtml(mm.note) + '</span>' : '';
-          var left = (mm.active === false) ? ' <span class="wk-member-left">已离开</span>' : '';
-          return '<span class="wk-member">' + escapeHtml(name) + note + left + '</span>';
-        }).join('') + '</div></div>';
-  }
-  // 跟进
-  var followHtml = '';
-  var fus = (pr.followUps || []);
-  if (fus.length) {
-    followHtml = '<div class="wk-detail-section"><h4>跟进（' + fus.length + '）</h4>'
-      + fus.slice().sort(function(a, b) { return sortFollowups([a, b])[0] === a ? -1 : 1; }).map(function(f) {
-          var done = f.done ? 'wk-fu-done' : (f.date && f.date <= todayStr() ? 'wk-fu-due' : '');
-          return '<div class="wk-fu ' + done + '"><span class="wk-fu-dot"></span>'
-            + '<span class="wk-fu-text">' + escapeHtml(f.text || '') + '</span>'
-            + (f.date ? '<span class="wk-fu-date">' + fmtShort(f.date) + '</span>' : '') + '</div>';
-        }).join('') + '</div>';
-  }
-  // 相关待办（work/project 标签，且内容/ref 命中项目名）
-  var related = (todosData || []).filter(function(t) {
-    if (t._deleted || t.done) return false;
-    if (t.tag !== 'work' && t.tag !== 'project') return false;
-    var hay = ((t.content || '') + ' ' + (t.ref || '')).toLowerCase();
-    return hay.indexOf((pr.name || '').toLowerCase()) >= 0;
-  });
-  var relHtml = '';
-  if (related.length) {
-    relHtml = '<div class="wk-detail-section"><h4>相关待办（' + related.length + '）</h4>'
-      + related.map(workTodoRow).join('') + '</div>';
-  }
-  var html =
-    '<div class="modal" style="max-width:560px"><div class="modal-header">'
-    + '<div class="modal-title">' + escapeHtml(pr.name) + ' <span class="badge ' + statusBadge + '">' + escapeHtml(pr.status || '未设定') + '</span></div>'
-    + '<button class="btn-icon" onclick="closeModal(\'workProjectModal\')">✕</button></div>'
-    + '<div class="modal-body">'
-    + (pr.domain ? infoRow('领域', pr.domain) : '')
-    + (pr.intro ? '<div class="wk-detail-intro">' + escapeHtml(pr.intro) + '</div>' : '')
-    + membersHtml + followHtml + relHtml
-    + '</div></div>';
-  var m = document.getElementById('workProjectModal');
-  if (!m) {
-    m = document.createElement('div');
-    m.className = 'modal-overlay';
-    m.id = 'workProjectModal';
-    document.body.appendChild(m);
-  }
-  m.innerHTML = html;
-  m.onclick = function(e) { if (e.target === m) closeModal('workProjectModal'); };
-  m.classList.add('active');
-}
 
 // Mobile sidebar
 function toggleSidebar() {
@@ -13300,8 +12885,8 @@ document.addEventListener('click', (e) => {
 initTheme();
 // 初始取一条随机划线笔记（每次打开页面换一条；游标跨端同步，保证不重复）
 initDailyHighlight();
-// 初始渲染默认页（工作台总览）
-navigate('home');
+// 初始渲染默认页（待办事项）
+navigate('todos');
 // 【2026-09-28 已停用】过期待办「自动顺延一周」曾把日期批量改写并推上云端（见函数处注释）。
 // 用户明确要求关掉：不再自动移动任何待办的日期。
 // 待办 → 每日记录：用本地数据先结算一次（云端数据到位后还会再结算，见 initCloudSync）
@@ -13376,7 +12961,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024f';
+  window.__BUILD__ = 'build 20261024e';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
