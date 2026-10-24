@@ -8563,34 +8563,128 @@ function showPickerHelp() {
   var e = _pickerEnvInfo();
   var verdict;
   if (e.shell) {
-    verdict = '判断：这个图标是用「' + e.shell + '」添加到桌面的。这类浏览器的"桌面快捷方式"运行在它自己的内核里，'
+    verdict = '这个图标是用「' + e.shell + '」添加到桌面的。这类"桌面快捷方式"跑在它自己的内核里，'
       + '很多没有实现文件选择功能 —— 表现就是点了完全没反应、也不报错。';
   } else if (e.webview) {
-    verdict = '判断：当前是安卓 WebView 内核（多半由某个 App 的"添加到桌面"生成）。'
-      + '文件选择能不能用，取决于那个 App 有没有实现它 —— 这不是网页代码能绕过的。';
+    verdict = '当前是安卓 WebView 内核（多半由某个 App 的"添加到桌面"生成）。'
+      + '文件选择能不能用，取决于那个 App 有没有实现它。';
   } else if (e.isIOS && e.standalone) {
-    verdict = '判断：iOS 主屏独立窗口。系统支持选图，若点了没反应，多半是个别版本的限制。';
+    verdict = 'iOS 主屏独立窗口。系统本身支持选图；若点了没反应，请用下面第 ① 步确认。';
   } else if (e.standalone) {
-    verdict = '判断：标准 PWA 独立窗口（Chrome/Edge 安装的）。理论上支持选图；若仍无反应，可能是系统权限限制。';
+    verdict = '标准 PWA 独立窗口（Chrome/Edge 安装的）。理论上支持选图，请用下面第 ① 步确认。';
   } else {
-    verdict = '判断：普通浏览器页面，理论上支持选图。';
+    verdict = '普通浏览器页面，理论上支持选图。';
   }
-  var note = verdict + '\n\n'
-    + '建议这样做（安卓 / iPhone 都适用）：\n'
-    + '1) 先「复制全部」把下面的环境信息存下来（发我就能定位）\n'
-    + '2) 用 Chrome（安卓）或 Safari（iPhone）打开本页\n'
-    + '3) 浏览器菜单里选「安装应用 / 添加到主屏幕」\n'
-    + '4) 把旧的图标删掉，避免两个混用\n\n'
-    + '本页地址：' + location.origin + location.pathname;
+
+  var old2 = document.getElementById('pickerHelpPanel');
+  if (old2 && old2.parentNode) old2.parentNode.removeChild(old2);
+
+  var wrap = document.createElement('div');
+  wrap.id = 'pickerHelpPanel';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:12px';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--surface);color:var(--text);border-radius:12px;max-width:560px;width:100%;max-height:88vh;overflow:auto;display:flex;flex-direction:column;padding:14px;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.35)';
+
+  function el(tag, css, text) {
+    var n = document.createElement(tag);
+    if (css) n.style.cssText = css;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  box.appendChild(el('div', 'font-weight:600;font-size:15px', '选不了图？按这两步确认'));
+
+  // ① 原生自测：一个完全可见的 input，如果它也点不开，就是环境不支持
+  var step1 = el('div', 'font-size:12px;line-height:1.65;color:var(--text)');
+  step1.textContent = '① 先点下面这个「系统原生选择框」。它是浏览器自带的控件，没有经过任何自定义代码：';
+  box.appendChild(step1);
+
+  var rawInput = document.createElement('input');
+  rawInput.type = 'file';
+  rawInput.id = 'pickerSelfTestInput';
+  rawInput.accept = 'image/*';
+  rawInput.style.cssText = 'font-size:13px;padding:8px;border:1px dashed var(--primary);border-radius:8px;background:var(--surface-hover);color:var(--text);width:100%';
+  box.appendChild(rawInput);
+
+  var selfResult = el('div', 'font-size:12px;line-height:1.6;color:var(--text-muted)', '（还没点）');
+  box.appendChild(selfResult);
+
+  rawInput.addEventListener('change', function () {
+    var f = rawInput.files && rawInput.files[0];
+    selfResult.style.color = 'var(--success)';
+    selfResult.textContent = '✅ 系统原生选择框能打开，也能选到文件（' + (f ? f.name : '') + '）。'
+      + '说明这个环境本身支持选图 —— 那是我们封面区的控件写法问题，把这个结果发我，我继续修。';
+  });
+  // 点击后若页面切后台/失焦，也视为"选择器打开了"
+  function markOpened(why) {
+    if (rawInput.files && rawInput.files.length) return;
+    if (selfResult.textContent.indexOf('✅') === 0) return;
+    selfResult.style.color = 'var(--success)';
+    selfResult.textContent = '✅ 选择器打开了（' + why + '）。环境支持选图 —— 那是我们封面区的写法问题，把这个结果发我。';
+  }
+  rawInput.addEventListener('click', function () {
+    setTimeout(function () {
+      if (document.visibilityState === 'hidden') markOpened('页面切到后台');
+    }, 800);
+  });
+  var onBlur = function () { markOpened('窗口失去焦点'); };
+  window.addEventListener('blur', onBlur, { once: true });
+
+  // ② 如果①也点不开 → 环境问题，换浏览器重装
+  var step2 = el('div', 'font-size:12px;line-height:1.65;color:var(--text)');
+  step2.textContent = '② 如果①也点不开（完全没反应），说明这个图标背后的内核没有实现文件选择 —— '
+    + '这种情况网页代码改不了，需要换一个浏览器重新安装：';
+  box.appendChild(step2);
+
+  var steps = el('div', 'font-size:12px;line-height:1.7;color:var(--text-muted);padding-left:4px;white-space:pre-line');
+  steps.textContent = '· 安卓：用 Chrome 打开本页 → 菜单「安装应用」或「添加到主屏幕」\n'
+    + '· iPhone：必须用 Safari 打开 → 分享 → 添加到主屏幕\n'
+    + '· 装好后把旧图标删掉，避免两个混用\n\n'
+    + '判断依据：' + verdict + '\n\n本页地址：' + location.origin + location.pathname;
+  box.appendChild(steps);
+
+  // ③ 可复制的环境信息
   var info = [
     'build: ' + e.build,
     'standalone: ' + e.standalone,
     '识别到的浏览器壳: ' + (e.shell || '（无）'),
     'WebView 内核: ' + e.webview,
+    '原生选择框可用: ' + (selfResult.textContent.indexOf('✅') === 0 ? '是' : '未确认'),
     'UA: ' + e.ua,
     'url: ' + location.href
   ].join('\n');
-  showTextSaveFallback(info, '环境信息.txt', note, '选不了图？环境诊断');
+
+  var ta = el('textarea', 'width:100%;box-sizing:border-box;min-height:120px;font:11px/1.45 monospace;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-hover);color:var(--text)');
+  ta.readOnly = true;
+  ta.value = info;
+  box.appendChild(ta);
+
+  var bar = el('div', 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap');
+  var btnClose = el('button', '', '关闭');
+  btnClose.className = 'btn btn-ghost';
+  btnClose.onclick = function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+  var btnCopy = el('button', '', '复制全部');
+  btnCopy.className = 'btn btn-primary';
+  btnCopy.onclick = function () {
+    // 复制时把自测结果一起刷新进去
+    ta.value = info.replace('原生选择框可用: 未确认', '原生选择框可用: ' + (selfResult.textContent.indexOf('✅') === 0 ? '是' : '未确认'));
+    ta.focus(); ta.select();
+    var done = function () { toast('已复制，发我即可 ✅'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value).then(done).catch(function () {
+        try { document.execCommand('copy'); done(); } catch (err) { toast('复制失败，请长按文本框手动复制'); }
+      });
+    } else {
+      try { document.execCommand('copy'); done(); } catch (err) { toast('复制失败，请长按文本框手动复制'); }
+    }
+  };
+  bar.appendChild(btnClose);
+  bar.appendChild(btnCopy);
+  box.appendChild(bar);
+
+  wrap.appendChild(box);
+  document.body.appendChild(wrap);
 }
 
 function handleCoverFileInput(input) {
@@ -12629,7 +12723,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261022f';
+  window.__BUILD__ = 'build 20261022g';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
