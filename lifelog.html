@@ -4282,7 +4282,8 @@ function renderSystemStatus() {
   html += row('上次同步', _fmtAgo(lastSync));
   html += row('待推送集合', pending.length ? (pending.length + ' 个：' + pending.slice(0, 4).join('、') + (pending.length > 4 ? '…' : '')) : '无（全部已同步）',
     pending.length ? 'var(--warning)' : 'var(--success)');
-  html += row('上次备份', (lastBackup ? (_fmtAgo(lastBackup) + (backupDays !== null ? '（' + backupDays + ' 天前）' : '')) : '从未备份'),
+  var backupDateStr = lastBackup ? localDateStr(new Date(lastBackup)) : '';
+  html += row('上次备份', (lastBackup ? (_fmtAgo(lastBackup) + '（' + backupDateStr + '）') : '从未备份'),
     backupWarn ? 'var(--danger)' : '');
   if (backupWarn) {
     html += '<div style="margin-top:8px;font-size:12px;line-height:1.6;color:var(--danger)">'
@@ -8732,6 +8733,8 @@ function showPickerHelp() {
   });
   var onBlur = function () { markOpened('窗口失去焦点'); };
   window.addEventListener('blur', onBlur, { once: true });
+  // 关闭面板时把这个监听也撤掉：否则每打开一次就多挂一个（虽然 once，但没触发过就会一直留着）
+  function _unbind() { try { window.removeEventListener('blur', onBlur); } catch (e) {} }
 
   // ② 如果①也点不开 → 环境问题，换浏览器重装
   var step2 = el('div', 'font-size:12px;line-height:1.65;color:var(--text)');
@@ -8765,7 +8768,13 @@ function showPickerHelp() {
   var bar = el('div', 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap');
   var btnClose = el('button', '', '关闭');
   btnClose.className = 'btn btn-ghost';
-  btnClose.onclick = function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+  function closePanel() {
+    _unbind();
+    if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+  }
+  btnClose.onclick = closePanel;
+  // 点遮罩空白处也能关（手机上更顺手）
+  wrap.addEventListener('click', function (ev) { if (ev.target === wrap) closePanel(); });
   var btnCopy = el('button', '', '复制全部');
   btnCopy.className = 'btn btn-primary';
   btnCopy.onclick = function () {
@@ -12873,7 +12882,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024c';
+  window.__BUILD__ = 'build 20261024d';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
