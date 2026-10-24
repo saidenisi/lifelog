@@ -1380,16 +1380,37 @@ tbody tr:hover{background:var(--surface-hover)}
    用「视觉隐藏」替代：仍在渲染树里、可被 label 激活、也能被 .click() 触发。 */
 .file-input-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;opacity:0;pointer-events:none}
 
-/* 触屏模式：整块封面区盖一层透明的原生 <label>，点它就由**浏览器原生**唤起相册，
-   完全不经过 JS（不依赖用户手势判定，PWA/WebView 里也稳）。 */
+/* 触屏模式（2026-10-24 v4）：让**真实的 file input 本体**变成一层透明覆盖层铺满封面区。
+   为什么这么做：已安装 PWA / 安卓 WebView 里，
+     - JS 的 input.click() 可能被静默忽略；
+     - label[for] 的"合成点击"也可能不被认；
+   而"用户手指直接点在 input 元素上"是浏览器唯一必须处理的情形。
+   注意：这里要覆盖 .file-input-sr 的裁剪与 pointer-events。 */
+.cover-drop-zone.touch-mode #mediaCoverFile{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;height:100%!important;
+  clip:auto!important;margin:0!important;padding:0!important;
+  border:0!important;overflow:visible!important;
+  opacity:0!important;
+  pointer-events:auto!important;
+  cursor:pointer;
+  z-index:2;
+  font-size:16px;   /* 避免 iOS 聚焦缩放 */
+}
+/* label 仍保留（藏在 input 之下，作为极端环境的冗余通道） */
 .cover-file-tap{display:none}
-.cover-drop-zone.touch-mode .cover-file-tap{display:block;position:absolute;inset:0;z-index:2;cursor:pointer;-webkit-tap-highlight-color:transparent}
-/* 按钮与清除键必须压在透明 label 之上，否则点击会被 label 吃掉 */
+.cover-drop-zone.touch-mode .cover-file-tap{display:block;position:absolute;inset:0;z-index:1;cursor:pointer;-webkit-tap-highlight-color:transparent}
+/* 按钮与清除键必须压在透明层之上，否则点击会被吃掉 */
 .cover-file-btn{position:relative;z-index:3;display:inline-block;cursor:pointer}
 .cover-drop-zone.touch-mode .cover-file-btn{font-size:13px!important;padding:9px 18px!important}
 /* 「点封面可更换图片」这条提示在 zone 外面，用 body 上的 touch-ui 兜住 */
 body.touch-ui .cover-mobile-hint.show{display:block}
 .cover-drop-zone.touch-mode #coverClearBtn{z-index:4}
+/* 「选不了图？」帮助入口：只在触屏显示（桌面本来就有 Ctrl+V） */
+.cover-picker-help{display:none;margin-top:6px;text-align:right;font-size:11px}
+.cover-picker-help a{color:var(--primary);text-decoration:underline}
+body.touch-ui .cover-picker-help{display:block}
 /* 文案也跟 touch-mode 走：万一某设备的 hover 媒体查询不准，JS 判定的 class 仍能纠正文案 */
 .cover-drop-zone.touch-mode .cover-hint-desktop{display:none}
 .cover-drop-zone.touch-mode .cover-hint-mobile{display:block}
@@ -2579,7 +2600,10 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
         <div class="card-header"><div class="card-title">🔧 环境诊断</div></div>
         <div class="card-body">
           <p class="text-sm text-muted mb-16">装到桌面图标（PWA）后如果某个功能不正常，点这里可以看到当前运行环境——比如是否在独立窗口里、触屏判定结果、封面选图控件状态。截图发我即可定位。</p>
-          <button class="btn btn-ghost" onclick="showEnvDiag()">🔍 显示诊断信息</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost" onclick="showEnvDiag()">🔍 显示诊断信息</button>
+            <button class="btn btn-ghost" onclick="showPickerHelp()">🖼️ 选不了图？</button>
+          </div>
           <div class="mt-8" id="envDiagBody" style="display:none"></div>
         </div>
       </div>
@@ -3407,22 +3431,22 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
             <button type="button" class="cover-file-btn" onclick="coverPickFile()" style="margin-top:6px;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-hover);color:var(--text-secondary);cursor:pointer">📁 选择图片</button>
           </div>
           <button type="button" id="coverClearBtn" class="cover-clear-btn" style="display:none" onclick="clearCover(event)">✕</button>
-          <!-- 触屏时覆盖整块封面区的原生 label：点它由浏览器自己唤起相册，不经 JS。
-               这是已安装 PWA / 安卓 WebView 里最可靠的路径。 -->
+          <!-- 封面选图：文件输入**就在封面区内部**。
+               触屏时它变成一层透明但**真实**的 input 铺满整个封面区（见 CSS `.touch-mode #mediaCoverFile`）——
+               用户点的就是 input 本体，浏览器必须自己弹相册：不经 JS、也不经 label 的合成点击。
+               这是已安装 PWA / 安卓 WebView 里兼容性最好的方式。
+               不用 display:none —— 部分壳会认为"不可交互"而拒绝弹窗。 -->
+          <input type="file" id="mediaCoverFile" class="file-input-sr"
+                 accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp"
+                 onchange="handleCoverFileInput(this)">
+          <!-- 冗余保险：label 与透明 input 重叠；万一某环境不认 input 层，label 仍能激活它 -->
           <label class="cover-file-tap" for="mediaCoverFile" aria-label="从相册选择图片"></label>
         </div>
         <div id="coverMobileHint" class="cover-mobile-hint">点封面可更换图片</div>
-        <input type="text" class="form-input" id="mediaCoverUrl" placeholder="也可粘贴图片URL" style="margin-top:6px;font-size:12px" oninput="onCoverUrlInput(this.value)">
+        <div class="cover-picker-help"><a href="javascript:void(0)" onclick="showPickerHelp()">选不了图？点这里看原因</a></div>
+        <input type="text" class="form-input" id="mediaCoverUrl" placeholder="也可粘贴图片URL（选不了图时用它）" style="margin-top:6px;font-size:12px" oninput="onCoverUrlInput(this.value)">
       </div>
       <input type="hidden" id="mediaCover">
-      <!-- 封面选图：必须用**页面里常驻**的 input。原来用 document.createElement 临时造一个、
-           从不插入 DOM 就 .click()，手机（iOS / 部分安卓）不会唤起相册选择器。
-           也不能用 display:none —— 已安装的 PWA / 部分安卓 WebView 会认为它不可交互而拒绝弹窗，
-           改用 .file-input-sr（视觉隐藏但仍可被激活）。
-           accept 里补上具体扩展名：某些安卓相册服务对 image/* 解析失败会静默不弹。 -->
-      <input type="file" id="mediaCoverFile" class="file-input-sr"
-             accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp"
-             onchange="handleCoverFileInput(this)">
       <div class="form-group" id="mediaDateSingleGroup">
         <label class="form-label">日期</label>
         <input type="date" class="form-input" id="mediaDate">
@@ -5703,8 +5727,11 @@ function copyExportText() {
 function downloadExportText() {
   const text = document.getElementById('netExportText').value;
   const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='匹配清单.txt'; a.click(); URL.revokeObjectURL(url);
+  // 统一走 saveBlobAsFile：a 必须进 DOM、revoke 要延后、iOS 主屏改用分享/手动复制
+  Promise.resolve(saveBlobAsFile(blob, '匹配清单.txt')).then(function (mode) {
+    if (mode === 'text' || mode === 'failed') showTextSaveFallback(text, '匹配清单.txt');
+    else if (mode !== 'cancelled') toast(mode === 'shared' ? '已通过系统分享导出 📦' : '已导出 📦');
+  });
 }
 
 // ===== Toast =====
@@ -8511,6 +8538,61 @@ function coverPickFile() {
   input.click();
 }
 
+// 判断当前运行环境（用于"选不了图"的一键诊断）
+function _pickerEnvInfo() {
+  var ua = navigator.userAgent || '';
+  var standalone = false;
+  try {
+    standalone = (navigator.standalone === true) ||
+      !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  } catch (e) {}
+  var shell = (ua.match(/MiuiBrowser|MQQBrowser|QQBrowser|UCBrowser|Quark|baiduboxapp|SogouMobileBrowser|HuaweiBrowser|HeyTapBrowser|VivoBrowser|OppoBrowser|360SE|MetaSr/i) || [])[0] || '';
+  var webview = /;\s*wv[;)]/.test(ua);
+  return {
+    ua: ua,
+    standalone: standalone,
+    shell: shell,
+    webview: webview,
+    isIOS: /iPhone|iPad|iPod/.test(ua),
+    build: window.__BUILD__ || ''
+  };
+}
+
+// 「选不了图？」帮助面板：给出判定 + 可复制的环境信息（用户直接发我即可定位）
+function showPickerHelp() {
+  var e = _pickerEnvInfo();
+  var verdict;
+  if (e.shell) {
+    verdict = '判断：这个图标是用「' + e.shell + '」添加到桌面的。这类浏览器的"桌面快捷方式"运行在它自己的内核里，'
+      + '很多没有实现文件选择功能 —— 表现就是点了完全没反应、也不报错。';
+  } else if (e.webview) {
+    verdict = '判断：当前是安卓 WebView 内核（多半由某个 App 的"添加到桌面"生成）。'
+      + '文件选择能不能用，取决于那个 App 有没有实现它 —— 这不是网页代码能绕过的。';
+  } else if (e.isIOS && e.standalone) {
+    verdict = '判断：iOS 主屏独立窗口。系统支持选图，若点了没反应，多半是个别版本的限制。';
+  } else if (e.standalone) {
+    verdict = '判断：标准 PWA 独立窗口（Chrome/Edge 安装的）。理论上支持选图；若仍无反应，可能是系统权限限制。';
+  } else {
+    verdict = '判断：普通浏览器页面，理论上支持选图。';
+  }
+  var note = verdict + '\n\n'
+    + '建议这样做（安卓 / iPhone 都适用）：\n'
+    + '1) 先「复制全部」把下面的环境信息存下来（发我就能定位）\n'
+    + '2) 用 Chrome（安卓）或 Safari（iPhone）打开本页\n'
+    + '3) 浏览器菜单里选「安装应用 / 添加到主屏幕」\n'
+    + '4) 把旧的图标删掉，避免两个混用\n\n'
+    + '本页地址：' + location.origin + location.pathname;
+  var info = [
+    'build: ' + e.build,
+    'standalone: ' + e.standalone,
+    '识别到的浏览器壳: ' + (e.shell || '（无）'),
+    'WebView 内核: ' + e.webview,
+    'UA: ' + e.ua,
+    'url: ' + location.href
+  ].join('\n');
+  showTextSaveFallback(info, '环境信息.txt', note, '选不了图？环境诊断');
+}
+
 function handleCoverFileInput(input) {
   var f = input.files && input.files[0];
   var accepted = f ? handleImageBlob(f) : false;
@@ -8862,18 +8944,135 @@ function escapeHtml(s) {
 }
 
 
+// ===== 统一的「保存文件」出口 =====
+// 解决三个真实坑：
+// 1) <a> 必须先进 DOM 再 click —— 游离节点在个别浏览器里不触发下载；
+// 2) revokeObjectURL 必须延后 —— 紧跟着 click 立刻 revoke，下载会被打断（文件 0 字节或直接没有）；
+// 3) iOS「添加到主屏」的独立窗口里 <a download> 常静默失败 → 改用系统分享面板（可存到「文件」/微信）。
+// 返回：'download' | 'shared' | 'cancelled' | 'failed' | 'text'
+function saveBlobAsFile(blob, filename) {
+  var isIOSHome = (typeof navigator !== 'undefined' && navigator.standalone === true);
+
+  if (isIOSHome) {
+    if (navigator.canShare && navigator.share && typeof File === 'function') {
+      try {
+        var file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+        if (navigator.canShare({ files: [file] })) {
+          // 必须在用户手势有效期内调用，不要先 await 别的
+          return navigator.share({ files: [file], title: filename }).then(function () {
+            return 'shared';
+          }).catch(function (e) {
+            if (e && e.name === 'AbortError') return 'cancelled';
+            return doAnchorDownload(blob, filename);
+          });
+        }
+      } catch (e) { /* 落到下面 */ }
+    }
+    // iOS 主屏且不支持分享文件 → 直接给「复制文本」的手动保存面板（这里下载本来就不可靠）
+    return Promise.resolve('text');
+  }
+
+  return Promise.resolve(doAnchorDownload(blob, filename));
+}
+
+function doAnchorDownload(blob, filename) {
+  try {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);          // 关键：必须挂进文档
+    a.click();
+    // 延迟清理：立即 revoke 会让部分浏览器的下载失败
+    setTimeout(function () {
+      if (a.parentNode) a.parentNode.removeChild(a);
+      try { URL.revokeObjectURL(url); } catch (e) {}
+    }, 60000);
+    return 'download';
+  } catch (e) {
+    return 'failed';
+  }
+}
+
+// 手动保存面板（给 iOS 主屏这类不允许下载的环境兜底）
+function showTextSaveFallback(text, filename, note, titleText) {
+  var old = document.getElementById('textSaveFallback');
+  if (old && old.parentNode) old.parentNode.removeChild(old);
+
+  var wrap = document.createElement('div');
+  wrap.id = 'textSaveFallback';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:14px';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--surface);color:var(--text);border-radius:12px;max-width:560px;width:100%;max-height:86vh;display:flex;flex-direction:column;padding:14px;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.35)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-weight:600;font-size:15px';
+  title.textContent = titleText || '备份内容（手动保存）';
+
+  var desc = document.createElement('div');
+  desc.style.cssText = 'font-size:12px;color:var(--text-muted);line-height:1.6;white-space:pre-line';
+  desc.textContent = note || ('当前是「主屏独立窗口」，系统不允许直接保存文件。请点下方「复制全部」，粘贴到 备忘录 / 微信文件传输助手 / 文件 App 保存（文件名建议：' + filename + '）。');
+
+  var ta = document.createElement('textarea');
+  ta.readOnly = true;
+  ta.value = text;
+  ta.style.cssText = 'flex:1;min-height:200px;width:100%;box-sizing:border-box;font:11px/1.45 monospace;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-hover);color:var(--text)';
+
+  var bar = document.createElement('div');
+  bar.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap';
+
+  var btnClose = document.createElement('button');
+  btnClose.className = 'btn btn-ghost';
+  btnClose.textContent = '关闭';
+  btnClose.onclick = function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); };
+
+  var btnCopy = document.createElement('button');
+  btnCopy.className = 'btn btn-primary';
+  btnCopy.textContent = '复制全部';
+  btnCopy.onclick = function () {
+    ta.focus(); ta.select();
+    var done = function () { toast('已复制，去粘贴保存吧 ✅'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () {
+        try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败，请长按文本框手动复制'); }
+      });
+    } else {
+      try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败，请长按文本框手动复制'); }
+    }
+  };
+
+  bar.appendChild(btnClose);
+  bar.appendChild(btnCopy);
+  box.appendChild(title);
+  box.appendChild(desc);
+  box.appendChild(ta);
+  box.appendChild(bar);
+  wrap.appendChild(box);
+  document.body.appendChild(wrap);
+}
+
 function exportAllData() {
   const data = { fitness: fitnessData, sleep: sleepData, medications: medicationsData, healthNotes: healthNotesData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, projects: projectsData, projOrder: projOrderData, persons: personsData, memos: memosData, hlState: hlStateData, exportDate: new Date().toISOString() };
-  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `lifelog_backup_${todayStr()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  // Record last backup time
-  localStorage.setItem('lifelog_lastBackup', new Date().toISOString());
-  toast('数据已导出 📦');
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], {type: 'application/json'});
+  const filename = `lifelog_backup_${todayStr()}.json`;
+
+  return Promise.resolve(saveBlobAsFile(blob, filename)).then(function (mode) {
+    if (mode === 'cancelled') return;                     // 用户主动取消分享 → 不改状态、不提示已导出
+    if (mode === 'text') {                                // iOS 主屏：给可复制的手动保存面板
+      showTextSaveFallback(json, filename);
+      toast('当前环境不能直接存文件，请复制后保存 📋');
+      return;
+    }
+    if (mode === 'failed') {
+      showTextSaveFallback(json, filename, '保存文件失败（浏览器限制）。请复制下面的内容，粘贴到备忘录或文件 App 保存。');
+      return;
+    }
+    localStorage.setItem('lifelog_lastBackup', new Date().toISOString());
+    toast(mode === 'shared' ? '备份已通过系统分享导出 📦' : '数据已导出 📦');
+  });
 }
 
 // Query and display Supabase database usage (500 MB free quota)
@@ -10680,11 +10879,10 @@ window.debugTodos = debugTodos;
 function exportCSV(filename, headers, rows) {
   const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(','))].join('\n');
   const blob = new Blob(['\ufeff' + csv], {type: 'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-  toast('CSV已导出 📥');
+  Promise.resolve(saveBlobAsFile(blob, filename)).then(function (mode) {
+    if (mode === 'text' || mode === 'failed') showTextSaveFallback(csv, filename);
+    else if (mode !== 'cancelled') toast(mode === 'shared' ? 'CSV 已通过系统分享导出 📥' : 'CSV已导出 📥');
+  });
 }
 function exportFitnessCSV() {
   if (!fitnessData.length) return toast('没有数据可导出');
@@ -12431,7 +12629,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261022e';
+  window.__BUILD__ = 'build 20261022f';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
