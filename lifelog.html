@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
 <meta name="theme-color" content="#6366f1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -969,8 +969,10 @@ body{
   color:var(--text);
   line-height:1.6;
   min-height:100vh;
+  min-height:100dvh;
   transition:background .3s,color .3s;
   -webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
 }
 
 /* ===== Scrollbar ===== */
@@ -980,7 +982,7 @@ body{
 ::-webkit-scrollbar-thumb:hover{background:var(--text-muted)}
 
 /* ===== Layout ===== */
-.app{display:flex;min-height:100vh}
+.app{display:flex;min-height:100vh;min-height:100dvh}
 
 /* ===== Sidebar ===== */
 .sidebar{
@@ -990,10 +992,11 @@ body{
   display:flex;
   flex-direction:column;
   position:fixed;
-  top:0;left:0;bottom:0;
+  top:env(safe-area-inset-top,0px);left:0;bottom:env(safe-area-inset-bottom,0px);
   z-index:100;
   transition:transform .3s ease;
   overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
 }
 .sidebar-header{
   padding:24px 20px 16px;
@@ -1662,7 +1665,7 @@ body.touch-ui .cover-picker-help{display:block}
   .main{
     margin-left:0;
     max-width:100%;
-    padding:16px 16px 90px;
+    padding:calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + 96px);
   }
   .mobile-nav{display:flex}
   .mobile-menu-btn{display:flex}
@@ -4422,6 +4425,16 @@ window.addEventListener('beforeunload', function() {
     flushPushKeepalive();
   }
 });
+
+// iOS Safari：beforeunload 在 PWA 退到后台 / 被系统终止时不一定触发，
+// 改用 pagehide + visibilitychange(hidden) 兜底，确保最后改动能同步到云端。
+function _iosFlush() {
+  if (__RESCUE_MODE__ || __RESYNC_KEYS__.length) return;
+  if (_pushTimer) { clearTimeout(_pushTimer); _pushTimer = null; }
+  flushPushKeepalive();
+}
+window.addEventListener('pagehide', _iosFlush);
+document.addEventListener('visibilitychange', function () { if (document.hidden) _iosFlush(); });
 
 function flushPushKeepalive() {
   // ⚠️ 这里是「绕过 setSyncStatus/pushAllToCloud 的直连写入」，必须自己带守卫：
@@ -12961,7 +12974,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024e';
+  window.__BUILD__ = 'build 20261024g';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
