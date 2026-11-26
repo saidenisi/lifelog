@@ -6949,7 +6949,8 @@ function renderSleep() {
   // Stats
   // 统计口径：全部未删除记录；且**三项各自过滤「缺该字段」的记录**再平均。
   // 原因：timeToDecimal('') 返回 null，0 + null 会被当成 0 → 把「没填入睡时间」当成「00:00 入睡」，平均值被往早拉。
-  // 入睡平均必须与打卡基准 avgBedtimeDecimal() 完全同一口径，否则两处数字会对不上。
+  // 入睡平均必须与打卡基准 avgBedtimeBefore() 使用同一套 timeToDecimal / decimalToTime 口径（显示才有可比性）。
+  // 注意：健康页这里是「全历史平均」，而打卡基准是「该日之前的平均」，两者刻意不同（打卡要避免未来数据）。
   const alive = sleepData.filter(s => !s._deleted);
   const durRecs = alive.filter(s => s.duration != null && s.duration !== '' && !isNaN(Number(s.duration)));
   const bedRecs = alive.filter(s => s.bedtime);
@@ -10373,14 +10374,18 @@ function appendImageBlock(url) {
 // ===== 打卡 =====
 function saveHabits() { DB.set('habits', habitsData); scheduleCloudPush(); }
 
-// 全部已记录睡眠的「平均入睡时间」（十进制小时，跨午夜已 +24）——自动打卡的基准
-function avgBedtimeDecimal() {
-  var arr = (typeof sleepData !== 'undefined' ? sleepData : []).filter(function(s) { return s && !s._deleted && s.bedtime; });
+// 自动打卡的基准 = **该日之前**（严格 date < dateStr，不含当天、不含未来）所有睡眠记录的入睡平均。
+// 时点对齐：10 天前的判定只能拿 10 天前已知的数据去比，不能用今天才有的全量平均回头评分（否则会用到未来信息）。
+function avgBedtimeBefore(dateStr) {
+  var all = (typeof sleepData !== 'undefined' ? sleepData : []);
   var sum = 0, n = 0;
-  arr.forEach(function(s) {
+  for (var i = 0; i < all.length; i++) {
+    var s = all[i];
+    if (!s || s._deleted || !s.bedtime) continue;
+    if (!s.date || s.date >= dateStr) continue;
     var v = timeToDecimal(s.bedtime, true);
     if (v != null && !isNaN(v)) { sum += v; n++; }
-  });
+  }
   return n ? sum / n : null;
 }
 
@@ -10397,14 +10402,14 @@ function habitEval(habit, dateStr) {
       return s && !s._deleted && s.date === dateStr;
     })[0];
     if (!rec || !rec.bedtime) return { state: 'no-data', detail: '当晚没有睡眠记录' };
-    var base = avgBedtimeDecimal();
-    if (base == null) return { state: 'no-data', detail: '还没有睡眠数据可作基准' };
+    var base = avgBedtimeBefore(dateStr);   // 只用该日之前的历史，不看当天和未来
+    if (base == null) return { state: 'no-data', detail: '这是最早的一条记录，之前没有可比的' };
     var v = timeToDecimal(rec.bedtime, true);
     // 严格定义：必须「早于」平均才算达标，等于平均不算（没早睡）。
     // 1e-9 小时 ≈ 0.0036 秒，只用来抵消浮点误差，远小于 1 分钟的真实粒度，不会掩盖真实差异。
     var ok = v < base - 1e-9;
     var rel = ok ? ' < ' : (Math.abs(v - base) <= 1e-9 ? ' = ' : ' > ');
-    return { state: ok ? 'ok' : 'no', detail: '当晚 ' + rec.bedtime + rel + '平均 ' + decimalToTime(base) };
+    return { state: ok ? 'ok' : 'no', detail: '当晚 ' + rec.bedtime + rel + '之前平均 ' + decimalToTime(base) };
   }
   return { state: 'no-data', detail: '' };
 }
@@ -10414,7 +10419,7 @@ function renderHabitToday() {
   if (!el) return;
   var list = habitsData.filter(function(h) { return h && !h._deleted; });
   if (!list.length) {
-    el.innerHTML = '<div class="text-sm text-muted" style="line-height:1.6">还没有打卡目标。点右上「⚙️ 目标」添加，比如「早睡」——自动项会拿当天入睡时间和全部记录的平均入睡时间比。</div>';
+    el.innerHTML = '<div class="text-sm text-muted" style="line-height:1.6">还没有打卡目标。点右上「⚙️ 目标」添加，比如「早睡」——自动项会拿当晚入睡时间和<b>那天之前</b>所有记录的平均入睡时间比（不用未来数据）。</div>';
     return;
   }
   el.innerHTML = list.map(function(h) {
@@ -10520,7 +10525,7 @@ function openHabitManager() {
   body.innerHTML = '<div id="habitMgrList"></div>' +
     '<button class="btn btn-primary" style="margin-top:10px;width:100%" onclick="addHabit()">＋ 新增目标</button>' +
     '<div class="text-sm text-muted" style="margin-top:12px;line-height:1.75">' +
-    '<b>自动</b>：不用打卡。拿当天睡眠记录的入睡时间，和「全部记录的平均入睡时间」比，<b>严格早于</b>平均才算 ✓（等于平均不算，因为没早睡），晚于就是 ✗。<br>' +
+    '<b>自动</b>：不用打卡。拿当晚入睡时间，和<b>那天之前</b>所有睡眠记录的平均入睡时间比（只用当时已知的数据，不用未来），<b>严格早于</b>平均才算 ✓（等于平均不算，因为没早睡），晚于就是 ✗。最早的一条记录没有可比历史，显示 —。<br>' +
     '<b>手动</b>：自己写目标（如「读书 30 分钟」），达成后到每日记录里点圆圈打卡。' +
     '</div>';
   renderHabitMgrList();
@@ -13684,7 +13689,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024n';
+  window.__BUILD__ = 'build 20261024o';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
