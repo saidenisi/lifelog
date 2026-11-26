@@ -2123,11 +2123,31 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .net-note{font-size:12px;color:var(--text-secondary);background:var(--border-light);padding:1px 6px;border-radius:6px;margin-left:4px;line-height:1.5}
 .net-tagline{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px}
 /* ===== 统一「进展流」（把 跟进 + 时间线 + 记事 合成一条时间线） ===== */
-.nt-add{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;padding:8px;border-radius:9px;background:var(--surface-hover)}
+.nt-add{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;padding:10px;border-radius:10px;background:var(--surface-hover)}
 .nt-add .form-input{min-width:0;font-size:13px;padding:6px 9px}
-.nt-add-date{flex:0 0 126px}
-.nt-add-text{flex:1;min-width:110px}
+.nt-add-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.nt-add-date{flex:0 0 130px}
+.nt-add-text{width:100%;min-height:78px;max-height:40vh;resize:vertical;font-family:inherit;font-size:14px;line-height:1.6;padding:9px 11px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box}
+.nt-add-text:focus{outline:none;border-color:var(--primary)}
+.nt-edit-box{width:100%;min-height:88px;max-height:40vh;resize:vertical;font-family:inherit;font-size:14px;line-height:1.6;padding:9px 11px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);box-sizing:border-box}
+.nt-edit-box:focus{outline:none;border-color:var(--primary)}
 .nt-add-todo{flex:0 0 auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary);white-space:nowrap;cursor:pointer;user-select:none}
+/* 项目详情 / 编辑弹窗：放大 + 头部固定 + 内容区独立滚动（长项目可多屏下拉） */
+#netDetailModal .modal,
+#netProjectModal .modal{max-width:820px;height:90vh;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+#netDetailModal .modal .modal-header,
+#netProjectModal .modal .modal-header{flex:0 0 auto}
+#netDetailModal .modal .modal-body,
+#netProjectModal .modal .modal-body{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px 26px}
+#netDetailModal .modal .modal-footer,
+#netProjectModal .modal .modal-footer{flex:0 0 auto}
+@media (max-width:768px){
+  .modal-overlay{padding:8px}
+  #netDetailModal .modal,
+  #netProjectModal .modal{max-width:100%;height:94vh;max-height:94vh;border-radius:14px}
+  #netDetailModal .modal .modal-body,
+  #netProjectModal .modal .modal-body{padding:16px}
+}
 .nt-flow{display:flex;flex-direction:column}
 .nt-item{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:0.5px solid var(--border-light);font-size:13px;line-height:1.55}
 .nt-item:last-child{border-bottom:none}
@@ -5553,6 +5573,17 @@ function openNetDetail(kind, id) {
   document.getElementById('netDetailBody').innerHTML = body;
   document.getElementById('netDetailModal').classList.add('active');
   autoGrowAllMembers();
+  autoGrowEntryBoxes();
+}
+// 进展输入/编辑框按内容自动长高（上限 40vh，超出内部滚动）
+function autoGrowEntryBoxes() {
+  ['ntAddText', 'ntEditText'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.height = 'auto';
+    const hh = el.scrollHeight;
+    if (hh) el.style.height = Math.min(hh, Math.round(window.innerHeight * 0.4)) + 'px';
+  });
 }
 function tagNoteItemHtml(t, cls) {
   const tag = tagOf(t), note = noteOf(t);
@@ -5627,11 +5658,13 @@ function dueEntryCount(rec, kind) {
 
 function ntItemHtml(e) {
   if (_ntEditKey && e.key === _ntEditKey) {
-    return '<div class="net-inline-edit">' +
-      '<input type="date" class="form-input" id="ntEditDate" value="' + escapeHtml(e.date || '') + '" style="flex:0 0 126px;font-size:13px;padding:6px 9px">' +
-      '<input type="text" class="form-input" id="ntEditText" value="' + escapeHtml(e.text) + '" style="flex:1;min-width:110px;font-size:13px;padding:6px 9px" onkeydown="if(event.key===\'Enter\'){event.preventDefault();saveNtEntry(\'' + e.key + '\');}">' +
-      '<button class="btn btn-primary btn-sm" onclick="saveNtEntry(\'' + e.key + '\')">存</button>' +
-      '<button class="btn btn-ghost btn-sm" onclick="cancelNtEntry()">取消</button></div>';
+    return '<div class="net-inline-edit" style="flex-direction:column;align-items:stretch;gap:8px">' +
+      '<textarea class="nt-edit-box" id="ntEditText" rows="4">' + escapeHtml(e.text) + '</textarea>' +
+      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+      '<input type="date" class="form-input" id="ntEditDate" value="' + escapeHtml(e.date || '') + '" style="flex:0 0 130px;font-size:13px;padding:6px 9px">' +
+      '<span style="flex:1"></span>' +
+      '<button class="btn btn-primary btn-sm" onclick="saveNtEntry(\'' + e.key + '\')">保存</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="cancelNtEntry()">取消</button></div></div>';
   }
   const due = e.canToggle && !e.done && e.date && e.date <= todayStr();
   const dotCls = e.canToggle ? (e.done ? 'nt-dot on' : 'nt-dot') : 'nt-dot hist';
@@ -5652,12 +5685,18 @@ function ntItemHtml(e) {
 function entriesSectionHtml(rec, kind) {
   const isProj = kind === 'project';
   const list = collectEntries(rec, kind);
-  let h = '<div class="net-detail-section" id="ntFlowSection"><h4>' + (isProj ? '🧭 进展流' : '🧭 和 TA 的往来') + '</h4>';
+  const title = (isProj ? '🧭 进展流' : '🧭 和 TA 的往来') + (list.length ? '（' + list.length + '）' : '');
+  let h = '<div class="net-detail-section" id="ntFlowSection"><h4>' + title + '</h4>';
   h += '<div class="nt-add">' +
-    '<input type="date" class="form-input nt-add-date" id="ntAddDate" value="' + todayStr() + '">' +
-    '<input type="text" class="form-input nt-add-text" id="ntAddText" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="' + (isProj ? '记一条进展…（回车）' : '记一条往来…（回车）') + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addNtEntry();}">' +
-    '<label class="nt-add-todo"><input type="checkbox" id="ntAddTodo">待跟进</label>' +
-    '<button class="btn btn-primary btn-sm" onclick="addNtEntry()">记</button></div>';
+    '<textarea class="nt-add-text" id="ntAddText" rows="3" placeholder="' +
+      (isProj ? '记一条进展…内容多可以写多行' : '记一条往来…内容多可以写多行') +
+      '（Ctrl/⌘ + Enter 保存）" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key===\'Enter\'){event.preventDefault();addNtEntry();}"></textarea>' +
+    '<div class="nt-add-row">' +
+      '<input type="date" class="form-input nt-add-date" id="ntAddDate" value="' + todayStr() + '">' +
+      '<label class="nt-add-todo"><input type="checkbox" id="ntAddTodo">待跟进</label>' +
+      '<span style="flex:1"></span>' +
+      '<button class="btn btn-primary btn-sm" onclick="addNtEntry()">记下来</button>' +
+    '</div></div>';
   if (!list.length) {
     h += '<div class="nt-empty">还没有记录。上面写一条，进展会按日期自动串成一条线。</div>';
   } else {
@@ -13283,7 +13322,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024j';
+  window.__BUILD__ = 'build 20261024k';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
