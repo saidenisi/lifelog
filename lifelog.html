@@ -2122,6 +2122,36 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .member-pick-dropdown .opt .py{color:var(--text-muted);font-size:11px;flex-shrink:0}
 .net-note{font-size:12px;color:var(--text-secondary);background:var(--border-light);padding:1px 6px;border-radius:6px;margin-left:4px;line-height:1.5}
 .net-tagline{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px}
+/* ===== 统一「进展流」（把 跟进 + 时间线 + 记事 合成一条时间线） ===== */
+.nt-add{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;padding:8px;border-radius:9px;background:var(--surface-hover)}
+.nt-add .form-input{min-width:0;font-size:13px;padding:6px 9px}
+.nt-add-date{flex:0 0 126px}
+.nt-add-text{flex:1;min-width:110px}
+.nt-add-todo{flex:0 0 auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-secondary);white-space:nowrap;cursor:pointer;user-select:none}
+.nt-flow{display:flex;flex-direction:column}
+.nt-item{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:0.5px solid var(--border-light);font-size:13px;line-height:1.55}
+.nt-item:last-child{border-bottom:none}
+.nt-dot{flex:0 0 auto;width:15px;height:15px;margin-top:3px;border-radius:8px;border:1.5px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;background:transparent}
+.nt-dot.on{background:var(--primary);border-color:var(--primary)}
+.nt-dot.on::after{content:'';width:6px;height:3px;border-left:1.6px solid #fff;border-bottom:1.6px solid #fff;transform:rotate(-45deg) translate(0,-1px)}
+.nt-dot.hist{background:var(--text-muted);border-color:var(--text-muted);cursor:default}
+.nt-dot.hist::after{content:'';width:5px;height:5px;border-radius:3px;background:#fff}
+.nt-body{flex:1;min-width:0}
+.nt-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-bottom:1px}
+.nt-meta .due{color:var(--danger);font-weight:600}
+.nt-src{font-size:10px;padding:0 5px;border-radius:4px;background:var(--border-light);color:var(--text-muted);line-height:15px}
+.nt-text{color:var(--text);word-break:break-word;white-space:pre-wrap}
+.nt-item.isdone .nt-text{color:var(--text-muted)}
+.nt-ops{flex:0 0 auto;display:flex;gap:2px;align-items:center;opacity:.5}
+.nt-item:hover .nt-ops{opacity:1}
+.nt-empty{font-size:12px;color:var(--text-muted);padding:6px 0}
+/* 项目卡片上的一行「最近进展」 */
+.net-latest{font-size:12px;color:var(--text-secondary);margin-top:7px;padding-top:7px;border-top:1px dashed var(--border-light);display:flex;gap:6px;align-items:baseline}
+.net-latest .d{color:var(--text-muted);flex:0 0 auto;font-variant-numeric:tabular-nums}
+.net-latest .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 记事归属标签 */
+.memo-link-tag{font-size:11px;padding:0 6px;border-radius:5px;background:var(--primary-bg);color:var(--primary);line-height:17px;white-space:nowrap}
+.memo-link-tag.person{background:var(--border-light);color:var(--text-secondary)}
 </style>
 </head>
 <body>
@@ -2763,12 +2793,10 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
         <textarea class="form-textarea" id="netProjectNote" placeholder="项目情况、关键信息…"></textarea>
       </div>
       <div class="form-group">
-        <label class="form-label">跟进提醒</label>
-        <div id="netProjectFollowups"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">时间线 / 记录</label>
-        <div id="netProjectTimeline"></div>
+        <label class="form-label">进展 / 跟进</label>
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.65;padding:8px 10px;background:var(--surface-hover);border-radius:8px">
+          保存后回到<b>项目详情</b>即可记录：未勾选＝待跟进，勾上＝已完成。原来的「跟进提醒」和「时间线 / 记录」已合并成一条<b>进展流</b>，不用再纠结写哪个。
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -2844,7 +2872,26 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
       <input type="hidden" id="memoId">
       <div class="form-group">
         <label class="form-label">内容</label>
-        <textarea class="form-textarea" id="memoContent" placeholder="随手记点什么…" style="min-height:160px"></textarea>
+        <textarea class="form-textarea" id="memoContent" placeholder="随手记点什么…" style="min-height:140px"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">日期</label>
+        <input type="date" class="form-input" id="memoDate">
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:140px">
+          <label class="form-label">关联项目（可选）</label>
+          <select class="form-select" id="memoProject"><option value="">无</option></select>
+        </div>
+        <div class="form-group" style="flex:1;min-width:140px">
+          <label class="form-label">关联人脉（可选）</label>
+          <select class="form-select" id="memoPerson"><option value="">无</option></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="memoTodo"> 记为「待跟进」（不勾＝已发生的事）
+        </label>
       </div>
     </div>
     <div class="modal-footer">
@@ -4717,8 +4764,9 @@ function renderNetProjects() {
 }
 function projectCardHtml(p, idx, total) {
   const statusBadge = p.status === '进行中' ? 'badge-success' : p.status === '已完成' ? 'badge-muted' : p.status === '已暂停' ? 'badge-warning' : 'badge-info';
-  const due = dueFollowupCount(p);
+  const due = dueEntryCount(p, 'project');
   const memCount = projectMemberCount(p);
+  const le = latestEntry(p, 'project');
   const canUp = idx > 0, canDown = idx < total - 1;
   return `<div class="net-card" onclick="openNetProject('${p.id}')">
     <div class="net-head">
@@ -4733,6 +4781,7 @@ function projectCardHtml(p, idx, total) {
     </div>
     ${p.domain ? `<div class="net-sub">领域：${escapeHtml(p.domain)}</div>` : ''}
     ${p.intro ? `<div class="net-sub">${escapeHtml(p.intro)}</div>` : ''}
+    ${le ? `<div class="net-latest"><span class="d">${escapeHtml(le.date||'')}</span><span class="t">${escapeHtml(le.text)}</span></div>` : ''}
   </div>`;
 }
 
@@ -4757,7 +4806,7 @@ function renderNetPersons() {
   list.innerHTML = items.map(personCardHtml).join('');
 }
 function personCardHtml(p) {
-  const due = dueFollowupCount(p);
+  const due = dueEntryCount(p, 'person');
   const linked = projectsData.filter(pr=>!pr._deleted && (pr.members||[]).some(mm=>mm.personId===p.id)).map(pr => {
     const mm = (pr.members||[]).find(x=>x.personId===p.id);
     return {pr, active: !mm || mm.active !== false, note: (mm&&mm.note)||''};
@@ -4800,11 +4849,19 @@ function renderMemos() {
   const items = memosData.filter(m => !m._deleted).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
   if (!items.length) { list.innerHTML = netEmptyHtml('📝','还没有记事，点击「新建记事」开始', 'openMemoModal()'); return; }
   list.innerHTML = items.map(m => {
-    const t = (m.updatedAt || m.createdAt || '').slice(0,16).replace('T',' ');
+    const pr = m.projectId ? projectsData.find(x=>x.id===m.projectId) : null;
+    const pe = m.personId ? personsData.find(x=>x.id===m.personId) : null;
+    const done = _memoDone(m);
+    const dstr = _memoDate(m);
     return `<div class="net-card">
       <div class="net-sub" style="white-space:pre-wrap;line-height:1.6;font-size:13px">${linkify(m.content||'')}</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-        <span style="font-size:11px;color:var(--text-muted)">${t}</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;gap:8px;flex-wrap:wrap">
+        <span style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:11px;color:var(--text-muted)">
+          ${dstr ? `<span>${escapeHtml(dstr)}</span>` : ''}
+          ${!done ? '<span class="badge badge-danger">待跟进</span>' : ''}
+          ${pr ? `<span class="memo-link-tag" title="所属项目">项目 · ${escapeHtml(pr.name)}</span>` : ''}
+          ${pe ? `<span class="memo-link-tag person" title="关联人脉">人 · ${escapeHtml(pe.name)}</span>` : ''}
+        </span>
         <span style="display:flex;gap:4px">
           <button class="btn-icon" onclick="openMemoModal('${m.id}')" title="编辑">✏️</button>
           <button class="btn-icon" onclick="deleteMemo('${m.id}')" title="删除">🗑️</button>
@@ -4819,10 +4876,27 @@ function linkify(text) {
   const escaped = escapeHtml(text);
   return escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:var(--primary);word-break:break-all">$1</a>');
 }
-function openMemoModal(id) {
+function openMemoModal(id, preset) {
+  const m = id ? (memosData.find(x=>x.id===id) || null) : null;
   document.getElementById('memoId').value = id || '';
   document.getElementById('memoModalTitle').textContent = id ? '编辑记事' : '新建记事';
-  document.getElementById('memoContent').value = id ? ((memosData.find(x=>x.id===id)||{}).content || '') : '';
+  document.getElementById('memoContent').value = m ? (m.content || '') : '';
+  const dEl = document.getElementById('memoDate');
+  if (dEl) dEl.value = m ? _memoDate(m) : todayStr();
+  const pSel = document.getElementById('memoProject');
+  if (pSel) {
+    pSel.innerHTML = '<option value="">无</option>' + projectsData.filter(x=>!x._deleted)
+      .map(x => '<option value="' + x.id + '">' + escapeHtml(x.name) + '</option>').join('');
+    pSel.value = (m && m.projectId) || (preset && preset.projectId) || '';
+  }
+  const peSel = document.getElementById('memoPerson');
+  if (peSel) {
+    peSel.innerHTML = '<option value="">无</option>' + personsData.filter(x=>!x._deleted)
+      .map(x => '<option value="' + x.id + '">' + escapeHtml(x.name) + '</option>').join('');
+    peSel.value = (m && m.personId) || (preset && preset.personId) || '';
+  }
+  const tEl = document.getElementById('memoTodo');
+  if (tEl) tEl.checked = m ? !_memoDone(m) : false;
   document.getElementById('memoModal').classList.add('active');
   setTimeout(function(){ const el = document.getElementById('memoContent'); if (el) el.focus(); }, 50);
 }
@@ -4831,15 +4905,33 @@ function saveMemo() {
   const content = document.getElementById('memoContent').value.trim();
   if (!content) { toast('内容不能为空'); return; }
   const now = new Date().toISOString();
+  const dEl = document.getElementById('memoDate');
+  const pEl = document.getElementById('memoProject');
+  const peEl = document.getElementById('memoPerson');
+  const tEl = document.getElementById('memoTodo');
+  const date = (dEl && dEl.value) || todayStr();
+  const projectId = (pEl && pEl.value) || '';
+  const personId = (peEl && peEl.value) || '';
+  const done = !(tEl && tEl.checked);
   if (id) {
     const idx = memosData.findIndex(x=>x.id===id);
-    if (idx>=0) memosData[idx] = {...memosData[idx], content, updatedAt: now, _pendingPush: true};
+    if (idx>=0) {
+      const rec = Object.assign({}, memosData[idx], {content: content, date: date, done: done, updatedAt: now, _pendingPush: true});
+      if (projectId) rec.projectId = projectId; else delete rec.projectId;
+      if (personId) rec.personId = personId; else delete rec.personId;
+      memosData[idx] = rec;
+    }
   } else {
-    memosData.push({id: uid(), content, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true});
+    const rec = {id: uid(), content: content, date: date, done: done, createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true};
+    if (projectId) rec.projectId = projectId;
+    if (personId) rec.personId = personId;
+    memosData.push(rec);
   }
   saveMemos();
   closeModal('memoModal');
   renderMemos();
+  const dm = document.getElementById('netDetailModal');
+  if (dm && dm.classList.contains('active') && _netDetailId) openNetDetail(_netDetailKind, _netDetailId);
   toast('已保存');
 }
 function deleteMemo(id) {
@@ -5472,6 +5564,222 @@ function tagNoteItemHtml(t, cls) {
 function personTagListHtml(arr) {
   return (arr||[]).map(t => `<div class="net-tagline" style="margin-bottom:3px">${tagNoteItemHtml(t)}</div>`).join('');
 }
+// ===== 统一「进展流」 =====
+// 一条时间线，三个数据源：
+//   ① memos 里带 projectId / personId 的记录（新写入的进展都走这里，因此「记事本」天然含全部进展）
+//   ② rec.followUps（历史「跟进提醒」，带 done）
+//   ③ rec.timeline（历史「时间线/记录」，无 done，视为已发生）
+// 读时合并，不迁移、不改写旧字段；编辑/删除按来源分发回各自字段。
+let _ntEditKey = '';
+
+function _memoDate(m) { return m.date || (m.createdAt ? String(m.createdAt).slice(0, 10) : ''); }
+function _memoDone(m) { return m.done === undefined ? true : !!m.done; }
+
+function collectEntries(rec, kind) {
+  if (!rec) return [];
+  const relKey = kind === 'project' ? 'projectId' : 'personId';
+  const out = [];
+  // 人脉视图：TA 参与的所有项目，其进展也一并汇总（标注项目名），这才是真正的「打通」
+  const linkedProjIds = kind === 'person'
+    ? projectsData.filter(function(pr) {
+        return !pr._deleted && (pr.members || []).some(function(mm) { return mm.personId === rec.id; });
+      }).map(function(pr) { return pr.id; })
+    : [];
+  memosData.forEach(function(m) {
+    if (m._deleted) return;
+    if (m[relKey] === rec.id) {
+      out.push({ key: 'memo:' + m.id, src: 'memo', refId: m.id, date: _memoDate(m),
+        text: m.content || '', done: _memoDone(m), canToggle: true, ctx: '' });
+      return;
+    }
+    if (linkedProjIds.length && m.projectId && linkedProjIds.indexOf(m.projectId) >= 0) {
+      const pr = projectsData.find(function(x) { return x.id === m.projectId; });
+      out.push({ key: 'memo:' + m.id, src: 'memo', refId: m.id, date: _memoDate(m),
+        text: m.content || '', done: _memoDone(m), canToggle: true, ctx: pr ? pr.name : '' });
+    }
+  });
+  (rec.followUps || []).forEach(function(f) {
+    out.push({ key: 'follow:' + f.id, src: 'follow', refId: f.id, date: f.date || '',
+      text: f.text || '', done: !!f.done, canToggle: true });
+  });
+  (rec.timeline || []).forEach(function(t, i) {
+    out.push({ key: 'tl:' + i, src: 'tl', refId: i, date: t.date || '',
+      text: t.text || '', done: true, canToggle: false });
+  });
+  out.sort(function(a, b) {
+    const da = String(a.date || ''), db = String(b.date || '');
+    if (da !== db) return db.localeCompare(da);          // 日期倒序，最新在上
+    if (a.done !== b.done) return a.done ? 1 : -1;        // 同日：待跟进在前
+    return 0;
+  });
+  return out;
+}
+
+function latestEntry(rec, kind) {
+  const arr = collectEntries(rec, kind).filter(function(e) { return String(e.text || '').trim(); });
+  return arr.length ? arr[0] : null;
+}
+
+// 到期待跟进数（含旧 followUps 与新的进展记录）
+function dueEntryCount(rec, kind) {
+  const t = todayStr();
+  return collectEntries(rec, kind).filter(function(e) {
+    return e.canToggle && !e.done && e.date && e.date <= t;
+  }).length;
+}
+
+function ntItemHtml(e) {
+  if (_ntEditKey && e.key === _ntEditKey) {
+    return '<div class="net-inline-edit">' +
+      '<input type="date" class="form-input" id="ntEditDate" value="' + escapeHtml(e.date || '') + '" style="flex:0 0 126px;font-size:13px;padding:6px 9px">' +
+      '<input type="text" class="form-input" id="ntEditText" value="' + escapeHtml(e.text) + '" style="flex:1;min-width:110px;font-size:13px;padding:6px 9px" onkeydown="if(event.key===\'Enter\'){event.preventDefault();saveNtEntry(\'' + e.key + '\');}">' +
+      '<button class="btn btn-primary btn-sm" onclick="saveNtEntry(\'' + e.key + '\')">存</button>' +
+      '<button class="btn btn-ghost btn-sm" onclick="cancelNtEntry()">取消</button></div>';
+  }
+  const due = e.canToggle && !e.done && e.date && e.date <= todayStr();
+  const dotCls = e.canToggle ? (e.done ? 'nt-dot on' : 'nt-dot') : 'nt-dot hist';
+  let h = '<div class="nt-item' + (e.done ? ' isdone' : '') + '">';
+  h += '<div class="' + dotCls + '"' + (e.canToggle ? ' onclick="toggleNtEntry(\'' + e.key + '\')" title="' + (e.done ? '标为待跟进' : '标为已完成') + '"' : '') + '></div>';
+  h += '<div class="nt-body"><div class="nt-meta">';
+  if (e.date) h += '<span>' + escapeHtml(e.date) + '</span>';
+  if (due) h += '<span class="due">逾期</span>';
+  if (e.src === 'follow') h += '<span class="nt-src">旧·跟进</span>';
+  if (e.src === 'tl') h += '<span class="nt-src">旧·记录</span>';
+  if (e.ctx) h += '<span class="nt-src">' + escapeHtml(e.ctx) + '</span>';
+  h += '</div><div class="nt-text">' + escapeHtml(e.text) + '</div></div>';
+  h += '<div class="nt-ops"><button class="btn-icon" title="编辑" onclick="startNtEdit(\'' + e.key + '\')">✏️</button>' +
+       '<button class="btn-icon" title="删除" onclick="deleteNtEntry(\'' + e.key + '\')">🗑️</button></div></div>';
+  return h;
+}
+
+function entriesSectionHtml(rec, kind) {
+  const isProj = kind === 'project';
+  const list = collectEntries(rec, kind);
+  let h = '<div class="net-detail-section" id="ntFlowSection"><h4>' + (isProj ? '🧭 进展流' : '🧭 和 TA 的往来') + '</h4>';
+  h += '<div class="nt-add">' +
+    '<input type="date" class="form-input nt-add-date" id="ntAddDate" value="' + todayStr() + '">' +
+    '<input type="text" class="form-input nt-add-text" id="ntAddText" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="' + (isProj ? '记一条进展…（回车）' : '记一条往来…（回车）') + '" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addNtEntry();}">' +
+    '<label class="nt-add-todo"><input type="checkbox" id="ntAddTodo">待跟进</label>' +
+    '<button class="btn btn-primary btn-sm" onclick="addNtEntry()">记</button></div>';
+  if (!list.length) {
+    h += '<div class="nt-empty">还没有记录。上面写一条，进展会按日期自动串成一条线。</div>';
+  } else {
+    h += '<div class="nt-flow">' + list.map(ntItemHtml).join('') + '</div>';
+  }
+  h += '<div style="font-size:11px;color:var(--text-muted);margin-top:6px">未勾选 = 待跟进；勾上 = 已完成。这里记的内容也会出现在「记事本」。</div>';
+  h += '</div>';
+  return h;
+}
+
+function _ntFind(rec, key) {
+  const i = key.indexOf(':');
+  const src = key.slice(0, i), refId = key.slice(i + 1);
+  if (src === 'memo') return { src: src, obj: memosData.find(function(m) { return m.id === refId; }) };
+  if (src === 'follow') return { src: src, obj: (rec.followUps || []).find(function(f) { return f.id === refId; }) };
+  if (src === 'tl') return { src: src, idx: parseInt(refId, 10), obj: (rec.timeline || [])[parseInt(refId, 10)] };
+  return { src: src, obj: null };
+}
+function _ntPersistRec(rec) {
+  markPending(rec);
+  if (_netDetailKind === 'project') saveProjects(); else savePersons();
+}
+function addNtEntry() {
+  const rec = netDetailRecord(); if (!rec) return;
+  const dEl = document.getElementById('ntAddDate');
+  const tEl = document.getElementById('ntAddText');
+  const cEl = document.getElementById('ntAddTodo');
+  const text = ((tEl && tEl.value) || '').trim();
+  if (!text) { toast('请输入内容'); if (tEl) tEl.focus(); return; }
+  const now = new Date().toISOString();
+  const m = { id: uid(), content: text, date: (dEl && dEl.value) || todayStr(),
+    done: !(cEl && cEl.checked), createdAt: now, updatedAt: now,
+    _deleted: false, _pendingPush: true };
+  if (_netDetailKind === 'project') m.projectId = rec.id; else m.personId = rec.id;
+  memosData.push(m);
+  saveMemos();
+  _ntEditKey = '';
+  openNetDetail(_netDetailKind, rec.id);
+  toast(m.done ? '已记录' : '已记为待跟进');
+}
+function toggleNtEntry(key) {
+  const rec = netDetailRecord(); if (!rec) return;
+  const f = _ntFind(rec, key); if (!f || !f.obj) return;
+  if (f.src === 'memo') {
+    f.obj.done = !_memoDone(f.obj);
+    f.obj.updatedAt = new Date().toISOString();
+    markPending(f.obj); saveMemos();
+  } else if (f.src === 'follow') {
+    f.obj.done = !f.obj.done; _ntPersistRec(rec);
+  } else { return; }
+  openNetDetail(_netDetailKind, rec.id);
+}
+function startNtEdit(key) { _ntEditKey = key; openNetDetail(_netDetailKind, _netDetailId); }
+function cancelNtEntry() {
+  _ntEditKey = ''; openNetDetail(_netDetailKind, _netDetailId);
+  const el = document.getElementById('ntAddText'); if (el) el.focus();
+}
+function saveNtEntry(key) {
+  const rec = netDetailRecord(); if (!rec) return;
+  const dEl = document.getElementById('ntEditDate');
+  const tEl = document.getElementById('ntEditText');
+  const text = ((tEl && tEl.value) || '').trim();
+  if (!text) { toast('内容不能为空'); return; }
+  const date = (dEl && dEl.value) || '';
+  const f = _ntFind(rec, key); if (!f || !f.obj) return;
+  if (f.src === 'memo') {
+    f.obj.content = text;
+    if (date) f.obj.date = date;
+    f.obj.updatedAt = new Date().toISOString();
+    markPending(f.obj); saveMemos();
+  } else {
+    f.obj.text = text; f.obj.date = date; _ntPersistRec(rec);
+  }
+  _ntEditKey = '';
+  openNetDetail(_netDetailKind, rec.id);
+}
+function deleteNtEntry(key) {
+  const rec = netDetailRecord(); if (!rec) return;
+  if (!confirm('删除这条记录？')) return;
+  const f = _ntFind(rec, key); if (!f || !f.obj) return;
+  if (f.src === 'memo') {
+    f.obj._deleted = true;
+    f.obj.updatedAt = new Date().toISOString();
+    f.obj._pendingPush = true;
+    saveMemos();
+  } else if (f.src === 'follow') {
+    rec.followUps = (rec.followUps || []).filter(function(x) { return x.id !== f.obj.id; });
+    _ntPersistRec(rec);
+  } else if (f.src === 'tl') {
+    rec.timeline = (rec.timeline || []).filter(function(_, i) { return i !== f.idx; });
+    _ntPersistRec(rec);
+  }
+  _ntEditKey = '';
+  openNetDetail(_netDetailKind, rec.id);
+}
+
+// 项目「相关待办」：按项目名宽松匹配待办（只读，不从待办反写）
+function projectRelatedTodos(p) {
+  const name = String((p && p.name) || '').trim();
+  if (!name) return [];
+  return todosData.filter(function(t) {
+    if (t._deleted || t.done) return false;
+    if (t.ref && String(t.ref).indexOf(name) >= 0) return true;
+    return String(t.content || '').indexOf(name) >= 0;
+  }).sort(function(a, b) { return String(a.date || '').localeCompare(String(b.date || '')); });
+}
+function relatedTodosHtml(p) {
+  const list = projectRelatedTodos(p);
+  if (!list.length) return '';
+  let h = '<div class="net-detail-section"><h4>✅ 相关待办（' + list.length + '）</h4><div class="nt-flow">';
+  list.forEach(function(t) {
+    h += '<div class="nt-item"><div class="nt-body"><div class="nt-meta"><span>' + escapeHtml(t.date || '') + '</span>' +
+      (t.tag ? '<span class="nt-src">' + escapeHtml(t.tag) + '</span>' : '') +
+      '</div><div class="nt-text">' + escapeHtml(t.content || '') + '</div></div></div>';
+  });
+  h += '</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">从「待办事项」里按项目名自动汇聚，不用手抄。</div></div>';
+  return h;
+}
+
 function projectDetailHtml(p) {
   const members = (p.members||[]).map(m => {
     const per = personsData.find(x=>x.id===m.personId);
@@ -5492,8 +5800,8 @@ function projectDetailHtml(p) {
   ).join('');
   h += `<div class="net-detail-section"><h4>👥 参与的人（${members.length}）</h4>${memberHtml}
     <div id="projectMemberAddArea"><button class="btn btn-ghost btn-sm" onclick="showProjectMemberAdd()" style="margin-top:8px">＋ 添加成员</button></div></div>`;
-  h += followupsHtml(p);
-  h += timelineHtml(p);
+  h += entriesSectionHtml(p, 'project');
+  h += relatedTodosHtml(p);
   if (p.note) h += infoRow('备注', p.note);
   h += detailFooter('project', p.id);
   return h;
@@ -5515,8 +5823,7 @@ function personDetailHtml(p) {
       ${l.note?`<div class="pl-note">${escapeHtml(l.note)}</div>`:''}
     </div>`;
   }).join('')}</div>`;
-  h += followupsHtml(p);
-  h += timelineHtml(p);
+  h += entriesSectionHtml(p, 'person');
   h += detailFooter('person', p.id);
   return h;
 }
@@ -12971,7 +13278,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024h';
+  window.__BUILD__ = 'build 20261024i';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
