@@ -10400,8 +10400,11 @@ function habitEval(habit, dateStr) {
     var base = avgBedtimeDecimal();
     if (base == null) return { state: 'no-data', detail: '还没有睡眠数据可作基准' };
     var v = timeToDecimal(rec.bedtime, true);
-    var ok = v <= base;
-    return { state: ok ? 'ok' : 'no', detail: '当晚 ' + rec.bedtime + (ok ? ' ≤ ' : ' > ') + '平均 ' + decimalToTime(base) };
+    // 严格定义：必须「早于」平均才算达标，等于平均不算（没早睡）。
+    // 1e-9 小时 ≈ 0.0036 秒，只用来抵消浮点误差，远小于 1 分钟的真实粒度，不会掩盖真实差异。
+    var ok = v < base - 1e-9;
+    var rel = ok ? ' < ' : (Math.abs(v - base) <= 1e-9 ? ' = ' : ' > ');
+    return { state: ok ? 'ok' : 'no', detail: '当晚 ' + rec.bedtime + rel + '平均 ' + decimalToTime(base) };
   }
   return { state: 'no-data', detail: '' };
 }
@@ -10517,7 +10520,7 @@ function openHabitManager() {
   body.innerHTML = '<div id="habitMgrList"></div>' +
     '<button class="btn btn-primary" style="margin-top:10px;width:100%" onclick="addHabit()">＋ 新增目标</button>' +
     '<div class="text-sm text-muted" style="margin-top:12px;line-height:1.75">' +
-    '<b>自动</b>：不用打卡。拿当天睡眠记录的入睡时间，和「全部记录的平均入睡时间」比，早于等于平均就是 ✓，晚于就是 ✗。<br>' +
+    '<b>自动</b>：不用打卡。拿当天睡眠记录的入睡时间，和「全部记录的平均入睡时间」比，<b>严格早于</b>平均才算 ✓（等于平均不算，因为没早睡），晚于就是 ✗。<br>' +
     '<b>手动</b>：自己写目标（如「读书 30 分钟」），达成后到每日记录里点圆圈打卡。' +
     '</div>';
   renderHabitMgrList();
@@ -13681,7 +13684,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024m';
+  window.__BUILD__ = 'build 20261024n';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
