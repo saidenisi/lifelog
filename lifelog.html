@@ -6947,21 +6947,29 @@ function deleteSleep(id) {
 
 function renderSleep() {
   // Stats
+  // 统计口径：全部未删除记录；且**三项各自过滤「缺该字段」的记录**再平均。
+  // 原因：timeToDecimal('') 返回 null，0 + null 会被当成 0 → 把「没填入睡时间」当成「00:00 入睡」，平均值被往早拉。
+  // 入睡平均必须与打卡基准 avgBedtimeDecimal() 完全同一口径，否则两处数字会对不上。
   const alive = sleepData.filter(s => !s._deleted);
-  // 统计口径：全部未删除记录的平均值（与趋势图「全部平均」一致），避免当月无记录时整片空白
-  const statRecords = alive;
-  const avgDuration = statRecords.length > 0
-    ? (statRecords.reduce((s,r) => s+r.duration, 0) / statRecords.length).toFixed(1)
+  const durRecs = alive.filter(s => s.duration != null && s.duration !== '' && !isNaN(Number(s.duration)));
+  const bedRecs = alive.filter(s => s.bedtime);
+  const wakeRecs = alive.filter(s => s.wakeTime);
+
+  const avgDuration = durRecs.length > 0
+    ? (durRecs.reduce((s,r) => s + Number(r.duration), 0) / durRecs.length).toFixed(1)
     : '0';
   document.getElementById('sleepAvgDuration').textContent = avgDuration + ' 小时';
-  // Average bedtime & wake time (all records)
-  if (statRecords.length > 0) {
-    const avgBed = statRecords.reduce((s,r) => s + timeToDecimal(r.bedtime, true), 0) / statRecords.length;
-    const avgWake = statRecords.reduce((s,r) => s + timeToDecimal(r.wakeTime, false), 0) / statRecords.length;
+
+  if (bedRecs.length > 0) {
+    const avgBed = bedRecs.reduce((s,r) => s + timeToDecimal(r.bedtime, true), 0) / bedRecs.length;
     document.getElementById('sleepAvgBedtime').textContent = decimalToTime(avgBed);
-    document.getElementById('sleepAvgWake').textContent = decimalToTime(avgWake);
   } else {
     document.getElementById('sleepAvgBedtime').textContent = '—';
+  }
+  if (wakeRecs.length > 0) {
+    const avgWake = wakeRecs.reduce((s,r) => s + timeToDecimal(r.wakeTime, false), 0) / wakeRecs.length;
+    document.getElementById('sleepAvgWake').textContent = decimalToTime(avgWake);
+  } else {
     document.getElementById('sleepAvgWake').textContent = '—';
   }
 
@@ -13673,7 +13681,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024l';
+  window.__BUILD__ = 'build 20261024m';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
