@@ -2185,7 +2185,7 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
         <span class="icon">✅</span><span>待办事项</span>
       </div>
       <div class="nav-item" data-page="network">
-        <span class="icon">👥</span><span>人脉</span>
+        <span class="icon">👥</span><span>工作台</span>
       </div>
       <div class="nav-label">工具</div>
       <div class="nav-item" data-page="export">
@@ -2696,8 +2696,8 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
     <div class="page" id="page-network">
       <div class="page-header">
         <div>
-          <div class="page-title">人脉</div>
-          <div class="page-subtitle">项目 · 人脉 · 供需匹配</div>
+          <div class="page-title">工作台</div>
+          <div class="page-subtitle">项目 · 人脉 · 记事本</div>
         </div>
         <button class="mobile-menu-btn" id="mobileMenuBtn6">☰</button>
       </div>
@@ -2740,7 +2740,7 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
   <div class="mobile-nav-item" data-page="media"><span class="icon">🎬</span>影音</div>
   <div class="mobile-nav-item" data-page="daily"><span class="icon">📅</span>每日</div>
   <div class="mobile-nav-item active" data-page="todos"><span class="icon">✅</span>待办</div>
-  <div class="mobile-nav-item" data-page="network"><span class="icon">👥</span>人脉</div>
+  <div class="mobile-nav-item" data-page="network"><span class="icon">👥</span>工作台</div>
   <div class="mobile-nav-item" data-page="export"><span class="icon">📦</span>数据</div>
 </div>
 
@@ -2768,17 +2768,9 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">领域</label>
-          <input type="text" class="form-input" id="netProjectDomain" placeholder="如 地产、科技">
-        </div>
-        <div class="form-group">
           <label class="form-label">状态</label>
           <select class="form-select" id="netProjectStatus"></select>
         </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">一句话简介</label>
-        <input type="text" class="form-input" id="netProjectIntro" placeholder="项目是做什么的">
       </div>
       <div class="form-group">
         <label class="form-label">参与的人</label>
@@ -2794,8 +2786,9 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
       </div>
       <div class="form-group">
         <label class="form-label">进展 / 跟进</label>
-        <div style="font-size:12px;color:var(--text-muted);line-height:1.65;padding:8px 10px;background:var(--surface-hover);border-radius:8px">
-          保存后回到<b>项目详情</b>即可记录：未勾选＝待跟进，勾上＝已完成。原来的「跟进提醒」和「时间线 / 记录」已合并成一条<b>进展流</b>，不用再纠结写哪个。
+        <button type="button" class="btn btn-ghost" onclick="gotoProjectDetailFromEdit()" style="width:100%">📋 打开详情页，记录 / 编辑进展 →</button>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.6">
+          进展统一在详情页维护：未勾选＝待跟进，勾上＝已完成。点上面按钮会先保存当前修改，再打开详情。
         </div>
       </div>
     </div>
@@ -4731,13 +4724,21 @@ function saveProjectOrder(ids) {
   scheduleCloudPush();
 }
 // 展示顺序：有自定义顺序则按它；未列入的排到后面（按更新时间兜底）
+// 状态优先级：筹备中 → 进行中 → 已暂停 → 已完成 → 已搁置
+// （改状态后自动归位：已完成落到所有「已暂停」之后，已搁置落到所有「已完成」之后）
+function projectStatusRank(s) {
+  const i = NET_STATUSES.indexOf(s);
+  return i < 0 ? 1 : i;   // 未填状态按「进行中」处理
+}
 function sortedProjects() {
   const alive = projectsData.filter(p => !p._deleted);
   const ids = projectOrderIds();
   const rank = {};
   ids.forEach((id, i) => { rank[id] = i; });
   return alive.sort((a, b) => {
-    const ra = (a.id in rank) ? rank[a.id] : Infinity;
+    const sa = projectStatusRank(a.status), sb = projectStatusRank(b.status);
+    if (sa !== sb) return sa - sb;                       // 先按状态分组
+    const ra = (a.id in rank) ? rank[a.id] : Infinity;   // 同组内再按手动顺序
     const rb = (b.id in rank) ? rank[b.id] : Infinity;
     if (ra !== rb) return ra - rb;
     return (b.updatedAt || '').localeCompare(a.updatedAt || '');
@@ -4768,7 +4769,7 @@ function projectCardHtml(p, idx, total) {
   const memCount = projectMemberCount(p);
   const le = latestEntry(p, 'project');
   const canUp = idx > 0, canDown = idx < total - 1;
-  return `<div class="net-card" onclick="openNetProject('${p.id}')">
+  return `<div class="net-card" onclick="openNetDetail('project','${p.id}')">
     <div class="net-head">
       <span class="net-name">${escapeHtml(p.name)}</span>
       ${p.status ? `<span class="badge ${statusBadge}">${p.status}</span>` : ''}
@@ -4779,8 +4780,6 @@ function projectCardHtml(p, idx, total) {
         <button class="btn-icon proj-sort-btn" onclick="moveProject('${p.id}',1,event)"${canDown?'':' disabled'} title="下移">▼</button>
       </span>
     </div>
-    ${p.domain ? `<div class="net-sub">领域：${escapeHtml(p.domain)}</div>` : ''}
-    ${p.intro ? `<div class="net-sub">${escapeHtml(p.intro)}</div>` : ''}
     ${le ? `<div class="net-latest"><span class="d">${escapeHtml(le.date||'')}</span><span class="t">${escapeHtml(le.text)}</span></div>` : ''}
   </div>`;
 }
@@ -4999,16 +4998,12 @@ function openNetProject(id) {
   if (id) {
     const p = projectsData.find(x=>x.id===id); if(!p) return;
     document.getElementById('netProjectName').value = p.name||'';
-    document.getElementById('netProjectDomain').value = p.domain||'';
     renderNetStatusOptions(p.status);
-    document.getElementById('netProjectIntro').value = p.intro||'';
     document.getElementById('netProjectNote').value = p.note||'';
     _tmpMembers = (p.members||[]).map(m=>({personId:m.personId, role:m.role||'', active: m.active !== false, note: m.note||''}));
   } else {
     document.getElementById('netProjectName').value='';
-    document.getElementById('netProjectDomain').value='';
     renderNetStatusOptions('进行中');
-    document.getElementById('netProjectIntro').value='';
     document.getElementById('netProjectNote').value='';
     _tmpMembers = [];
   }
@@ -5208,9 +5203,11 @@ function saveNetProject() {
   const id = document.getElementById('netProjectId').value;
   const name = document.getElementById('netProjectName').value.trim();
   if (!name) { toast('请输入项目名称'); return; }
-  const domain = document.getElementById('netProjectDomain').value.trim();
   const status = document.getElementById('netProjectStatus').value;
-  const intro = document.getElementById('netProjectIntro').value.trim();
+  // 「领域」「一句话简介」已从界面移除：保留旧记录里已有的值，不覆盖、不丢失
+  const _exist = id ? projectsData.find(x => x.id === id) : null;
+  const domain = _exist ? (_exist.domain || '') : '';
+  const intro = _exist ? (_exist.intro || '') : '';
   const note = document.getElementById('netProjectNote').value;
   const members = _tmpMembers
     .filter(m => m.personId)
@@ -5780,15 +5777,23 @@ function relatedTodosHtml(p) {
   return h;
 }
 
+// 从「编辑项目」跳到「项目详情」记进展：先保存当前修改，再开详情
+function gotoProjectDetailFromEdit() {
+  const id = document.getElementById('netProjectId').value;
+  if (!id) { toast('请先填写名称并保存，再记录进展'); return; }
+  const name = (document.getElementById('netProjectName').value || '').trim();
+  if (name) { try { saveNetProject(); } catch (e) { console.warn('保存失败', e); } }
+  closeModal('netProjectModal');
+  openNetDetail('project', id);
+}
+
 function projectDetailHtml(p) {
   const members = (p.members||[]).map(m => {
     const per = personsData.find(x=>x.id===m.personId);
     return per ? {per, active: m.active !== false, note: m.note||''} : null;
   }).filter(Boolean);
   let h = '';
-  h += infoRow('领域', p.domain);
   h += infoRow('状态', p.status);
-  h += infoRow('简介', p.intro);
   const memberHtml = members.map(m =>
     `<div class="member-detail-row">
       <div class="mem-top">
@@ -6241,7 +6246,7 @@ var PAGE_SUBTITLES = {
   media:'看过的电影 / 剧 / 书 / 演出',
   daily:'今天的记录与自悟',
   todos:'今天 ' + todayStr() + ' 的待办',
-  network:'人脉与项目',
+  network:'项目 · 人脉 · 记事本',
   export:'备份 · 同步 · 系统状态'
 };
 function applyPageSubtitle(page) {
@@ -13278,7 +13283,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024i';
+  window.__BUILD__ = 'build 20261024j';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
