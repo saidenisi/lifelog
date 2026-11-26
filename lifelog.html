@@ -2172,6 +2172,40 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
 /* 记事归属标签 */
 .memo-link-tag{font-size:11px;padding:0 6px;border-radius:5px;background:var(--primary-bg);color:var(--primary);line-height:17px;white-space:nowrap}
 .memo-link-tag.person{background:var(--border-light);color:var(--text-secondary)}
+/* ===== 每日记录：内容块（文字/图片/待办 混排） ===== */
+.dblk-list{display:flex;flex-direction:column;gap:10px}
+.dblk-text{width:100%;min-height:64px;resize:vertical;font-family:inherit;font-size:14.5px;line-height:1.75;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);box-sizing:border-box}
+.dblk-text:focus{outline:none;border-color:var(--primary)}
+.dblk-img{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+.dblk-img img{display:block;width:100%;max-height:420px;object-fit:contain;background:var(--border-light)}
+.dblk-del{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:14px;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.dblk-del:active{opacity:.7}
+.dblk-todo{display:flex;align-items:flex-start;gap:8px;padding:9px 12px;border-radius:10px;background:var(--success-bg);border:1px solid transparent;position:relative}
+.dblk-todo .tick{flex:0 0 auto;color:var(--success);font-weight:700;line-height:1.5}
+.dblk-todo .txt{flex:1;min-width:0;font-size:14px;line-height:1.6;color:var(--text)}
+.dblk-todo .src{font-size:10px;padding:0 5px;border-radius:4px;background:rgba(0,0,0,.05);color:var(--text-muted);line-height:15px;flex:0 0 auto;align-self:center}
+.dblk-todo .dblk-del{position:static;width:22px;height:22px;border-radius:11px;background:transparent;color:var(--text-muted);font-size:14px}
+.dblk-addbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.dblk-addbtn{appearance:none;border:1px dashed var(--border);background:transparent;color:var(--text-secondary);font-family:inherit;font-size:13px;padding:7px 14px;border-radius:9px;cursor:pointer;line-height:1.2}
+.dblk-addbtn:active{background:var(--surface-hover)}
+.dblk-hint{font-size:11px;color:var(--text-muted)}
+.dblk-empty{font-size:13px;color:var(--text-muted);padding:16px;text-align:center;border:1px dashed var(--border);border-radius:10px}
+/* ===== 打卡 ===== */
+.habit-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light)}
+.habit-row:last-child{border-bottom:none}
+.habit-mark{flex:0 0 auto;width:26px;height:26px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;border:1.5px solid var(--border);color:var(--text-muted);cursor:pointer;user-select:none;background:transparent}
+.habit-mark.ok{background:var(--success);border-color:var(--success);color:#fff}
+.habit-mark.no{background:var(--danger);border-color:var(--danger);color:#fff}
+.habit-mark.na{border-style:dashed;cursor:default;color:var(--text-muted)}
+.habit-body{flex:1;min-width:0}
+.habit-name{font-size:14px;line-height:1.5;color:var(--text)}
+.habit-sub{font-size:11.5px;color:var(--text-muted);margin-top:1px;font-variant-numeric:tabular-nums}
+.habit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15px,1fr));gap:4px;margin-top:8px}
+.habit-cell{aspect-ratio:1;border-radius:3px;background:var(--border-light)}
+.habit-cell.ok{background:var(--success)}
+.habit-cell.no{background:var(--danger);opacity:.4}
+.habit-cell.na{background:var(--border-light);opacity:.45}
+.habit-stat-line{display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);margin-top:6px;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -2522,6 +2556,19 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
         </div>
       </div>
 
+      <div class="card" id="habitTodayCard" style="margin-bottom:16px">
+        <div class="card-body" style="padding:14px 16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted)">✅ 打卡（针对本日）</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="openHabitStats()">📊 统计</button>
+              <button class="btn btn-ghost btn-sm" onclick="openHabitManager()">⚙️ 目标</button>
+            </div>
+          </div>
+          <div id="habitTodayList"></div>
+        </div>
+      </div>
+
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
         <!-- Left: Calendar + Tag filter -->
         <div style="width:300px;flex-shrink:0">
@@ -2548,18 +2595,18 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
             <div class="card-body" style="padding:16px">
               <div class="daily-section">
                 <div class="daily-section-label">
-                  <span>📝 经历</span>
-                  <span class="tag" style="background:var(--info-bg);color:var(--info)">今天发生的事</span>
-                </div>
-                <textarea class="daily-textarea" id="dailyExperience" placeholder="今天经历了什么？做了哪些事？"></textarea>
-              </div>
-              <div class="daily-section">
-                <div class="daily-section-label">
-                  <span>✅ 今日完成</span>
-                  <span class="tag" style="background:var(--info-bg);color:var(--info)">自待办 · 22:00 后带入</span>
+                  <span>📝 今日记录</span>
+                  <span class="tag" style="background:var(--info-bg);color:var(--info)">文字 · 图片 · 待办完成，可混排</span>
                   <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:11px;padding:2px 8px" onclick="pullTodosToDaily()">🔄 从待办带入</button>
                 </div>
-                <textarea class="daily-textarea" id="dailyTodoLog" placeholder="待办里勾选完成的事项会自动带到这里；你也可以在这里补充说明"></textarea>
+                <div class="dblk-list" id="dailyBlocks"></div>
+                <div class="dblk-addbar">
+                  <button type="button" class="dblk-addbtn" onclick="addDailyBlock('text')">＋ 文字</button>
+                  <label class="dblk-addbtn" for="dailyImageInput">＋ 图片</label>
+                  <span class="dblk-hint">改完自动保存；待办勾完成后自动追加到底部</span>
+                </div>
+                <input type="file" id="dailyImageInput" class="file-input-sr"
+                       accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp" multiple>
               </div>
               <div class="daily-section">
                 <div class="daily-section-label">
@@ -2567,12 +2614,6 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
                   <span class="tag" style="background:var(--purple-bg);color:var(--purple)">自己的领悟 · 他人的启发</span>
                 </div>
                 <textarea class="daily-textarea" id="dailyInsight" placeholder="自己想通的、从别人或书里学到的一句话…"></textarea>
-              </div>
-              <div class="daily-section">
-                <div class="daily-section-label"><span>🖼️ 图片</span></div>
-                <div class="daily-images" id="dailyImages"></div>
-                <input type="file" id="dailyImageInput" class="file-input-sr"
-                       accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp" multiple>
               </div>
               <div class="daily-section">
                 <div class="daily-section-label">
@@ -2911,6 +2952,17 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
       <button class="btn btn-ghost" onclick="closeModal('memoModal')">取消</button>
       <button class="btn btn-primary" onclick="saveMemo()">保存</button>
     </div>
+  </div>
+</div>
+
+<!-- 打卡 Modal（目标管理 / 统计共用） -->
+<div class="modal-overlay" id="habitModal">
+  <div class="modal" style="max-width:660px">
+    <div class="modal-header">
+      <div class="modal-title" id="habitModalTitle">打卡</div>
+      <button class="btn-icon" onclick="closeModal('habitModal')">✕</button>
+    </div>
+    <div class="modal-body" id="habitModalBody"></div>
   </div>
 </div>
 
@@ -3688,6 +3740,7 @@ let personsData = DB.get('persons') || [];
 let netGroupsData = DB.get('netGroups') || [];
 let netTagsData = DB.get('netTags') || [];
 let memosData = DB.get('memos') || [];
+let habitsData = DB.get('habits') || [];
 let hlStateData = DB.get('hlState') || [];
 // 项目手动排序：单独一条极小的记录，只存 id 顺序（不碰项目本身的内容/时间戳，零风险）
 let projOrderData = DB.get('projOrder') || [];
@@ -3971,7 +4024,7 @@ function saveAll() {
 // ===== Cloud Sync (Supabase) =====
 const SUPABASE_URL = 'https://naazilvdmqsbwtlhlhkk.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_qgdOr6NGtOkYTlCf0X2vZQ_tXfsbFco';
-const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock2', 'media', 'dailyNotes', 'todos', 'projects', 'projOrder', 'persons', 'memos', 'hlState'];
+const SYNC_KEYS = ['fitness', 'sleep', 'medications', 'healthNotes', 'accounts', 'rates', 'stock2', 'media', 'dailyNotes', 'todos', 'projects', 'projOrder', 'persons', 'memos', 'habits', 'hlState'];
 let _pullErrors = 0; // 记录最近一次拉取失败条数，供实时订阅状态判断，避免错误状态被覆盖
 
 // 原生 fetch 直接调 Supabase REST API，不依赖 supabase-js SDK（SDK 从外部 CDN 加载，
@@ -4168,6 +4221,7 @@ async function pullAllFromCloud() {
       case 'projOrder': projOrderData = merged; break;
       case 'persons': personsData = merged; break;
       case 'memos': memosData = merged; break;
+      case 'habits': habitsData = merged; break;
       case 'hlState': hlStateData = merged; break;
     }
     DB.set(key, merged);
@@ -4417,6 +4471,7 @@ async function pushAllToCloud() {
                 case 'projOrder': projOrderData = localValue; break;
                 case 'persons': personsData = localValue; break;
                 case 'memos': memosData = localValue; break;
+                case 'habits': habitsData = localValue; break;
                 case 'hlState': hlStateData = localValue; break;
               }
               DB.set(key, localValue);
@@ -9695,7 +9750,7 @@ function showTextSaveFallback(text, filename, note, titleText) {
 }
 
 function exportAllData() {
-  const data = { fitness: fitnessData, sleep: sleepData, medications: medicationsData, healthNotes: healthNotesData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, projects: projectsData, projOrder: projOrderData, persons: personsData, memos: memosData, hlState: hlStateData, exportDate: new Date().toISOString() };
+  const data = { fitness: fitnessData, sleep: sleepData, medications: medicationsData, healthNotes: healthNotesData, finance: financeData, accounts: accountData, rates: exchangeRates, stock: stockData, media: mediaData, dailyNotes: dailyNotes, todos: todosData, projects: projectsData, projOrder: projOrderData, persons: personsData, memos: memosData, habits: habitsData, hlState: hlStateData, exportDate: new Date().toISOString() };
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], {type: 'application/json'});
   const filename = `lifelog_backup_${todayStr()}.json`;
@@ -9917,6 +9972,7 @@ function importData(event) {
       if (data.projects) projectsData = data.projects;
       if (data.persons) personsData = data.persons;
       if (data.memos) memosData = data.memos;
+      if (data.habits) habitsData = data.habits;
       if (data.hlState) hlStateData = data.hlState;
       saveAll();
       saveAccounts();
@@ -9946,6 +10002,7 @@ function clearAllData() {
   projectsData = [];
   personsData = [];
   memosData = [];
+  habitsData = [];
   hlStateData = [];
   netGroupsData = [];
   netTagsData = [];
@@ -10147,6 +10204,10 @@ function settleTodoLog(now) {
       if (!Array.isArray(note.todoLogIds)) note.todoLogIds = [];
       if (note.todoLogIds.indexOf(t.id) >= 0) return; // 已带入过 → 不重复
       note.todoLog = (String(note.todoLog || '').replace(/\s+$/, '') ? String(note.todoLog).replace(/\s+$/, '') + '\n' : '') + line;
+      // 块式记录以 blocks 为准：已在用块的日记，同时追加一个待办块
+      if (Array.isArray(note.blocks)) {
+        note.blocks.push({ id: uid(), type: 'todo', text: String(t.content || '').trim(), url: '', todoId: t.id });
+      }
       note.todoLogIds.push(t.id);
       note.updatedAt = new Date().toISOString();
       note._deleted = false;
@@ -10164,9 +10225,12 @@ function runTodoLogSettle(now) {
   var touched = settleTodoLog(now);
   if (!touched.length) return 0;
   if (touched.indexOf(dailyDate) >= 0) {
-    var el = document.getElementById('dailyTodoLog');
-    var note = getDailyNote(dailyDate);
-    if (el && note) { el.value = note.todoLog || ''; autoResizeTextarea(el); _dailyDirty = false; }
+    var note2 = getDailyNote(dailyDate);
+    if (note2) {
+      currentBlocks = dailyBlocksOf(note2);
+      renderDailyBlocks();
+      _dailyDirty = false;
+    }
   }
   renderCalendar();
   return touched.length;
@@ -10198,6 +10262,291 @@ function autoResizeTextarea(el) {
   el.style.height = Math.min(el.scrollHeight, 480) + 'px';
 }
 
+// ===== 每日记录：内容块（文字 / 图片 / 待办完成 混排） =====
+// 以 note.blocks 为准；旧数据（experience / todoLog / images）在读取时就地兜底成块，不迁移、不改写。
+let currentBlocks = [];
+
+function dailyBlocksOf(note) {
+  if (!note) return [];
+  if (Array.isArray(note.blocks)) {
+    return note.blocks.filter(function(b) { return b && b.type; }).map(function(b) {
+      return { id: b.id || uid(), type: b.type, text: b.text || '', url: b.url || '', todoId: b.todoId || '' };
+    });
+  }
+  var out = [];
+  if (note.experience && String(note.experience).trim()) {
+    out.push({ id: 'lg_exp', type: 'text', text: String(note.experience), url: '', todoId: '' });
+  }
+  if (note.todoLog && String(note.todoLog).trim()) {
+    String(note.todoLog).split('\n').forEach(function(line, i) {
+      var s = line.replace(/^\s*[-•·]\s*/, '').replace(/\s+$/, '');
+      if (s.trim()) out.push({ id: 'lg_todo_' + i, type: 'todo', text: s.trim(), url: '', todoId: '' });
+    });
+  }
+  (note.images || []).forEach(function(u, i) {
+    if (u) out.push({ id: 'lg_img_' + i, type: 'image', text: '', url: u, todoId: '' });
+  });
+  return out;
+}
+
+function blocksToMirrors(blocks) {
+  var texts = [], todos = [], imgs = [];
+  (blocks || []).forEach(function(b) {
+    if (!b) return;
+    if (b.type === 'text' && String(b.text || '').trim()) texts.push(String(b.text).replace(/\s+$/, ''));
+    else if (b.type === 'todo' && String(b.text || '').trim()) todos.push('· ' + String(b.text).trim());
+    else if (b.type === 'image' && b.url) imgs.push(b.url);
+  });
+  return { experience: texts.join('\n\n'), todoLog: todos.join('\n'), images: imgs };
+}
+
+function renderDailyBlocks() {
+  var el = document.getElementById('dailyBlocks');
+  if (!el) return;
+  if (!currentBlocks.length) {
+    el.innerHTML = '<div class="dblk-empty">还没有内容。点下面「＋ 文字」或「＋ 图片」开始记录</div>';
+    return;
+  }
+  var html = '';
+  currentBlocks.forEach(function(b, i) {
+    if (b.type === 'text') {
+      html += '<textarea class="dblk-text" data-i="' + i + '" placeholder="写点什么…" oninput="onBlockTextInput(this)">' + escapeHtml(b.text || '') + '</textarea>';
+    } else if (b.type === 'image') {
+      html += '<div class="dblk-img"><img src="' + escapeHtml(b.url) + '" alt="" loading="lazy">' +
+        '<button type="button" class="dblk-del" onclick="deleteDailyBlock(' + i + ')" title="删除这张图">×</button></div>';
+    } else if (b.type === 'todo') {
+      html += '<div class="dblk-todo"><span class="tick">✓</span><span class="txt">' + escapeHtml(b.text || '') + '</span>' +
+        '<span class="src">' + (b.todoId ? '待办' : '手记') + '</span>' +
+        '<button type="button" class="dblk-del" onclick="deleteDailyBlock(' + i + ')" title="从日记中移除（不影响待办本身）">×</button></div>';
+    }
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.dblk-text').forEach(function(t) { autoResizeTextarea(t); });
+}
+
+function onBlockTextInput(el) {
+  var i = parseInt(el.getAttribute('data-i'), 10);
+  if (isNaN(i) || !currentBlocks[i]) return;
+  currentBlocks[i].text = el.value;
+  autoResizeTextarea(el);
+  _dailyDirty = true;
+  scheduleDailyAutoSave();
+}
+
+function addDailyBlock(type) {
+  if (type === 'image') {
+    var inp = document.getElementById('dailyImageInput');
+    if (inp) inp.click();
+    return;
+  }
+  currentBlocks.push({ id: uid(), type: 'text', text: '', url: '', todoId: '' });
+  renderDailyBlocks();
+  var list = document.querySelectorAll('#dailyBlocks .dblk-text');
+  if (list.length) list[list.length - 1].focus();
+  _dailyDirty = true;
+  scheduleDailyAutoSave();
+}
+
+function deleteDailyBlock(i) {
+  if (!currentBlocks[i]) return;
+  currentBlocks.splice(i, 1);
+  renderDailyBlocks();
+  _dailyDirty = true;
+  scheduleDailyAutoSave();
+}
+
+function appendImageBlock(url) {
+  currentBlocks.push({ id: uid(), type: 'image', text: '', url: url, todoId: '' });
+  renderDailyBlocks();
+  _dailyDirty = true;
+  scheduleDailyAutoSave();
+}
+
+// ===== 打卡 =====
+function saveHabits() { DB.set('habits', habitsData); scheduleCloudPush(); }
+
+// 全部已记录睡眠的「平均入睡时间」（十进制小时，跨午夜已 +24）——自动打卡的基准
+function avgBedtimeDecimal() {
+  var arr = (typeof sleepData !== 'undefined' ? sleepData : []).filter(function(s) { return s && !s._deleted && s.bedtime; });
+  var sum = 0, n = 0;
+  arr.forEach(function(s) {
+    var v = timeToDecimal(s.bedtime, true);
+    if (v != null && !isNaN(v)) { sum += v; n++; }
+  });
+  return n ? sum / n : null;
+}
+
+// 返回 {state:'ok'|'no'|'na'|'no-data', detail}
+function habitEval(habit, dateStr) {
+  if (!habit) return { state: 'na' };
+  if (habit.type !== 'auto') {
+    var note = getDailyNote(dateStr);
+    var on = !!(note && note.habitChecks && note.habitChecks[habit.id]);
+    return { state: on ? 'ok' : 'na', detail: on ? '已打卡' : '点圆圈打卡' };
+  }
+  if ((habit.rule || 'bedBeforeAvg') === 'bedBeforeAvg') {
+    var rec = (typeof sleepData !== 'undefined' ? sleepData : []).filter(function(s) {
+      return s && !s._deleted && s.date === dateStr;
+    })[0];
+    if (!rec || !rec.bedtime) return { state: 'no-data', detail: '当晚没有睡眠记录' };
+    var base = avgBedtimeDecimal();
+    if (base == null) return { state: 'no-data', detail: '还没有睡眠数据可作基准' };
+    var v = timeToDecimal(rec.bedtime, true);
+    var ok = v <= base;
+    return { state: ok ? 'ok' : 'no', detail: '当晚 ' + rec.bedtime + (ok ? ' ≤ ' : ' > ') + '平均 ' + decimalToTime(base) };
+  }
+  return { state: 'no-data', detail: '' };
+}
+
+function renderHabitToday() {
+  var el = document.getElementById('habitTodayList');
+  if (!el) return;
+  var list = habitsData.filter(function(h) { return h && !h._deleted; });
+  if (!list.length) {
+    el.innerHTML = '<div class="text-sm text-muted" style="line-height:1.6">还没有打卡目标。点右上「⚙️ 目标」添加，比如「早睡」——自动项会拿当天入睡时间和全部记录的平均入睡时间比。</div>';
+    return;
+  }
+  el.innerHTML = list.map(function(h) {
+    var r = habitEval(h, dailyDate);
+    var mark;
+    if (r.state === 'ok') mark = '<div class="habit-mark ok">✓</div>';
+    else if (r.state === 'no') mark = '<div class="habit-mark no">✗</div>';
+    else if (r.state === 'no-data') mark = '<div class="habit-mark na">—</div>';
+    else mark = '<div class="habit-mark" onclick="toggleHabitManual(\'' + h.id + '\')" title="点一下打卡">○</div>';
+    return '<div class="habit-row">' + mark +
+      '<div class="habit-body"><div class="habit-name">' + escapeHtml(h.name) + '</div>' +
+      '<div class="habit-sub">' + escapeHtml(r.detail || '') + '</div></div></div>';
+  }).join('');
+}
+
+function toggleHabitManual(id) {
+  var h = habitsData.filter(function(x) { return x && x.id === id; })[0];
+  if (!h || h.type === 'auto') return;
+  var note = getDailyNote(dailyDate);
+  if (!note) {
+    note = { id: dailyNoteId(dailyDate), date: dailyDate, experience: '', knowledge: '',
+      images: [], tags: [], todoLog: '', todoLogIds: [], blocks: currentBlocks.slice(),
+      createdAt: new Date().toISOString() };
+    dailyNotes.push(note);
+  }
+  if (!note.habitChecks) note.habitChecks = {};
+  if (note.habitChecks[id]) delete note.habitChecks[id];
+  else note.habitChecks[id] = true;
+  note.updatedAt = new Date().toISOString();
+  note._deleted = false;
+  note._pendingPush = true;
+  saveDailyNotes(); saveAll();
+  renderHabitToday();
+}
+
+function habitStatsOf(habit, days) {
+  var t = todayStr();
+  var cells = [];
+  for (var i = days - 1; i >= 0; i--) {
+    var d = shiftDate(t, -i);
+    var r = habitEval(habit, d);
+    cells.push({ date: d, state: r.state });
+  }
+  var ok = cells.filter(function(c) { return c.state === 'ok'; }).length;
+  var no = cells.filter(function(c) { return c.state === 'no'; }).length;
+  var denom = habit.type === 'auto' ? (ok + no) : days;
+  var rate = denom ? Math.round(ok / denom * 100) : null;
+  var streak = 0;
+  for (var j = cells.length - 1; j >= 0; j--) {
+    if (cells[j].state === 'ok') streak++;
+    else if (cells[j].state === 'no-data' || cells[j].state === 'na') { if (streak === 0) continue; else break; }
+    else break;
+  }
+  return { cells: cells, ok: ok, denom: denom, rate: rate, streak: streak };
+}
+
+function openHabitModal(title) {
+  document.getElementById('habitModalTitle').textContent = title;
+  document.getElementById('habitModal').classList.add('active');
+}
+
+function openHabitStats() {
+  var body = document.getElementById('habitModalBody');
+  var list = habitsData.filter(function(h) { return h && !h._deleted; });
+  if (!list.length) {
+    body.innerHTML = '<div class="text-sm text-muted">还没有打卡目标，先去「⚙️ 目标」添加一个。</div>';
+    openHabitModal('打卡统计'); return;
+  }
+  var html = '';
+  list.forEach(function(h) {
+    var s = habitStatsOf(h, 30);
+    html += '<div style="padding:12px 0;border-bottom:1px solid var(--border-light)">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">' +
+      '<div style="font-weight:600;font-size:14px">' + escapeHtml(h.name) + '</div>' +
+      '<div style="font-size:12px;color:var(--text-muted)">' + (h.type === 'auto' ? '自动' : '手动') + '</div></div>' +
+      '<div class="habit-stat-line"><span>近 30 天达标率</span><span><b>' + (s.rate == null ? '—' : s.rate + '%') + '</b>　✓' + s.ok + (h.type === 'auto' ? ' / 有数据 ' + s.denom + ' 天' : ' / 30 天') + '　连续 ' + s.streak + ' 天</span></div>' +
+      '<div class="habit-grid">' + s.cells.map(function(c) {
+        return '<div class="habit-cell ' + (c.state === 'ok' ? 'ok' : c.state === 'no' ? 'no' : c.state === 'na' ? 'na' : 'na') + '" title="' + c.date + '"></div>';
+      }).join('') + '</div></div>';
+  });
+  body.innerHTML = html;
+  openHabitModal('打卡统计');
+}
+
+function renderHabitMgrList() {
+  var el = document.getElementById('habitMgrList');
+  if (!el) return;
+  var list = habitsData.filter(function(h) { return h && !h._deleted; });
+  if (!list.length) { el.innerHTML = '<div class="text-sm text-muted">还没有目标。</div>'; return; }
+  el.innerHTML = list.map(function(h) {
+    return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">' +
+      '<input type="text" class="form-input" style="flex:1;min-width:140px" value="' + escapeHtml(h.name) + '" ' +
+      'onchange="updateHabitField(\'' + h.id + '\',\'name\',this.value)">' +
+      '<select class="form-select" style="flex:0 0 96px" onchange="updateHabitField(\'' + h.id + '\',\'type\',this.value)">' +
+      '<option value="auto"' + (h.type === 'auto' ? ' selected' : '') + '>自动</option>' +
+      '<option value="manual"' + (h.type !== 'auto' ? ' selected' : '') + '>手动</option></select>' +
+      '<button class="btn-icon" onclick="deleteHabit(\'' + h.id + '\')" title="删除">🗑️</button></div>';
+  }).join('');
+}
+
+function openHabitManager() {
+  var body = document.getElementById('habitModalBody');
+  body.innerHTML = '<div id="habitMgrList"></div>' +
+    '<button class="btn btn-primary" style="margin-top:10px;width:100%" onclick="addHabit()">＋ 新增目标</button>' +
+    '<div class="text-sm text-muted" style="margin-top:12px;line-height:1.75">' +
+    '<b>自动</b>：不用打卡。拿当天睡眠记录的入睡时间，和「全部记录的平均入睡时间」比，早于等于平均就是 ✓，晚于就是 ✗。<br>' +
+    '<b>手动</b>：自己写目标（如「读书 30 分钟」），达成后到每日记录里点圆圈打卡。' +
+    '</div>';
+  renderHabitMgrList();
+  openHabitModal('打卡目标');
+}
+
+function addHabit() {
+  var now = new Date().toISOString();
+  habitsData.push({ id: uid(), name: '新目标', type: 'manual', rule: 'bedBeforeAvg',
+    createdAt: now, updatedAt: now, _deleted: false, _pendingPush: true });
+  saveHabits();
+  renderHabitMgrList();
+  renderHabitToday();
+}
+
+function updateHabitField(id, field, val) {
+  var h = habitsData.filter(function(x) { return x && x.id === id; })[0];
+  if (!h) return;
+  h[field] = (val || '').trim() || (field === 'name' ? '未命名目标' : 'manual');
+  h.updatedAt = new Date().toISOString();
+  markPending(h);
+  saveHabits();
+  renderHabitToday();
+}
+
+function deleteHabit(id) {
+  if (!confirm('删除这个打卡目标？（已打卡的记录会保留在日记里）')) return;
+  var h = habitsData.filter(function(x) { return x && x.id === id; })[0];
+  if (!h) return;
+  h._deleted = true;
+  h.updatedAt = new Date().toISOString();
+  h._pendingPush = true;
+  saveHabits();
+  renderHabitMgrList();
+  renderHabitToday();
+}
+
 function renderDaily() {
   var dt = new Date(dailyDate + 'T00:00:00');
   var weekDays = ['日','一','二','三','四','五','六'];
@@ -10209,17 +10558,12 @@ function renderDaily() {
   // This prevents switching pages (or re-renders) from wiping unsaved input.
   if (renderedDate !== dailyDate) {
     var note = getDailyNote(dailyDate);
-    var expEl = document.getElementById('dailyExperience');
     var insEl = document.getElementById('dailyInsight');
-    var logEl = document.getElementById('dailyTodoLog');
-    if (expEl) expEl.value = note ? (note.experience || '') : '';
     if (insEl) insEl.value = dailyInsightText(note);
-    if (logEl) logEl.value = note ? (note.todoLog || '') : '';
-    autoResizeTextarea(expEl);
     autoResizeTextarea(insEl);
-    autoResizeTextarea(logEl);
     _dailyDirty = false;
-    currentImages = (note && note.images) ? note.images.slice() : [];
+    currentBlocks = dailyBlocksOf(note);
+    currentImages = blocksToMirrors(currentBlocks).images;
     currentTags = (note && note.tags) ? note.tags.slice() : [];
     renderDailyTags();
     var tip = document.getElementById('dailySavedTip');
@@ -10227,7 +10571,8 @@ function renderDaily() {
     renderedDate = dailyDate;
   }
 
-  renderImages();
+  renderDailyBlocks();
+  renderHabitToday();
   renderCalendar();
   renderTagList();
   renderDailyHighlight();
@@ -10240,32 +10585,31 @@ function scheduleDailyAutoSave() {
 }
 
 function saveDailyNoteSilent() {
-  var expEl = document.getElementById('dailyExperience');
   var insEl = document.getElementById('dailyInsight');
-  var logEl = document.getElementById('dailyTodoLog');
-  if (!expEl || !insEl) return;
-  var exp = expEl.value.trim();
+  if (!insEl) return;
   var ins = insEl.value.trim();
-  var todoLog = logEl ? logEl.value.replace(/\s+$/, '') : '';
-  if (!exp && !ins && !todoLog && currentImages.length === 0 && currentTags.length === 0) { _dailyDirty = false; return; } // nothing to save
+  var m = blocksToMirrors(currentBlocks);
+  if (!m.experience && !ins && !m.todoLog && m.images.length === 0 && currentTags.length === 0) { _dailyDirty = false; return; }
 
   var note = getDailyNote(dailyDate);
+  var now = new Date().toISOString();
   if (note) {
-    note.experience = exp;
+    note.blocks = currentBlocks.slice();
+    note.experience = m.experience;
+    note.todoLog = m.todoLog;
+    note.images = m.images;
     note.knowledge = ins;       // 「自悟和他悟」= 合并后的单一字段
     note.reflection = '';       // 已并入 knowledge，清空以免下次重复拼接
-    note.todoLog = todoLog;     // 待办自动带入的内容（用户可编辑增加）
-    note.images = currentImages.slice();
     note.tags = currentTags.slice();
-    note.updatedAt = new Date().toISOString();
+    note.updatedAt = now;
     note._deleted = false;
     note._pendingPush = true;
   } else {
     dailyNotes.push({
       id: dailyNoteId(dailyDate), date: dailyDate,
-      experience: exp, knowledge: ins, todoLog: todoLog,
-      images: currentImages.slice(), tags: currentTags.slice(),
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _pendingPush: true
+      blocks: currentBlocks.slice(), experience: m.experience, todoLog: m.todoLog, images: m.images,
+      knowledge: ins, tags: currentTags.slice(), todoLogIds: [],
+      createdAt: now, updatedAt: now, _pendingPush: true
     });
   }
   _dailyDirty = false;
@@ -10276,13 +10620,12 @@ function saveDailyNoteSilent() {
 }
 
 function saveDailyNote() {
-  var exp = document.getElementById('dailyExperience').value.trim();
-  var ins = document.getElementById('dailyInsight').value.trim();
-  var logEl = document.getElementById('dailyTodoLog');
-  var todoLog = logEl ? logEl.value.replace(/\s+$/, '') : '';
+  var insEl = document.getElementById('dailyInsight');
+  var ins = insEl ? insEl.value.trim() : '';
+  var m = blocksToMirrors(currentBlocks);
   var tip = document.getElementById('dailySavedTip');
 
-  if (!exp && !ins && !todoLog && currentImages.length === 0 && currentTags.length === 0) {
+  if (!m.experience && !ins && !m.todoLog && m.images.length === 0 && currentTags.length === 0) {
     // Empty: remove existing note for this date if any
     var existing = getDailyNote(dailyDate);
     if (existing) {
@@ -10300,24 +10643,27 @@ function saveDailyNote() {
     }
   } else {
     var note = getDailyNote(dailyDate);
+    var now = new Date().toISOString();
     if (note) {
-      note.experience = exp;
+      note.blocks = currentBlocks.slice();
+      note.experience = m.experience;
+      note.todoLog = m.todoLog;
+      note.images = m.images;
       note.knowledge = ins;
       note.reflection = '';
-      note.todoLog = todoLog;
-      note.images = currentImages.slice();
       note.tags = currentTags.slice();
-      note.updatedAt = new Date().toISOString();
+      note.updatedAt = now;
       note._deleted = false;
       note._pendingPush = true;
     } else {
       dailyNotes.push({
         id: dailyNoteId(dailyDate), date: dailyDate,
-        experience: exp, knowledge: ins, todoLog: todoLog,
-        images: currentImages.slice(), tags: currentTags.slice(),
-        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), _pendingPush: true
+        blocks: currentBlocks.slice(), experience: m.experience, todoLog: m.todoLog, images: m.images,
+        knowledge: ins, tags: currentTags.slice(), todoLogIds: [],
+        createdAt: now, updatedAt: now, _pendingPush: true
       });
     }
+    _dailyDirty = false;
     saveDailyNotes();
     saveAll();
     if (tip) { tip.textContent = '已保存 ✅'; }
@@ -10428,7 +10774,7 @@ function handleDailyImageUpload(input) {
       uploadImageToStorage(blob).then(function(url) {
         if (url) {
           currentImages.push(url);
-          renderImages();
+          appendImageBlock(url);
         }
       });
     });
@@ -10476,7 +10822,12 @@ async function uploadImageToStorage(blob) {
 function deleteDailyImage(index) {
   var url = currentImages[index];
   currentImages.splice(index, 1);
-  renderImages();
+  var bi = -1;
+  for (var i = 0; i < currentBlocks.length; i++) {
+    if (currentBlocks[i].type === 'image' && currentBlocks[i].url === url) { bi = i; break; }
+  }
+  if (bi >= 0) currentBlocks.splice(bi, 1);
+  renderDailyBlocks();
   // If it's a Storage URL, delete the file from cloud too
   if (url && url.indexOf(STORAGE_PUBLIC_PREFIX) === 0) {
     var path = url.slice(STORAGE_PUBLIC_PREFIX.length);
@@ -10519,7 +10870,7 @@ function addImageByUrl(prefix) {
   if (prefix === 'daily') {
     currentImages.push(url);
     inp.value = '';
-    renderImages();
+    appendImageBlock(url);
     _dailyDirty = true;
     scheduleDailyAutoSave();
     toast('已用链接添加图片 ✅');
@@ -13322,7 +13673,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024k';
+  window.__BUILD__ = 'build 20261024l';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
