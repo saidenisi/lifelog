@@ -2198,14 +2198,18 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .habit-mark.no{background:var(--danger);border-color:var(--danger);color:#fff}
 .habit-mark.na{border-style:dashed;cursor:default;color:var(--text-muted)}
 .habit-body{flex:1;min-width:0}
-.habit-name{font-size:14px;line-height:1.5;color:var(--text)}
+.habit-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.habit-name{font-size:14px;line-height:1.5;color:var(--text);flex:1;min-width:0}
+.habit-rate{flex:0 0 auto;font-size:15px;font-weight:700;color:var(--success);font-variant-numeric:tabular-nums;letter-spacing:-.2px}
+.habit-rate.mid{color:var(--text-secondary)}
+.habit-rate.low{color:var(--warning)}
 .habit-sub{font-size:11.5px;color:var(--text-muted);margin-top:1px;font-variant-numeric:tabular-nums}
-.habit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15px,1fr));gap:4px;margin-top:8px}
-.habit-cell{aspect-ratio:1;border-radius:3px;background:var(--border-light)}
-.habit-cell.ok{background:var(--success)}
-.habit-cell.no{background:var(--danger);opacity:.4}
-.habit-cell.na{background:var(--border-light);opacity:.45}
-.habit-stat-line{display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);margin-top:6px;font-variant-numeric:tabular-nums}
+/* 内嵌迷你统计：近 14 天格子图 */
+.habit-spark{display:grid;grid-template-columns:repeat(14,1fr);gap:3px;margin-top:7px}
+.hcell{aspect-ratio:1;border-radius:3px;background:var(--border-light);min-width:0}
+.hcell.ok{background:var(--success)}
+.hcell.no{background:var(--danger);opacity:.42}
+.hcell.na{background:var(--border-light);opacity:.6}
 </style>
 </head>
 <body>
@@ -2559,9 +2563,8 @@ label.btn{cursor:pointer;-webkit-tap-highlight-color:transparent}
       <div class="card" id="habitTodayCard" style="margin-bottom:16px">
         <div class="card-body" style="padding:14px 16px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-            <div style="font-size:12px;font-weight:600;color:var(--text-muted)">✅ 打卡（针对本日）</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted)">✅ 打卡（自动项看昨晚）</div>
             <div style="display:flex;gap:6px">
-              <button class="btn btn-ghost btn-sm" onclick="openHabitStats()">📊 统计</button>
               <button class="btn btn-ghost btn-sm" onclick="openHabitManager()">⚙️ 目标</button>
             </div>
           </div>
@@ -10401,15 +10404,15 @@ function habitEval(habit, dateStr) {
     var rec = (typeof sleepData !== 'undefined' ? sleepData : []).filter(function(s) {
       return s && !s._deleted && s.date === dateStr;
     })[0];
-    if (!rec || !rec.bedtime) return { state: 'no-data', detail: '当晚没有睡眠记录' };
+    if (!rec || !rec.bedtime) return { state: 'no-data', detail: '' };
     var base = avgBedtimeBefore(dateStr);   // 只用该日之前的历史，不看当天和未来
-    if (base == null) return { state: 'no-data', detail: '这是最早的一条记录，之前没有可比的' };
+    if (base == null) return { state: 'no-data', detail: '还没有更早的记录可比' };
     var v = timeToDecimal(rec.bedtime, true);
     // 严格定义：必须「早于」平均才算达标，等于平均不算（没早睡）。
     // 1e-9 小时 ≈ 0.0036 秒，只用来抵消浮点误差，远小于 1 分钟的真实粒度，不会掩盖真实差异。
     var ok = v < base - 1e-9;
     var rel = ok ? ' < ' : (Math.abs(v - base) <= 1e-9 ? ' = ' : ' > ');
-    return { state: ok ? 'ok' : 'no', detail: '当晚 ' + rec.bedtime + rel + '之前平均 ' + decimalToTime(base) };
+    return { state: ok ? 'ok' : 'no', detail: rec.bedtime + rel + '之前平均 ' + decimalToTime(base) };
   }
   return { state: 'no-data', detail: '' };
 }
@@ -10419,19 +10422,44 @@ function renderHabitToday() {
   if (!el) return;
   var list = habitsData.filter(function(h) { return h && !h._deleted; });
   if (!list.length) {
-    el.innerHTML = '<div class="text-sm text-muted" style="line-height:1.6">还没有打卡目标。点右上「⚙️ 目标」添加，比如「早睡」——自动项会拿当晚入睡时间和<b>那天之前</b>所有记录的平均入睡时间比（不用未来数据）。</div>';
+    el.innerHTML = '<div class="text-sm text-muted" style="line-height:1.6">还没有打卡目标。点右上「⚙️ 目标」添加，比如「早睡」——自动项会拿<b>昨晚</b>入睡时间和那晚之前所有记录的平均比，不用未来数据。</div>';
     return;
   }
+  // 自动项判「昨晚」：睡眠数据是第二天早上补录的，今晚的这一觉明早才有，所以打卡看的是昨晚那一觉。
+  var evalDate = shiftDate(dailyDate, -1);
+
   el.innerHTML = list.map(function(h) {
-    var r = habitEval(h, dailyDate);
+    var isAuto = h.type === 'auto';
+    var r = habitEval(h, isAuto ? evalDate : dailyDate);
     var mark;
     if (r.state === 'ok') mark = '<div class="habit-mark ok">✓</div>';
     else if (r.state === 'no') mark = '<div class="habit-mark no">✗</div>';
     else if (r.state === 'no-data') mark = '<div class="habit-mark na">—</div>';
     else mark = '<div class="habit-mark" onclick="toggleHabitManual(\'' + h.id + '\')" title="点一下打卡">○</div>';
+
+    // 统计直接内嵌：14 天格子图（看清最近走势）+ 近 30 天达标率 / 连续天数
+    var s14 = habitStatsOf(h, 14);
+    var s30 = habitStatsOf(h, 30);
+    var rateTxt = (s30.rate == null) ? '—' : s30.rate + '%';
+    var spark = s14.cells.map(function(c) {
+      var cls = c.state === 'ok' ? 'ok' : c.state === 'no' ? 'no' : 'na';
+      return '<div class="hcell ' + cls + '" title="' + c.date + '"></div>';
+    }).join('');
+
+    var bits = [];
+    if (isAuto) { if (r.detail) bits.push('昨晚 ' + r.detail); }
+    else bits.push(r.state === 'ok' ? '已打卡' : '点圆圈打卡');
+    if (s30.denom) bits.push('达标 ' + s30.ok + '/' + s30.denom);
+    if (s30.streak > 0) bits.push('连续 ' + s30.streak + ' 天');
+
+    var rateCls = (s30.rate == null) ? '' : (s30.rate >= 70 ? '' : (s30.rate >= 40 ? ' mid' : ' low'));
     return '<div class="habit-row">' + mark +
-      '<div class="habit-body"><div class="habit-name">' + escapeHtml(h.name) + '</div>' +
-      '<div class="habit-sub">' + escapeHtml(r.detail || '') + '</div></div></div>';
+      '<div class="habit-body">' +
+        '<div class="habit-head"><span class="habit-name">' + escapeHtml(h.name) + '</span>' +
+        '<span class="habit-rate' + rateCls + '" title="近 30 天达标率">' + rateTxt + '</span></div>' +
+        '<div class="habit-sub">' + escapeHtml(bits.join(' · ')) + '</div>' +
+        '<div class="habit-spark">' + spark + '</div>' +
+      '</div></div>';
   }).join('');
 }
 
@@ -10465,7 +10493,21 @@ function habitStatsOf(habit, days) {
   }
   var ok = cells.filter(function(c) { return c.state === 'ok'; }).length;
   var no = cells.filter(function(c) { return c.state === 'no'; }).length;
-  var denom = habit.type === 'auto' ? (ok + no) : days;
+  var denom;
+  if (habit.type === 'auto') {
+    denom = ok + no;                       // 自动项：按「有可比基准的天数」
+  } else {
+    // 手动项：按「目标创建之后」的天数算，避免新建目标立刻显示个位数达标率
+    var eff = days;
+    var created = String(habit.createdAt || '').slice(0, 10);
+    if (created) {
+      var cMs = new Date(created + 'T00:00:00').getTime();
+      var tMs = new Date(t + 'T00:00:00').getTime();
+      var span = Math.floor((tMs - cMs) / 86400000) + 1;
+      if (span > 0 && span < days) eff = span;
+    }
+    denom = eff;
+  }
   var rate = denom ? Math.round(ok / denom * 100) : null;
   var streak = 0;
   for (var j = cells.length - 1; j >= 0; j--) {
@@ -10479,29 +10521,6 @@ function habitStatsOf(habit, days) {
 function openHabitModal(title) {
   document.getElementById('habitModalTitle').textContent = title;
   document.getElementById('habitModal').classList.add('active');
-}
-
-function openHabitStats() {
-  var body = document.getElementById('habitModalBody');
-  var list = habitsData.filter(function(h) { return h && !h._deleted; });
-  if (!list.length) {
-    body.innerHTML = '<div class="text-sm text-muted">还没有打卡目标，先去「⚙️ 目标」添加一个。</div>';
-    openHabitModal('打卡统计'); return;
-  }
-  var html = '';
-  list.forEach(function(h) {
-    var s = habitStatsOf(h, 30);
-    html += '<div style="padding:12px 0;border-bottom:1px solid var(--border-light)">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">' +
-      '<div style="font-weight:600;font-size:14px">' + escapeHtml(h.name) + '</div>' +
-      '<div style="font-size:12px;color:var(--text-muted)">' + (h.type === 'auto' ? '自动' : '手动') + '</div></div>' +
-      '<div class="habit-stat-line"><span>近 30 天达标率</span><span><b>' + (s.rate == null ? '—' : s.rate + '%') + '</b>　✓' + s.ok + (h.type === 'auto' ? ' / 有数据 ' + s.denom + ' 天' : ' / 30 天') + '　连续 ' + s.streak + ' 天</span></div>' +
-      '<div class="habit-grid">' + s.cells.map(function(c) {
-        return '<div class="habit-cell ' + (c.state === 'ok' ? 'ok' : c.state === 'no' ? 'no' : c.state === 'na' ? 'na' : 'na') + '" title="' + c.date + '"></div>';
-      }).join('') + '</div></div>';
-  });
-  body.innerHTML = html;
-  openHabitModal('打卡统计');
 }
 
 function renderHabitMgrList() {
@@ -13689,7 +13708,7 @@ checkBackupReminder();
 // 「环境诊断」入口在「数据管理」页：装到桌面图标后如果某个功能不正常，
 // 那里能直接显示 standalone/浏览器、触屏判定、封面选图控件状态 —— 比靠猜快得多。
 (function(){
-  window.__BUILD__ = 'build 20261024o';
+  window.__BUILD__ = 'build 20261024p';
   var b = document.createElement('div');
   b.id = 'buildMarker';
   b.textContent = window.__BUILD__;
